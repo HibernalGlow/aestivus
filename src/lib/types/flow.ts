@@ -13,8 +13,10 @@ export interface NodeData {
   toolName?: string;
   category?: NodeCategory;
   config?: Record<string, unknown>;
+  params?: Record<string, any>;
   status?: NodeStatus;
   progress?: number;
+  [key: string]: unknown;
 }
 
 export type NodeCategory = 'input' | 'tool' | 'output' | 'control';

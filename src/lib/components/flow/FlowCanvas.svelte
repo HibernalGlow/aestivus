@@ -28,7 +28,16 @@
 
   let nodes = $derived($flowStore.nodes as any[]);
   let edges = $derived($flowStore.edges as any[]);
+
+  function handleKeyDown(e: KeyboardEvent) {
+    if ((e.key === 'Delete' || e.key === 'Backspace') && $flowStore.selectedNodeId) {
+      e.preventDefault();
+      flowStore.removeNode($flowStore.selectedNodeId);
+    }
+  }
 </script>
+
+<svelte:window onkeydown={handleKeyDown} />
 
 <div class="h-full w-full">
   <SvelteFlow
@@ -37,8 +46,44 @@
     {nodeTypes}
     onnodeclick={(event) => flowStore.selectNode(event.detail.node.id)}
     onpaneclick={() => flowStore.selectNode(null)}
-    onnodeschange={(event) => flowStore.setNodes(event.detail as any)}
-    onedgeschange={(event) => flowStore.setEdges(event.detail as any)}
+    onnodeschange={(event) => {
+      const changes = event.detail;
+      if (Array.isArray(changes)) {
+        const currentNodes = $flowStore.nodes;
+        let newNodes = [...currentNodes];
+        for (const change of changes) {
+          if (change.type === 'remove') {
+            newNodes = newNodes.filter(n => n.id !== change.id);
+          } else if (change.type === 'position' && change.position) {
+            newNodes = newNodes.map(n => 
+              n.id === change.id ? { ...n, position: change.position } : n
+            );
+          } else if (change.type === 'select') {
+            newNodes = newNodes.map(n =>
+              n.id === change.id ? { ...n, selected: change.selected } : n
+            );
+          }
+        }
+        flowStore.setNodes(newNodes as any);
+      }
+    }}
+    onedgeschange={(event) => {
+      const changes = event.detail;
+      if (Array.isArray(changes)) {
+        const currentEdges = $flowStore.edges;
+        let newEdges = [...currentEdges];
+        for (const change of changes) {
+          if (change.type === 'remove') {
+            newEdges = newEdges.filter(e => e.id !== change.id);
+          } else if (change.type === 'select') {
+            newEdges = newEdges.map(e =>
+              e.id === change.id ? { ...e, selected: change.selected } : e
+            );
+          }
+        }
+        flowStore.setEdges(newEdges as any);
+      }
+    }}
     onconnect={(event) => {
       const conn = event.detail;
       flowStore.addEdge({
@@ -52,7 +97,6 @@
     }}
     fitView
     snapToGrid
-    deleteKeyCode="Delete"
   >
     <Background />
     <Controls />

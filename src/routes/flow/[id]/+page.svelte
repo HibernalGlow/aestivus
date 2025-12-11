@@ -1,23 +1,21 @@
 <script lang="ts">
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
-  import { flowStore, taskStore } from '$lib/stores';
+  import { flowStore, taskStore, selectedNode } from '$lib/stores';
   import { api } from '$lib/services/api';
   import FlowCanvas from '$lib/components/flow/FlowCanvas.svelte';
   import FlowToolbar from '$lib/components/flow/FlowToolbar.svelte';
   import NodePalette from '$lib/components/flow/NodePalette.svelte';
+  import NodeEditor from '$lib/components/flow/NodeEditor.svelte';
   import LogViewer from '$lib/components/execution/LogViewer.svelte';
 
   const flowId = $derived($page.params.id);
 
-  onMount(async () => {
+  onMount(() => {
     if (flowId && flowId !== 'new') {
-      try {
-        const flow = await api.getFlow(flowId);
-        flowStore.load(flow);
-      } catch (e) {
-        console.error('加载流程失败:', e);
-      }
+      api.getFlow(flowId)
+        .then(flow => flowStore.load(flow))
+        .catch(e => console.error('加载流程失败:', e));
     } else {
       flowStore.reset();
     }
@@ -46,5 +44,9 @@
         </div>
       {/if}
     </div>
+
+    {#if $selectedNode}
+      <NodeEditor />
+    {/if}
   </div>
 </div>

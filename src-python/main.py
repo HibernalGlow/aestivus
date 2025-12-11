@@ -16,6 +16,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from uvicorn import Config, Server
 
 from api.endpoints import router as api_router
+from api.flows import router as flows_router
+from api.tasks import router as tasks_router
+from api.tools import router as tools_router
 
 PORT_API = 8009
 server_instance = None
@@ -55,6 +58,9 @@ app.add_middleware(
 
 # Include API routes
 app.include_router(api_router, prefix="/v1")
+app.include_router(flows_router, prefix="/v1")
+app.include_router(tasks_router, prefix="/v1")
+app.include_router(tools_router, prefix="/v1")
 
 @app.get("/")
 async def root():

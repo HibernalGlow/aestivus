@@ -1,0 +1,50 @@
+<script lang="ts">
+  import { page } from '$app/stores';
+  import { onMount } from 'svelte';
+  import { flowStore, taskStore } from '$lib/stores';
+  import { api } from '$lib/services/api';
+  import FlowCanvas from '$lib/components/flow/FlowCanvas.svelte';
+  import FlowToolbar from '$lib/components/flow/FlowToolbar.svelte';
+  import NodePalette from '$lib/components/flow/NodePalette.svelte';
+  import LogViewer from '$lib/components/execution/LogViewer.svelte';
+
+  const flowId = $derived($page.params.id);
+
+  onMount(async () => {
+    if (flowId && flowId !== 'new') {
+      try {
+        const flow = await api.getFlow(flowId);
+        flowStore.load(flow);
+      } catch (e) {
+        console.error('加载流程失败:', e);
+      }
+    } else {
+      flowStore.reset();
+    }
+
+    return () => {
+      flowStore.reset();
+      taskStore.reset();
+    };
+  });
+</script>
+
+<div class="h-screen flex flex-col bg-gray-100">
+  <FlowToolbar />
+
+  <div class="flex-1 flex overflow-hidden">
+    <NodePalette />
+
+    <div class="flex-1 flex flex-col">
+      <div class="flex-1">
+        <FlowCanvas />
+      </div>
+
+      {#if $taskStore.status !== 'idle' || $taskStore.logs.length > 0}
+        <div class="h-64 border-t border-gray-200">
+          <LogViewer />
+        </div>
+      {/if}
+    </div>
+  </div>
+</div>

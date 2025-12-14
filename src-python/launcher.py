@@ -23,21 +23,24 @@ class AestivalFlowApp:
     # 默认配置
     DEFAULT_PORT = 8009
     DEFAULT_HOST = "127.0.0.1"
+    FRONTEND_DEV_PORT = 5173  # SvelteKit 开发服务器端口
     WINDOW_TITLE = "AestivalFlow"
     WINDOW_WIDTH = 1400
     WINDOW_HEIGHT = 900
     SERVER_TIMEOUT = 10  # 等待服务器启动的超时时间（秒）
     
-    def __init__(self, port: int = DEFAULT_PORT, host: str = DEFAULT_HOST):
+    def __init__(self, port: int = DEFAULT_PORT, host: str = DEFAULT_HOST, dev_mode: bool = False):
         """
         初始化应用程序
         
         Args:
             port: FastAPI 服务器端口
             host: FastAPI 服务器主机地址
+            dev_mode: 开发模式，使用前端开发服务器
         """
         self.port = port
         self.host = host
+        self.dev_mode = dev_mode
         self.server_thread: Optional[threading.Thread] = None
         self.server: Optional[Server] = None
         self.window: Optional[webview.Window] = None
@@ -172,10 +175,19 @@ class AestivalFlowApp:
         # 创建桥接 API 实例
         self.api = BridgeAPI()
         
+        # 确定窗口 URL
+        if self.dev_mode:
+            # 开发模式：使用前端开发服务器
+            window_url = f"http://{self.host}:{self.FRONTEND_DEV_PORT}"
+            print(f"🔧 开发模式: 使用前端服务器 {window_url}")
+        else:
+            # 生产模式：使用后端服务器（需要构建前端）
+            window_url = f"http://{self.host}:{self.port}"
+        
         # 创建窗口
         self.window = webview.create_window(
             title=self.WINDOW_TITLE,
-            url=f"http://{self.host}:{self.port}",
+            url=window_url,
             width=self.WINDOW_WIDTH,
             height=self.WINDOW_HEIGHT,
             js_api=self.api,
@@ -205,7 +217,14 @@ class AestivalFlowApp:
 
 def main():
     """主入口函数"""
-    app = AestivalFlowApp()
+    # 检查是否为开发模式
+    dev_mode = "--dev" in sys.argv or os.getenv("DEV_MODE", "").lower() == "true"
+    
+    if dev_mode:
+        print("🔧 开发模式启动")
+        print("📝 请确保前端开发服务器已运行: yarn dev")
+    
+    app = AestivalFlowApp(dev_mode=dev_mode)
     app.start()
 
 

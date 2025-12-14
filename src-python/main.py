@@ -1,6 +1,9 @@
 """
-FastAPI Server for Tauri + SvelteKit
-Supports both sidecar mode (with stdin handling) and standalone mode (with auto-reload)
+FastAPI Server for AestivalFlow
+支持三种运行模式:
+- pywebview 模式: 作为桌面应用运行（推荐）
+- standalone 模式: 独立运行带热重载（开发用）
+- sidecar 模式: 作为 Tauri sidecar 运行（兼容旧版）
 """
 
 import os
@@ -23,30 +26,69 @@ from api.tools import router as tools_router
 PORT_API = 8009
 server_instance = None
 
-# Detect running mode
-def is_standalone_mode():
-    """Detect if running in standalone mode vs sidecar mode"""
-    return (
+
+def detect_running_mode() -> str:
+    """
+    检测当前运行模式
+    
+    Returns:
+        运行模式: 'pywebview', 'standalone', 或 'sidecar'
+    """
+    # pywebview 模式检测
+    if (
+        "--pywebview" in sys.argv or
+        os.getenv("PYWEBVIEW_MODE", "").lower() == "true"
+    ):
+        return "pywebview"
+    
+    # standalone 模式检测
+    if (
         "--standalone" in sys.argv or 
         "--reload" in sys.argv or
         os.getenv("STANDALONE_MODE", "").lower() == "true" or
         os.getenv("UVICORN_RELOAD", "").lower() == "true"
-    )
+    ):
+        return "standalone"
+    
+    # 默认 sidecar 模式
+    return "sidecar"
 
-STANDALONE_MODE = is_standalone_mode()
-mode_label = "standalone" if STANDALONE_MODE else "sidecar"
+
+def is_standalone_mode():
+    """Detect if running in standalone mode vs sidecar mode (兼容旧版)"""
+    return detect_running_mode() == "standalone"
+
+
+def is_pywebview_mode():
+    """检测是否为 pywebview 模式"""
+    return detect_running_mode() == "pywebview"
+
+
+RUNNING_MODE = detect_running_mode()
+STANDALONE_MODE = RUNNING_MODE == "standalone"
+mode_label = RUNNING_MODE
 
 # Create FastAPI app
 app = FastAPI(title="Test App API", version="1.0.0")
 
-# Add CORS
+# CORS 配置
+# 根据运行模式配置允许的来源
 cors_origins = [
-    "http://localhost:5173",  # SvelteKit dev server
-    "http://localhost:1420",  # Tauri dev server
+    "http://localhost:5173",   # SvelteKit dev server
+    "http://localhost:1420",   # Tauri dev server
     "http://127.0.0.1:5173",
     "http://127.0.0.1:1420",
-    "tauri://localhost"
+    "http://127.0.0.1:8009",   # pywebview 本地服务器
+    "http://localhost:8009",
+    "tauri://localhost",
 ]
+
+# pywebview 模式下允许所有本地来源
+if is_pywebview_mode():
+    # pywebview 使用本地 WebView，需要更宽松的 CORS
+    cors_origins.extend([
+        f"http://127.0.0.1:{PORT_API + i}" for i in range(10)
+    ])
 
 app.add_middleware(
     CORSMiddleware,
@@ -173,8 +215,26 @@ def run_sidecar():
     start_input_thread()
     start_api_server()
 
+
+def run_pywebview():
+    """Run in pywebview mode as desktop application"""
+    print(f"🚀 启动 pywebview 桌面应用模式")
+    print(f"💡 使用 launcher.py 启动完整的桌面应用")
+    
+    # 如果直接运行 main.py --pywebview，提示使用 launcher.py
+    try:
+        from launcher import main as launcher_main
+        launcher_main()
+    except ImportError:
+        print("❌ 请使用 launcher.py 启动 pywebview 模式")
+        print("   运行: python launcher.py")
+        sys.exit(1)
+
+
 if __name__ == "__main__":
-    if STANDALONE_MODE:
+    if RUNNING_MODE == "pywebview":
+        run_pywebview()
+    elif RUNNING_MODE == "standalone":
         run_standalone()
     else:
         run_sidecar()

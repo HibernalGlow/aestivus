@@ -1,32 +1,25 @@
 {
-  "name": "data-analyzer-pro",
-  "version": "2.1.0",
-  "description": "Professional data analysis tool with Python backend and modern UI",
+  "name": "aestival-flow",
+  "version": "3.0.0",
+  "description": "Python工具链可视化编排与执行平台 - pywebview 版本",
   "type": "module",
   "scripts": {
-    "install-reqs": "pnpm install && pip3 install -r src-python/requirements.txt",
+    "install-reqs": "yarn install && pip3 install -r src-python/requirements.txt",
     "dev": "vite dev --port 5173",
-    "dev:tauri": "vite dev --port 1420",
-    "dev:standalone": "concurrently \"cd src-python && uvicorn main:app --host 127.0.0.1 --port 8008 --reload\" \"vite dev --port 5173\"",
-    "dev:api": "cd src-python && uvicorn main:app --host 127.0.0.1 --port 8008 --reload",
+    "dev:standalone": "concurrently \"cd src-python && uvicorn main:app --host 127.0.0.1 --port 8009 --reload\" \"vite dev --port 5173\"",
+    "dev:api": "cd src-python && uvicorn main:app --host 127.0.0.1 --port 8009 --reload",
+    "dev:pywebview": "cd src-python && python launcher.py",
     "web:dev": "vite dev --port 5173 --host 0.0.0.0",
-    "build:sidecar-windows": "pyinstaller -c -F --clean --name main-x86_64-pc-windows-msvc --distpath src-tauri/bin src-python/main.py",
-    "build:sidecar-macos": "pyinstaller -c -F --clean --name main-aarch64-apple-darwin --distpath src-tauri/bin src-python/main.py",
-    "build:sidecar-linux": "pyinstaller -c -F --clean --name main-x86_64-unknown-linux-gnu --distpath src-tauri/bin src-python/main.py",
-    "build:icons": "pnpm tauri icon static/data-analyzer-icon.png",
     "build": "vite build",
-    "build:complete": "python3 build.py",
-    "tauri": "tauri",
+    "build:pywebview": "python build.py",
     "export": "vite build",
     "start": "vite preview",
+    "check": "svelte-check --tsconfig ./tsconfig.json",
     "lint": "svelte-check --tsconfig ./tsconfig.json"
   },
-  "license": "Commercial",
+  "license": "MIT",
   "dependencies": {
     "@tailwindcss/vite": "^4.1.11",
-    "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-http": "^2",
-    "@tauri-apps/plugin-opener": "^2",
     "@xyflow/svelte": "^1.5.0",
     "tailwindcss": "^4.1.11"
   },
@@ -38,7 +31,6 @@
     "@sveltejs/vite-plugin-svelte": "^5.0.0",
     "@tailwindcss/forms": "^0.5.9",
     "@tailwindcss/typography": "^0.5.15",
-    "@tauri-apps/cli": "^2",
     "@types/node": "^24.0.15",
     "bits-ui": "^2.8.11",
     "clsx": "^2.1.1",
@@ -51,10 +43,5 @@
     "typescript": "~5.6.2",
     "vite": "^6.0.3"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
-  },
-  "author": "DataCorp Solutions"
+  "author": "HibernalGlow"
 }

@@ -60,11 +60,30 @@ def _get_flow_path(flow_id: str) -> Path:
 
 
 def _load_flow(flow_id: str) -> Flow:
+    """
+    加载流程文件
+    
+    Args:
+        flow_id: 流程 ID
+        
+    Returns:
+        Flow 对象
+        
+    Raises:
+        HTTPException: 文件不存在或格式无效
+    """
     path = _get_flow_path(flow_id)
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"Flow {flow_id} not found")
-    with open(path, "r", encoding="utf-8") as f:
-        return Flow(**json.load(f))
+    
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return Flow(**data)
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid JSON format: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to load flow: {str(e)}")
 
 
 def _save_flow(flow: Flow) -> None:

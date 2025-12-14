@@ -102,6 +102,60 @@ export const api = {
     return request(`/tools/${toolName}/last-params`);
   },
 
+  // 节点执行 API
+  async executeNode(nodeType: string, config: Record<string, unknown>): Promise<{
+    success: boolean;
+    message: string;
+    data?: unknown;
+    stats?: Record<string, number>;
+    output_path?: string;
+  }> {
+    return request('/execute/node', {
+      method: 'POST',
+      body: JSON.stringify({
+        node_type: nodeType,
+        config
+      })
+    });
+  },
+
+  async executeFlowNodes(nodes: Array<{
+    id: string;
+    type: string;
+    config: Record<string, unknown>;
+  }>, edges: Array<{
+    source: string;
+    target: string;
+  }>): Promise<{
+    success: boolean;
+    message: string;
+    node_results: Record<string, unknown>;
+    execution_order: string[];
+  }> {
+    return request('/execute/flow', {
+      method: 'POST',
+      body: JSON.stringify({ nodes, edges })
+    });
+  },
+
+  // 节点类型 API
+  async getNodeTypes(): Promise<Array<{
+    name: string;
+    displayName: string;
+    description: string;
+    category: string;
+    icon: string;
+  }>> {
+    return request('/nodes/types');
+  },
+
+  async getNodeSchema(name: string): Promise<{
+    inputSchema: unknown;
+    outputSchema: unknown;
+  }> {
+    return request(`/nodes/types/${name}/schema`);
+  },
+
   // 系统功能
   async readClipboard(): Promise<string> {
     const data = await request<{ content: string }>('/system/clipboard');

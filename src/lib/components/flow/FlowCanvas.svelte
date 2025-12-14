@@ -12,17 +12,28 @@
   import InputNode from '$lib/components/nodes/InputNode.svelte';
   import ToolNode from '$lib/components/nodes/ToolNode.svelte';
   import OutputNode from '$lib/components/nodes/OutputNode.svelte';
+  import RepackuNode from '$lib/components/nodes/RepackuNode.svelte';
+  import RawfilterNode from '$lib/components/nodes/RawfilterNode.svelte';
+  import CrashuNode from '$lib/components/nodes/CrashuNode.svelte';
 
   const nodeTypes: NodeTypes = {
+    // 输入节点
     clipboard_input: InputNode,
     folder_input: InputNode,
     path_input: InputNode,
-    tool_repacku: ToolNode,
+    // 工具节点 - 新版（直接 import）
+    repacku: RepackuNode,
+    rawfilter: RawfilterNode,
+    crashu: CrashuNode,
+    // 工具节点 - 旧版（兼容）
+    tool_repacku: RepackuNode,
+    tool_rawfilter: RawfilterNode,
+    tool_crashu: CrashuNode,
     tool_samea: ToolNode,
-    tool_crashu: ToolNode,
     tool_migratef: ToolNode,
     tool_nameu: ToolNode,
     tool_formatv: ToolNode,
+    // 输出节点
     log_output: OutputNode
   };
 

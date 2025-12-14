@@ -1,20 +1,18 @@
 #!/usr/bin/env python3
+"""
+AestivalFlow 构建脚本
+支持 pywebview 桌面应用打包
+"""
 import json
 import sys
 import subprocess
 import platform
+import shutil
 from pathlib import Path
 
-def load_config():
-    config_path = Path("app.config.json")
-    if not config_path.exists():
-        print("❌ app.config.json not found!")
-        print("Please create app.config.json or run python3 configure.py first")
-        sys.exit(1)
-    with open(config_path, 'r') as f:
-        return json.load(f)
 
 def run_command(command, description, cwd=None):
+    """运行命令并显示状态"""
     print(f"🔧 {description}...")
     try:
         result = subprocess.run(
@@ -25,35 +23,42 @@ def run_command(command, description, cwd=None):
             capture_output=True,
             text=True
         )
-        print(f"✅ {description} completed")
+        print(f"✅ {description} 完成")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"❌ {description} failed!")
-        print(f"Error: {e.stderr}")
+        print(f"❌ {description} 失败!")
+        print(f"错误: {e.stderr}")
         return False
 
+
 def check_dependencies():
-    print("🔍 Checking dependencies...")
+    """检查必要的依赖"""
+    print("🔍 检查依赖...")
+    
     required_tools = {
-        "pnpm": "pnpm --version",
-        "python3": "python3 --version",
-        "pip3": "pip3 --version"
+        "yarn": "yarn --version",
+        "python": "python --version",
+        "pip": "pip --version"
     }
+    
     missing_tools = []
     for tool, check_cmd in required_tools.items():
         try:
             subprocess.run(check_cmd, shell=True, check=True, capture_output=True)
-            print(f"✅ {tool} is available")
+            print(f"  ✅ {tool}")
         except subprocess.CalledProcessError:
-            print(f"❌ {tool} is not available")
+            print(f"  ❌ {tool} 未安装")
             missing_tools.append(tool)
+    
     if missing_tools:
-        print(f"\n❌ Missing required tools: {', '.join(missing_tools)}")
-        print("Please install the missing tools and try again.")
+        print(f"\n❌ 缺少必要工具: {', '.join(missing_tools)}")
         sys.exit(1)
-    print("✅ All dependencies are available")
+    
+    print("✅ 所有依赖已就绪")
+
 
 def detect_platform():
+    """检测当前平台"""
     system = platform.system().lower()
     if system == "darwin":
         return "macos"
@@ -62,100 +67,152 @@ def detect_platform():
     elif system == "windows":
         return "windows"
     else:
-        print(f"⚠️  Unknown platform: {system}, defaulting to linux")
+        print(f"⚠️  未知平台: {system}，默认使用 linux")
         return "linux"
 
-def build_icons(config):
-    if not config.get("icon", {}).get("generate", False):
-        print("⏭️  Icon generation disabled in config")
-        return True
-    icon_source = config.get("icon", {}).get("source", "static/app-icon.png")
-    if not Path(icon_source).exists():
-        print(f"⚠️  Icon source not found: {icon_source}")
-        print("Skipping icon generation")
-        return True
-    return run_command("pnpm run build:icons", "Building app icons")
 
-def build_sidecar():
+def build_frontend():
+    """构建 SvelteKit 前端"""
+    return run_command("yarn build", "构建前端")
+
+
+def install_python_deps():
+    """安装 Python 依赖"""
+    return run_command(
+        "pip install -r requirements.txt",
+        "安装 Python 依赖",
+        cwd="src-python"
+    )
+
+
+def build_pywebview_app():
+    """使用 PyInstaller 打包 pywebview 应用"""
     platform_name = detect_platform()
+    
+    # 检查 PyInstaller
     try:
         subprocess.run("pyinstaller --version", shell=True, check=True, capture_output=True)
     except subprocess.CalledProcessError:
-        print("❌ PyInstaller not found!")
-        print("Installing PyInstaller...")
-        if not run_command("pip3 install pyinstaller", "Installing PyInstaller"):
+        print("📦 安装 PyInstaller...")
+        if not run_command("pip install pyinstaller", "安装 PyInstaller"):
             return False
-    return run_command(f"pnpm run build:sidecar-{platform_name}", f"Building Python sidecar for {platform_name}")
+    
+    # 构建目录
+    dist_dir = Path("dist")
+    dist_dir.mkdir(exist_ok=True)
+    
+    # PyInstaller 参数
+    app_name = "AestivalFlow"
+    if platform_name == "windows":
+        app_name += ".exe"
+    
+    # 构建命令
+    pyinstaller_cmd = [
+        "pyinstaller",
+        "--name", "AestivalFlow",
+        "--onefile",
+        "--windowed",  # 无控制台窗口
+        "--clean",
+        "--distpath", str(dist_dir),
+        "--add-data", f"../build{';' if platform_name == 'windows' else ':'}build",  # 包含前端构建
+        "launcher.py"
+    ]
+    
+    # 添加图标（如果存在）
+    icon_path = Path("static/app-icon.ico" if platform_name == "windows" else "static/app-icon.png")
+    if icon_path.exists():
+        pyinstaller_cmd.extend(["--icon", str(icon_path)])
+    
+    cmd_str = " ".join(pyinstaller_cmd)
+    return run_command(cmd_str, f"打包 pywebview 应用 ({platform_name})", cwd="src-python")
 
-def build_frontend():
-    return run_command("pnpm run build", "Building SvelteKit frontend")
 
-def build_tauri_app():
-    return run_command("pnpm tauri build", "Building Tauri application")
+def copy_frontend_to_python():
+    """复制前端构建到 Python 目录"""
+    print("📁 复制前端构建文件...")
+    
+    src = Path("build")
+    dst = Path("src-python/build")
+    
+    if not src.exists():
+        print("❌ 前端构建目录不存在，请先运行 yarn build")
+        return False
+    
+    # 清理旧的构建
+    if dst.exists():
+        shutil.rmtree(dst)
+    
+    # 复制
+    shutil.copytree(src, dst)
+    print("✅ 前端文件已复制")
+    return True
+
 
 def show_build_results():
-    print("\n🎉 Build completed successfully!")
-    print("\n📦 Build artifacts:")
-    bundle_dir = Path("src-tauri/target/release/bundle")
-    if bundle_dir.exists():
-        print(f"   📁 Bundle directory: {bundle_dir}")
-        for item in bundle_dir.iterdir():
-            if item.is_dir():
-                print(f"   📦 {item.name}/")
-                for bundle_file in item.iterdir():
-                    if bundle_file.is_file():
-                        size = bundle_file.stat().st_size / (1024 * 1024)
-                        print(f"      📄 {bundle_file.name} ({size:.1f} MB)")
-    system = platform.system().lower()
-    print(f"\n🚀 Distribution files for {system}:")
-    if system == "darwin":
-        print("   • .app file for direct execution")
-        print("   • .dmg file for distribution")
-    elif system == "linux":
-        print("   • .AppImage for portable execution")
-        print("   • .deb/.rpm for package installation")
-    elif system == "windows":
-        print("   • .exe file for direct execution")
-        print("   • .msi file for installation")
-    print(f"\n📚 Next steps:")
-    print(f"   • Test your built application")
-    print(f"   • Distribute the appropriate bundle for your target platform")
-    print(f"   • Consider code signing for production distribution")
+    """显示构建结果"""
+    print("\n🎉 构建完成!")
+    print("\n📦 构建产物:")
+    
+    dist_dir = Path("dist")
+    if dist_dir.exists():
+        for item in dist_dir.iterdir():
+            if item.is_file():
+                size = item.stat().st_size / (1024 * 1024)
+                print(f"   📄 {item.name} ({size:.1f} MB)")
+    
+    print("\n🚀 运行方式:")
+    print("   开发模式: yarn dev:standalone")
+    print("   pywebview: yarn dev:pywebview 或 cd src-python && python launcher.py")
+    print("   打包应用: 运行 dist/ 目录下的可执行文件")
+
 
 def main():
-    print("🏗️  Complete Production Build")
+    """主函数"""
+    print("🏗️  AestivalFlow 构建")
     print("=" * 50)
+    
     args = sys.argv[1:]
-    only_sidecar = "--sidecar" in args
-
-    config = load_config()
-    print(f"📋 Building: {config['app']['productName']} v{config['app']['version']}")
-    print("")
+    
+    # 解析参数
+    only_frontend = "--frontend" in args
+    only_backend = "--backend" in args
+    
     check_dependencies()
     print("")
-
-    if only_sidecar:
-        print("🚀 Building only Python Sidecar...")
-        if not build_sidecar():
-            print("\n❌ Sidecar build failed")
+    
+    if only_frontend:
+        print("🚀 仅构建前端...")
+        if not build_frontend():
             sys.exit(1)
-        print("\n✅ Sidecar build complete")
         return
-
+    
+    if only_backend:
+        print("🚀 仅打包后端...")
+        if not install_python_deps():
+            sys.exit(1)
+        if not build_pywebview_app():
+            sys.exit(1)
+        return
+    
+    # 完整构建
+    print("🚀 开始完整构建...\n")
+    
     build_steps = [
-        ("Icons", lambda: build_icons(config)),
-        ("Python Sidecar", build_sidecar),
-        ("SvelteKit Frontend", build_frontend),
-        ("Tauri Application", build_tauri_app)
+        ("前端构建", build_frontend),
+        ("复制前端文件", copy_frontend_to_python),
+        ("Python 依赖", install_python_deps),
+        ("pywebview 打包", build_pywebview_app)
     ]
-    print("🚀 Starting full build process...\n")
+    
     for step_name, step_func in build_steps:
-        print(f"📋 Step: {step_name}")
+        print(f"📋 步骤: {step_name}")
         if not step_func():
-            print(f"\n❌ Build failed at step: {step_name}")
+            print(f"\n❌ 构建失败: {step_name}")
             sys.exit(1)
         print("")
+    
     show_build_results()
+
 
 if __name__ == "__main__":
     main()

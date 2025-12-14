@@ -22,6 +22,9 @@ from api.endpoints import router as api_router
 from api.flows import router as flows_router
 from api.tasks import router as tasks_router
 from api.tools import router as tools_router
+from api.nodes import router as nodes_router
+from api.execution import router as execution_router
+from api.websocket import router as websocket_router
 
 PORT_API = 8009
 server_instance = None
@@ -103,6 +106,9 @@ app.include_router(api_router, prefix="/v1")
 app.include_router(flows_router, prefix="/v1")
 app.include_router(tasks_router, prefix="/v1")
 app.include_router(tools_router, prefix="/v1")
+app.include_router(nodes_router, prefix="/v1")
+app.include_router(execution_router, prefix="/v1")
+app.include_router(websocket_router, prefix="/v1")
 
 @app.get("/")
 async def root():

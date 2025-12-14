@@ -36,11 +36,55 @@ export const NODE_DEFINITIONS: NodeDefinition[] = [
     }
   },
 
-  // 工具节点
+  // 工具节点 - 新版（直接 import 模式）
+  {
+    type: 'repacku',
+    category: 'tool',
+    label: '文件重打包',
+    description: '分析目录结构并打包为压缩文件',
+    icon: 'Package',
+    inputs: ['path'],
+    outputs: ['path'],
+    configSchema: {
+      path: { type: 'path', label: '路径', required: true },
+      types: { type: 'array', label: '文件类型', default: [] },
+      delete_after: { type: 'boolean', label: '压缩后删除源', default: false }
+    }
+  },
+  {
+    type: 'rawfilter',
+    category: 'tool',
+    label: '相似文件过滤',
+    description: '分析并处理相似的压缩包文件',
+    icon: 'Search',
+    inputs: ['path'],
+    outputs: ['path'],
+    configSchema: {
+      path: { type: 'path', label: '路径', required: true },
+      name_only_mode: { type: 'boolean', label: '仅名称模式', default: false },
+      create_shortcuts: { type: 'boolean', label: '创建快捷方式', default: false },
+      trash_only: { type: 'boolean', label: '仅移动到 trash', default: false }
+    }
+  },
+  {
+    type: 'crashu',
+    category: 'tool',
+    label: '相似文件夹检测',
+    description: '检测文件夹相似度并批量移动',
+    icon: 'AlertTriangle',
+    inputs: ['path'],
+    outputs: ['path'],
+    configSchema: {
+      path: { type: 'path', label: '路径', required: true },
+      similarity_threshold: { type: 'number', label: '相似度阈值', default: 0.6 },
+      auto_move: { type: 'boolean', label: '自动移动', default: false }
+    }
+  },
+  // 工具节点 - 旧版（兼容）
   {
     type: 'tool_repacku',
     category: 'tool',
-    label: 'Repacku',
+    label: 'Repacku (旧)',
     description: '文件重打包工具',
     icon: 'Package',
     inputs: ['path'],
@@ -62,7 +106,7 @@ export const NODE_DEFINITIONS: NodeDefinition[] = [
   {
     type: 'tool_crashu',
     category: 'tool',
-    label: 'Crashu',
+    label: 'Crashu (旧)',
     description: '崩溃文件处理',
     icon: 'AlertTriangle',
     inputs: ['path'],

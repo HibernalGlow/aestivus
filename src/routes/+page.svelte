@@ -69,7 +69,7 @@
     <div class="mx-auto max-w-7xl px-6 py-6">
       <div class="flex items-center justify-between">
         <div>
-          <h1 class="text-2xl font-bold text-gray-900">AestivalFlow</h1>
+          <h1 class="text-2xl font-bold text-gray-900">aestival</h1>
           <p class="text-sm text-gray-500 mt-1">Python工具链可视化编排平台</p>
         </div>
         <Button onclick={createNewFlow}>

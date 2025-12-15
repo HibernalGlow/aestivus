@@ -1,4 +1,4 @@
-# AestivalFlow 实施指南
+# aestival 实施指南
 
 > **版本**: 1.0.0  
 > **创建日期**: 2025-12-12
@@ -33,7 +33,7 @@ migratef --version
 ### 1.2 项目初始化
 
 ```bash
-cd d:\1VSCODE\Projects\AestivalFlow
+cd d:\1VSCODE\Projects\aestival
 
 # 清理pnpm (迁移到yarn)
 rm pnpm-lock.yaml

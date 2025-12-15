@@ -1,5 +1,5 @@
 """
-FastAPI Server for AestivalFlow
+FastAPI Server for aestival
 支持三种运行模式:
 - pywebview 模式: 作为桌面应用运行（推荐）
 - standalone 模式: 独立运行带热重载（开发用）

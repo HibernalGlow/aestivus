@@ -1,5 +1,5 @@
 """
-AestivalFlow pywebview 启动器
+aestival pywebview 启动器
 使用 pywebview 作为桌面壳，在后台线程运行 FastAPI 服务器
 """
 
@@ -17,14 +17,14 @@ from uvicorn import Config, Server
 from bridge import BridgeAPI
 
 
-class AestivalFlowApp:
-    """AestivalFlow 应用程序主入口类"""
+class aestivalApp:
+    """aestival 应用程序主入口类"""
     
     # 默认配置
     DEFAULT_PORT = 8009
     DEFAULT_HOST = "127.0.0.1"
     FRONTEND_DEV_PORT = 5175  # Vite 开发服务器端口
-    WINDOW_TITLE = "AestivalFlow"
+    WINDOW_TITLE = "aestival"
     WINDOW_WIDTH = 1400
     WINDOW_HEIGHT = 900
     SERVER_TIMEOUT = 10  # 等待服务器启动的超时时间（秒）
@@ -49,7 +49,7 @@ class AestivalFlowApp:
     
     def start(self):
         """启动应用程序"""
-        print(f"🚀 启动 AestivalFlow...")
+        print(f"🚀 启动 aestival...")
         
         # 1. 查找可用端口
         self.port = self._find_available_port()
@@ -224,7 +224,7 @@ def main():
         print("🔧 开发模式启动")
         print("📝 请确保前端开发服务器已运行: yarn dev")
     
-    app = AestivalFlowApp(dev_mode=dev_mode)
+    app = aestivalApp(dev_mode=dev_mode)
     app.start()
 
 

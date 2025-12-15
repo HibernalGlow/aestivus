@@ -1,5 +1,5 @@
 {
-  "name": "aestival-flow",
+  "name": "aestival",
   "version": "3.0.0",
   "description": "Python工具链可视化编排与执行平台 - pywebview 版本",
   "type": "module",

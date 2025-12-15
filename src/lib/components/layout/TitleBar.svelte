@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * AestivalFlow - 自定义标题栏组件
+   * aestival - 自定义标题栏组件
    * 无边框窗口的标题栏，支持拖拽移动和窗口控制
    * 同时支持 pywebview 和 Tauri
    */
@@ -88,7 +88,7 @@
 >
   <!-- 左侧：应用名称（拖拽区域） -->
   <div class="flex items-center gap-2" data-tauri-drag-region>
-    <span class="text-sm font-semibold">AestivalFlow</span>
+    <span class="text-sm font-semibold">aestival</span>
   </div>
 
   <!-- 中间：功能按钮（不可拖拽） -->

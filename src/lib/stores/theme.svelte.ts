@@ -1,5 +1,5 @@
 /**
- * AestivalFlow - 主题系统
+ * aestival - 主题系统
  * 参考 neoview 实现，支持明暗模式切换和主题导入
  */
 import { writable, get } from 'svelte/store';

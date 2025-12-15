@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-AestivalFlow 构建脚本
+aestival 构建脚本
 支持 pywebview 桌面应用打包
 """
 import json
@@ -102,14 +102,14 @@ def build_pywebview_app():
     dist_dir.mkdir(exist_ok=True)
     
     # PyInstaller 参数
-    app_name = "AestivalFlow"
+    app_name = "aestival"
     if platform_name == "windows":
         app_name += ".exe"
     
     # 构建命令
     pyinstaller_cmd = [
         "pyinstaller",
-        "--name", "AestivalFlow",
+        "--name", "aestival",
         "--onefile",
         "--windowed",  # 无控制台窗口
         "--clean",
@@ -168,7 +168,7 @@ def show_build_results():
 
 def main():
     """主函数"""
-    print("🏗️  AestivalFlow 构建")
+    print("🏗️  aestival 构建")
     print("=" * 50)
     
     args = sys.argv[1:]

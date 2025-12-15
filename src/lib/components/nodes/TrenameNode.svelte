@@ -78,6 +78,25 @@
   function parseTree(json: string): TreeNode[] {
     try { return JSON.parse(json).root || []; } catch { return []; }
   }
+  
+  // 递归收集所有目录路径用于默认展开
+  function collectAllPaths(nodes: TreeNode[], prefix: string): string[] {
+    const paths: string[] = [];
+    nodes.forEach((node, i) => {
+      const path = `${prefix}_${i}`;
+      if (isDir(node)) {
+        paths.push(path);
+        if (node.children) paths.push(...collectAllPaths(node.children, path));
+      }
+    });
+    return paths;
+  }
+  
+  // 展开所有目录
+  function expandAll() {
+    const allPaths = collectAllPaths(treeData, 'root');
+    expandedPaths = new Set(allPaths);
+  }
 
   async function selectFolder() {
     try {
@@ -111,7 +130,10 @@
           stats = { total: r.data.total_items || 0, pending: r.data.pending_count || 0, ready: r.data.ready_count || 0, conflicts: 0 };
           basePath = r.data.base_path || '';
         }
-        if (segs.length > 0) treeData = parseTree(segs[0]);
+        if (segs.length > 0) {
+          treeData = parseTree(segs[0]);
+          expandAll(); // 默认展开所有目录
+        }
         currentSegment = 0; conflicts = []; phase = 'ready';
         log(`✅ ${r.data.total_items} 项, ${segs.length} 段`);
       } else { phase = 'error'; log(`❌ ${r.message}`); }
@@ -135,6 +157,7 @@
           stats.ready += r.data.ready_count || 0;
         }
         treeData = parseTree(text);
+        expandAll(); // 默认展开所有目录
         currentSegment = segments.length - 1; phase = 'ready';
         log(`✅ 导入 ${r.data.total_items} 项`);
       } else log(`❌ ${r.message}`);
@@ -280,7 +303,7 @@
                   variant={currentSegment === i ? 'default' : 'ghost'} 
                   size="sm" 
                   class="h-5 w-5 p-0 text-xs"
-                  onclick={() => { currentSegment = i; treeData = parseTree(segments[i]); }}
+                  onclick={() => { currentSegment = i; treeData = parseTree(segments[i]); expandAll(); }}
                 >{i + 1}</Button>
               {/each}
             </div>

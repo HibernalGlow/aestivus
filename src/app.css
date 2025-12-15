@@ -118,3 +118,17 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* NodeResizer 样式覆盖 - 使用主题色替代默认蓝色 */
+.svelte-flow__resize-control {
+  border-color: var(--primary) !important;
+}
+
+.svelte-flow__resize-control.line {
+  border-color: var(--primary) !important;
+}
+
+.svelte-flow__resize-control.handle {
+  background-color: var(--primary) !important;
+  border-color: var(--primary) !important;
+}

@@ -24,6 +24,8 @@ export interface ThemeState {
   themeName: string;
   systemPrefersDark: boolean;
   showImportDialog: boolean;
+  backgroundImage: string | null; // Base64 或 URL
+  backgroundOpacity: number; // 0-100
 }
 
 // 预设主题
@@ -101,18 +103,20 @@ export const presetThemes: ThemeConfig[] = [
 ];
 
 // 从 localStorage 加载
-function loadFromStorage(): { mode: ThemeMode; themeName: string; customThemes: ThemeConfig[] } {
+function loadFromStorage(): { mode: ThemeMode; themeName: string; customThemes: ThemeConfig[]; backgroundImage: string | null; backgroundOpacity: number } {
   if (typeof window === 'undefined') {
-    return { mode: 'system', themeName: 'Default', customThemes: [] };
+    return { mode: 'system', themeName: 'Default', customThemes: [], backgroundImage: null, backgroundOpacity: 30 };
   }
   try {
     const mode = (localStorage.getItem('theme-mode') as ThemeMode) || 'system';
     const themeName = localStorage.getItem('theme-name') || 'Default';
     const rawCustom = localStorage.getItem('custom-themes');
     const customThemes = rawCustom ? JSON.parse(rawCustom) : [];
-    return { mode, themeName, customThemes };
+    const backgroundImage = localStorage.getItem('background-image');
+    const backgroundOpacity = parseInt(localStorage.getItem('background-opacity') || '30', 10);
+    return { mode, themeName, customThemes, backgroundImage, backgroundOpacity };
   } catch {
-    return { mode: 'system', themeName: 'Default', customThemes: [] };
+    return { mode: 'system', themeName: 'Default', customThemes: [], backgroundImage: null, backgroundOpacity: 30 };
   }
 }
 
@@ -157,7 +161,7 @@ function findTheme(name: string, customThemes: ThemeConfig[]): ThemeConfig {
 
 // 创建主题 store
 function createThemeStore() {
-  const { mode: initialMode, themeName: initialThemeName, customThemes: initialCustomThemes } = loadFromStorage();
+  const { mode: initialMode, themeName: initialThemeName, customThemes: initialCustomThemes, backgroundImage: initialBg, backgroundOpacity: initialOpacity } = loadFromStorage();
   const systemPrefersDark = typeof window !== 'undefined' 
     ? window.matchMedia?.('(prefers-color-scheme: dark)').matches 
     : false;
@@ -167,6 +171,8 @@ function createThemeStore() {
     themeName: initialThemeName,
     systemPrefersDark,
     showImportDialog: false,
+    backgroundImage: initialBg,
+    backgroundOpacity: initialOpacity,
   });
 
   let customThemes = initialCustomThemes;
@@ -241,6 +247,32 @@ function createThemeStore() {
     
     openImportDialog: () => update(state => ({ ...state, showImportDialog: true })),
     closeImportDialog: () => update(state => ({ ...state, showImportDialog: false })),
+
+    // 背景图相关
+    setBackgroundImage: (imageData: string | null) => {
+      if (typeof localStorage !== 'undefined') {
+        if (imageData) {
+          localStorage.setItem('background-image', imageData);
+        } else {
+          localStorage.removeItem('background-image');
+        }
+      }
+      update(state => ({ ...state, backgroundImage: imageData }));
+    },
+
+    setBackgroundOpacity: (opacity: number) => {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('background-opacity', String(opacity));
+      }
+      update(state => ({ ...state, backgroundOpacity: opacity }));
+    },
+
+    clearBackground: () => {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('background-image');
+      }
+      update(state => ({ ...state, backgroundImage: null }));
+    },
   };
 }
 

@@ -7,6 +7,7 @@
   import FloatingToolbar from '$lib/components/flow/FloatingToolbar.svelte';
   import FloatingPalette from '$lib/components/flow/FloatingPalette.svelte';
   import LogViewer from '$lib/components/execution/LogViewer.svelte';
+  import { themeStore } from '$lib/stores/theme.svelte';
 
   const flowId = $derived(page.params.id);
 
@@ -27,8 +28,16 @@
 </script>
 
 <div class="h-full flex flex-col bg-background relative">
+  <!-- 背景图层 -->
+  {#if $themeStore.backgroundImage}
+    <div 
+      class="absolute inset-0 bg-cover bg-center bg-no-repeat pointer-events-none"
+      style="background-image: url({$themeStore.backgroundImage}); opacity: {$themeStore.backgroundOpacity / 100};"
+    ></div>
+  {/if}
+
   <!-- 全屏画布 -->
-  <div class="flex-1">
+  <div class="flex-1 relative">
     <FlowCanvas />
   </div>
 

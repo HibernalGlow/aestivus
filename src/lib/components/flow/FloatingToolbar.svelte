@@ -4,9 +4,31 @@
    */
   import { flowStore, taskStore, isRunning } from '$lib/stores';
   import { api } from '$lib/services/api';
-  import { Save, Play, Square, RotateCcw, FileDown, FileUp, Sun, Moon, Monitor, Palette, GripHorizontal } from '@lucide/svelte';
+  import { Save, Play, Square, RotateCcw, FileDown, FileUp, Sun, Moon, Monitor, Palette, GripHorizontal, Image, X } from '@lucide/svelte';
   import { Button } from '$lib/components/ui/button';
   import { themeStore, toggleThemeMode, openThemeImport } from '$lib/stores/theme.svelte';
+
+  // 背景图上传
+  function uploadBackground() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          themeStore.setBackgroundImage(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      }
+    };
+    input.click();
+  }
+
+  function clearBackground() {
+    themeStore.clearBackground();
+  }
 
   // 拖拽状态
   let isDragging = $state(false);
@@ -120,6 +142,14 @@
     <Button variant="ghost" size="icon" class="h-7 w-7" onclick={openThemeImport} title="导入主题">
       <Palette class="w-3.5 h-3.5" />
     </Button>
+    <Button variant="ghost" size="icon" class="h-7 w-7" onclick={uploadBackground} title="上传背景图">
+      <Image class="w-3.5 h-3.5" />
+    </Button>
+    {#if $themeStore.backgroundImage}
+      <Button variant="ghost" size="icon" class="h-7 w-7 text-destructive" onclick={clearBackground} title="清除背景">
+        <X class="w-3.5 h-3.5" />
+      </Button>
+    {/if}
     <div class="w-px h-5 bg-border mx-0.5"></div>
     <Button variant="ghost" size="icon" class="h-7 w-7" onclick={importFlow} title="导入流程">
       <FileUp class="w-3.5 h-3.5" />

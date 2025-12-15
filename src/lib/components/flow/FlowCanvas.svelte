@@ -133,7 +133,7 @@
       fitView
       snapGrid={[15, 15]}
     >
-      <Background />
+      <Background gap={20} color="currentColor" class="opacity-10" />
       <Controls />
       <MiniMap
         nodeColor={(node) => {
@@ -149,9 +149,12 @@
 
 <style>
   :global(.svelte-flow) {
-    background: #f8fafc;
+    background: transparent !important;
   }
   :global(.svelte-flow__node) {
     cursor: pointer;
+  }
+  :global(.svelte-flow__background) {
+    opacity: 0.3;
   }
 </style>

@@ -14,7 +14,7 @@
   import * as TreeView from '$lib/components/ui/tree-view';
   import * as BentoGrid from '$lib/components/ui/bento-grid';
   import { api } from '$lib/services/api';
-  import { nodeStateStore } from '$lib/stores/nodeStateStore';
+  import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
   import NodeWrapper from './NodeWrapper.svelte';
   import type { FolderNode, CompressionStats, FolderCard } from '$lib/types/repacku';
   import { 
@@ -74,7 +74,7 @@
   }
   
   // 从 nodeStateStore 获取或初始化状态
-  const savedState = nodeStateStore.get<RepackuState>(id);
+  const savedState = getNodeState<RepackuState>(id);
   
   // 初始化状态
   let path = data?.config?.path ?? '';
@@ -110,7 +110,7 @@
   
   // 保存状态到 nodeStateStore
   function saveState() {
-    nodeStateStore.set<RepackuState>(id, {
+    setNodeState<RepackuState>(id, {
       phase,
       progress,
       progressText,

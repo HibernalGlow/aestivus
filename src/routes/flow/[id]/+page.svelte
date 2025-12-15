@@ -6,6 +6,7 @@
   import FlowCanvas from '$lib/components/flow/FlowCanvas.svelte';
   import FloatingToolbar from '$lib/components/flow/FloatingToolbar.svelte';
   import FloatingPalette from '$lib/components/flow/FloatingPalette.svelte';
+  import FullscreenNodeModal from '$lib/components/flow/FullscreenNodeModal.svelte';
   import LogViewer from '$lib/components/execution/LogViewer.svelte';
   import { themeStore } from '$lib/stores/theme.svelte';
 
@@ -51,4 +52,7 @@
       <LogViewer />
     </div>
   {/if}
+
+  <!-- 全屏节点模态框 -->
+  <FullscreenNodeModal />
 </div>

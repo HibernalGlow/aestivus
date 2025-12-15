@@ -1,46 +1,110 @@
 <script lang="ts">
   /**
    * 通用节点包装器
-   * 提供：关闭、折叠/展开、固定 功能
+   * 提供：关闭、折叠/展开、固定、状态显示、全屏 功能
    */
-  import { X, ChevronDown, ChevronRight, Pin, PinOff } from '@lucide/svelte';
+  import { X, ChevronDown, ChevronRight, Pin, PinOff, Maximize2 } from '@lucide/svelte';
+  import { Badge } from '$lib/components/ui/badge';
   import { flowStore } from '$lib/stores';
+  import { fullscreenNodeStore } from '$lib/stores/fullscreenNode.svelte';
   import type { Snippet } from 'svelte';
+
+  // 状态类型
+  type NodeStatus = 'idle' | 'running' | 'completed' | 'error' | string;
+  type BadgeVariant = 'default' | 'secondary' | 'destructive' | 'outline';
 
   interface Props {
     /** 节点 ID */
     nodeId: string;
     /** 节点标题 */
     title: string;
-    /** 标题图标 */
+    /** Lucide 图标组件 */
     icon?: typeof X;
+    /** emoji 图标（与 icon 二选一） */
+    emoji?: string;
+    /** 节点状态 */
+    status?: NodeStatus;
+    /** 自定义状态标签 */
+    statusLabel?: string;
+    /** 自定义状态样式 */
+    statusVariant?: BadgeVariant;
     /** 是否可折叠，默认 true */
     collapsible?: boolean;
     /** 是否可关闭，默认 true */
     closable?: boolean;
     /** 是否可固定，默认 true */
     pinnable?: boolean;
+    /** 是否有全屏功能 */
+    hasFullscreen?: boolean;
+    /** 全屏节点类型 */
+    fullscreenType?: string;
+    /** 全屏传递数据 */
+    fullscreenData?: any;
     /** 初始折叠状态 */
     defaultCollapsed?: boolean;
+    /** 边框样式类 */
+    borderClass?: string;
     /** 节点内容 */
     children: Snippet;
-    /** 标题栏额外内容 */
+    /** 标题栏额外内容（在标准按钮之前） */
     headerExtra?: Snippet;
+    /** 折叠回调 */
+    onCollapse?: (collapsed: boolean) => void;
+    /** 固定回调 */
+    onPin?: (pinned: boolean) => void;
   }
+
+  // 默认状态标签映射
+  const defaultStatusLabels: Record<string, string> = {
+    idle: '就绪',
+    running: '运行中',
+    completed: '完成',
+    error: '错误',
+    scanning: '扫描中',
+    analyzing: '分析中',
+    analyzed: '待压缩',
+    compressing: '压缩中',
+    ready: '待操作',
+    renaming: '执行中'
+  };
+
+  // 默认状态样式映射
+  const defaultStatusVariants: Record<string, BadgeVariant> = {
+    idle: 'secondary',
+    running: 'default',
+    completed: 'default',
+    error: 'destructive',
+    scanning: 'default',
+    analyzing: 'default',
+    analyzed: 'secondary',
+    compressing: 'default',
+    ready: 'secondary',
+    renaming: 'default'
+  };
 
   let {
     nodeId,
     title,
     icon: Icon,
+    emoji,
+    status,
+    statusLabel,
+    statusVariant,
     collapsible = true,
     closable = true,
     pinnable = true,
+    hasFullscreen = false,
+    fullscreenType,
+    fullscreenData,
     defaultCollapsed = false,
+    borderClass = 'border-border',
     children,
-    headerExtra
+    headerExtra,
+    onCollapse,
+    onPin
   }: Props = $props();
 
-  // 状态 - 使用函数初始化避免警告
+  // 状态
   let collapsed = $state.raw(false);
   let pinned = $state(false);
   
@@ -48,6 +112,10 @@
   $effect(() => {
     if (defaultCollapsed) collapsed = true;
   });
+
+  // 计算状态显示
+  let displayLabel = $derived(statusLabel ?? (status ? defaultStatusLabels[status] ?? status : ''));
+  let displayVariant = $derived(statusVariant ?? (status ? defaultStatusVariants[status] ?? 'secondary' : 'secondary'));
 
   // 关闭节点
   function handleClose() {
@@ -58,22 +126,29 @@
   function toggleCollapse() {
     if (collapsible) {
       collapsed = !collapsed;
+      onCollapse?.(collapsed);
     }
   }
 
-  // 切换固定 - 更新节点的 draggable 属性
+  // 切换固定
   function togglePin() {
     pinned = !pinned;
     flowStore.updateNode(nodeId, { draggable: !pinned });
+    onPin?.(pinned);
+  }
+
+  // 打开全屏
+  function openFullscreen() {
+    if (hasFullscreen && fullscreenType) {
+      fullscreenNodeStore.open(fullscreenType, nodeId, fullscreenData);
+    }
   }
 </script>
 
-<div class="bg-card/95 backdrop-blur border rounded-lg shadow-lg overflow-hidden min-w-[160px]">
+<div class="bg-card/95 backdrop-blur border rounded-lg shadow-lg overflow-hidden min-w-[160px] {borderClass}">
   <!-- 标题栏 -->
-  <div 
-    class="flex items-center justify-between px-3 py-2 bg-muted/50 border-b cursor-move select-none"
-  >
-    <!-- 左侧：折叠按钮 + 图标 + 标题 -->
+  <div class="flex items-center justify-between px-3 py-2 bg-muted/30 border-b cursor-move select-none">
+    <!-- 左侧：折叠按钮 + 图标 + 标题 + 状态 -->
     <div class="flex items-center gap-2 flex-1 min-w-0">
       {#if collapsible}
         <button
@@ -89,17 +164,35 @@
         </button>
       {/if}
       
-      {#if Icon}
+      {#if emoji}
+        <span class="text-lg shrink-0">{emoji}</span>
+      {:else if Icon}
         <Icon class="w-4 h-4 text-muted-foreground shrink-0" />
       {/if}
       
-      <span class="text-sm font-medium truncate">{title}</span>
+      <span class="text-sm font-semibold truncate">{title}</span>
+      
+      {#if status && displayLabel}
+        <Badge variant={displayVariant} class="text-xs ml-1">
+          {displayLabel}
+        </Badge>
+      {/if}
     </div>
 
     <!-- 右侧：操作按钮 -->
     <div class="flex items-center gap-0.5 ml-2">
       {#if headerExtra}
         {@render headerExtra()}
+      {/if}
+      
+      {#if hasFullscreen}
+        <button
+          class="p-1 rounded hover:bg-muted transition-colors text-muted-foreground"
+          onclick={openFullscreen}
+          title="全屏"
+        >
+          <Maximize2 class="w-3.5 h-3.5" />
+        </button>
       {/if}
       
       {#if pinnable}

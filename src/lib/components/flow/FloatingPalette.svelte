@@ -4,9 +4,11 @@
    */
   import { getNodesByCategory } from '$lib/stores/nodeRegistry';
   import { flowStore } from '$lib/stores';
+  import { fullscreenNodeStore } from '$lib/stores/fullscreenNode.svelte';
   import {
     Clipboard, Folder, FileInput, Package, Search, AlertTriangle,
-    FolderSync, FileText, Video, Terminal, GripHorizontal, ChevronDown, ChevronRight
+    FolderSync, FileText, Video, Terminal, GripHorizontal, ChevronDown, ChevronRight,
+    Maximize2
   } from '@lucide/svelte';
 
   const icons: Record<string, typeof Clipboard> = {
@@ -56,6 +58,10 @@
       data: { label, status: 'idle' as const }
     };
     flowStore.addNode(node);
+  }
+
+  function openFullscreen(type: string) {
+    fullscreenNodeStore.open(type);
   }
 
   function onDragStart(event: DragEvent, type: string, label: string) {
@@ -116,15 +122,25 @@
               <div class="space-y-0.5 ml-1">
                 {#each nodes as nodeDef}
                   {@const Icon = icons[nodeDef.icon] || Terminal}
-                  <button
-                    class="w-full flex items-center gap-2 px-2 py-1.5 rounded text-left hover:bg-muted transition-colors cursor-grab active:cursor-grabbing text-sm"
-                    draggable="true"
-                    onclick={() => addNode(nodeDef.type, nodeDef.label)}
-                    ondragstart={(e) => onDragStart(e, nodeDef.type, nodeDef.label)}
-                  >
-                    <Icon class="w-3.5 h-3.5 {category.color}" />
-                    <span class="truncate">{nodeDef.label}</span>
-                  </button>
+                  <div class="flex items-center gap-1 group">
+                    <button
+                      class="flex-1 flex items-center gap-2 px-2 py-1.5 rounded text-left hover:bg-muted transition-colors cursor-grab active:cursor-grabbing text-sm"
+                      draggable="true"
+                      onclick={() => addNode(nodeDef.type, nodeDef.label)}
+                      ondragstart={(e) => onDragStart(e, nodeDef.type, nodeDef.label)}
+                    >
+                      <Icon class="w-3.5 h-3.5 {category.color}" />
+                      <span class="truncate">{nodeDef.label}</span>
+                    </button>
+                    <!-- 全屏打开按钮 -->
+                    <button
+                      class="p-1 rounded opacity-0 group-hover:opacity-100 hover:bg-muted transition-all"
+                      onclick={() => openFullscreen(nodeDef.type)}
+                      title="全屏打开"
+                    >
+                      <Maximize2 class="w-3 h-3 text-muted-foreground" />
+                    </button>
+                  </div>
                 {/each}
               </div>
             {/if}

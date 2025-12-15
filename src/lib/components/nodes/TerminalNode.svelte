@@ -7,27 +7,13 @@
    */
   import { Handle, Position } from '@xyflow/svelte';
   import { Button } from '$lib/components/ui/button';
-  import { Badge } from '$lib/components/ui/badge';
   import { onMount, onDestroy } from 'svelte';
+  import NodeWrapper from './NodeWrapper.svelte';
   import { 
-    Terminal, 
-    Trash2, 
-    Copy, 
-    Check,
-    Wifi,
-    WifiOff,
-    Pause,
-    Play,
-    ChevronDown,
-    ChevronRight,
-    X,
-    Pin,
-    PinOff
+    Terminal, Trash2, Copy, Check, Wifi, WifiOff, Pause, Play
   } from '@lucide/svelte';
-  import { flowStore } from '$lib/stores';
   import AnsiToHtml from 'ansi-to-html';
   
-  // Props from SvelteFlow
   export let id: string;
   export let data: {
     label?: string;
@@ -54,25 +40,14 @@
   let ws: WebSocket | null = null;
   let terminalEl: HTMLDivElement;
   
-  // 节点控制状态
-  let collapsed = false;
-  let pinned = false;
-  
-  function handleClose() { flowStore.removeNode(id); }
-  function toggleCollapse() { collapsed = !collapsed; }
-  function togglePin() { 
-    pinned = !pinned; 
-    flowStore.updateNode(id, { draggable: !pinned });
-  }
-  
   const maxLines = data?.maxLines ?? 200;
   const wsUrl = `ws://localhost:8009/ws/terminal`;
 
-  // 连接 WebSocket
+  // 边框样式
+  $: borderClass = connected ? 'border-primary/50' : 'border-border';
+
   function connect() {
-    if (ws) {
-      ws.close();
-    }
+    if (ws) ws.close();
     
     try {
       ws = new WebSocket(wsUrl);
@@ -93,7 +68,6 @@
             addLine(`📡 ${data.message || '连接成功'}`);
           }
         } catch {
-          // 纯文本消息
           addLine(event.data);
         }
       };
@@ -112,9 +86,7 @@
     }
   }
 
-  // 添加一行输出（保留 ANSI 颜色）
   function addLine(text: string) {
-    // 处理多行文本，转换 ANSI 为 HTML
     const newLines = text.split('\n')
       .filter(l => l.length > 0)
       .map(l => ({
@@ -123,20 +95,13 @@
       }));
     lines = [...lines, ...newLines].slice(-maxLines);
     
-    // 自动滚动到底部
     requestAnimationFrame(() => {
-      if (terminalEl) {
-        terminalEl.scrollTop = terminalEl.scrollHeight;
-      }
+      if (terminalEl) terminalEl.scrollTop = terminalEl.scrollHeight;
     });
   }
 
-  // 清空终端
-  function clear() {
-    lines = [];
-  }
+  function clear() { lines = []; }
 
-  // 复制内容（纯文本）
   async function copyContent() {
     const text = lines.map(l => l.text).join('\n');
     try {
@@ -148,134 +113,109 @@
     }
   }
 
-  // 切换暂停
   function togglePause() {
     paused = !paused;
     addLine(paused ? '⏸️ 已暂停' : '▶️ 已恢复');
   }
 
-  // 重新连接
   function reconnect() {
     addLine('🔄 正在重新连接...');
     connect();
   }
 
-  onMount(() => {
-    connect();
-  });
-
-  onDestroy(() => {
-    if (ws) {
-      ws.close();
-    }
-  });
-
-  // 忽略未使用的 id 警告
-  void id;
+  onMount(() => { connect(); });
+  onDestroy(() => { if (ws) ws.close(); });
 </script>
 
-<div class="rounded-lg border-2 bg-card min-w-[280px] max-w-[400px] {connected ? 'border-green-500/50' : 'border-border'}">
-  <!-- 输入端口 -->
+<div class="min-w-[280px] max-w-[400px]">
   <Handle type="target" position={Position.Left} class="bg-primary!" />
   
-  <!-- 标题栏 -->
-  <div class="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/30">
-    <div class="flex items-center gap-2">
-      <button class="p-0.5 rounded hover:bg-muted" onclick={toggleCollapse} title={collapsed ? '展开' : '折叠'}>
-        {#if collapsed}<ChevronRight class="w-4 h-4" />{:else}<ChevronDown class="w-4 h-4" />{/if}
-      </button>
-      <Terminal class="w-5 h-5 text-green-500" />
-      <span class="font-semibold">{data?.label ?? '终端输出'}</span>
-      <Badge variant={connected ? 'default' : 'secondary'} class="text-xs">
-        {#if connected}
-          <Wifi class="w-3 h-3 mr-1" />
-          已连接
-        {:else}
-          <WifiOff class="w-3 h-3 mr-1" />
-          未连接
-        {/if}
-      </Badge>
-    </div>
-    <div class="flex items-center gap-0.5">
-      <button class="p-1 rounded hover:bg-muted {pinned ? 'text-primary' : 'text-muted-foreground'}" onclick={togglePin} title={pinned ? '取消固定' : '固定'}>
-        {#if pinned}<Pin class="w-3.5 h-3.5" />{:else}<PinOff class="w-3.5 h-3.5" />{/if}
-      </button>
-      <button class="p-1 rounded hover:bg-destructive hover:text-destructive-foreground text-muted-foreground" onclick={handleClose} title="关闭">
-        <X class="w-3.5 h-3.5" />
-      </button>
-    </div>
-  </div>
-  
-  <!-- 内容区（折叠时隐藏） -->
-  {#if !collapsed}
-  <!-- 终端内容 -->
-  <div 
-    bind:this={terminalEl}
-    class="bg-zinc-900 text-zinc-100 p-2 font-mono text-xs h-[180px] overflow-y-auto select-text cursor-text nodrag"
+  <NodeWrapper
+    nodeId={id}
+    title={data?.label ?? '终端输出'}
+    icon={Terminal}
+    status={connected ? 'connected' : 'disconnected'}
+    statusLabel={connected ? '已连接' : '未连接'}
+    statusVariant={connected ? 'default' : 'secondary'}
+    {borderClass}
   >
-    {#each lines as line}
-      <div class="whitespace-pre-wrap break-all leading-relaxed">{@html line.html}</div>
-    {/each}
-    {#if lines.length === 0}
-      <div class="text-zinc-500 italic">等待输出...</div>
-    {/if}
-  </div>
-  
-  <!-- 工具栏 -->
-  <div class="flex items-center justify-between p-2 border-t border-border bg-muted/50 nodrag">
-    <div class="flex items-center gap-1">
-      <Button 
-        variant="ghost" 
-        size="icon" 
-        class="h-7 w-7"
-        onclick={togglePause}
-        title={paused ? '恢复' : '暂停'}
-      >
-        {#if paused}
-          <Play class="h-4 w-4" />
-        {:else}
-          <Pause class="h-4 w-4" />
-        {/if}
-      </Button>
-      <Button 
-        variant="ghost" 
-        size="icon" 
-        class="h-7 w-7"
-        onclick={clear}
-        title="清空"
-      >
-        <Trash2 class="h-4 w-4" />
-      </Button>
-      <Button 
-        variant="ghost" 
-        size="icon" 
-        class="h-7 w-7"
-        onclick={copyContent}
-        title="复制"
-      >
-        {#if copied}
-          <Check class="h-4 w-4 text-green-500" />
-        {:else}
-          <Copy class="h-4 w-4" />
-        {/if}
-      </Button>
-    </div>
-    <div class="flex items-center gap-2">
-      <span class="text-xs text-muted-foreground">{lines.length} 行</span>
-      {#if !connected}
-        <Button 
-          variant="outline" 
-          size="sm" 
-          class="h-7 text-xs"
-          onclick={reconnect}
-        >
-          重新连接
-        </Button>
+    {#snippet headerExtra()}
+      {#if connected}
+        <Wifi class="w-3 h-3 text-green-500 mr-1" />
+      {:else}
+        <WifiOff class="w-3 h-3 text-muted-foreground mr-1" />
       {/if}
-    </div>
-  </div>
-  {/if}
+    {/snippet}
+    
+    {#snippet children()}
+      <!-- 终端内容 -->
+      <div 
+        bind:this={terminalEl}
+        class="bg-zinc-900 text-zinc-100 p-2 font-mono text-xs h-[180px] overflow-y-auto select-text cursor-text"
+      >
+        {#each lines as line}
+          <div class="whitespace-pre-wrap break-all leading-relaxed">{@html line.html}</div>
+        {/each}
+        {#if lines.length === 0}
+          <div class="text-zinc-500 italic">等待输出...</div>
+        {/if}
+      </div>
+      
+      <!-- 工具栏 -->
+      <div class="flex items-center justify-between p-2 border-t border-border bg-muted/50">
+        <div class="flex items-center gap-1">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            class="h-7 w-7"
+            onclick={togglePause}
+            title={paused ? '恢复' : '暂停'}
+          >
+            {#if paused}
+              <Play class="h-4 w-4" />
+            {:else}
+              <Pause class="h-4 w-4" />
+            {/if}
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            class="h-7 w-7"
+            onclick={clear}
+            title="清空"
+          >
+            <Trash2 class="h-4 w-4" />
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            class="h-7 w-7"
+            onclick={copyContent}
+            title="复制"
+          >
+            {#if copied}
+              <Check class="h-4 w-4 text-green-500" />
+            {:else}
+              <Copy class="h-4 w-4" />
+            {/if}
+          </Button>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-muted-foreground">{lines.length} 行</span>
+          {#if !connected}
+            <Button 
+              variant="outline" 
+              size="sm" 
+              class="h-7 text-xs"
+              onclick={reconnect}
+            >
+              重新连接
+            </Button>
+          {/if}
+        </div>
+      </div>
+    {/snippet}
+  </NodeWrapper>
   
-  <!-- 输出端口 -->
   <Handle type="source" position={Position.Right} class="bg-primary!" />
 </div>

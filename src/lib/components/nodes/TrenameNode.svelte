@@ -558,105 +558,156 @@
           </DashboardGrid>
         </div>
       {:else}
-        <!-- 普通模式 -->
-        <div class="flex flex-1 min-h-0 overflow-hidden">
-          <!-- 左侧：操作区 -->
-          <div class="flex flex-col p-2 space-y-2 {showTree ? 'w-1/2 border-r' : 'flex-1'} overflow-y-auto">
-            <!-- 路径输入 -->
-            <div class="flex gap-1">
-              <Input bind:value={scanPath} placeholder="目录路径..." disabled={isRunning} class="flex-1 h-7 text-xs" />
-              <Button variant="ghost" size="icon" class="h-7 w-7 shrink-0" onclick={selectFolder} disabled={isRunning}><FolderOpen class="h-3 w-3" /></Button>
-              <Button variant="ghost" size="icon" class="h-7 w-7 shrink-0" onclick={pastePath} disabled={isRunning}><Clipboard class="h-3 w-3" /></Button>
-            </div>
-
+        <!-- 普通模式：Bento 块布局 -->
+        <div class="flex-1 overflow-y-auto p-2">
+          <div class="grid grid-cols-2 gap-2" style="grid-auto-rows: minmax(auto, max-content);">
             
-            <!-- 扫描按钮 -->
-            <div class="flex gap-1">
-              <Button variant="outline" size="sm" class="flex-1 h-7 text-xs" onclick={() => handleScan(false)} disabled={isRunning}>
-                {#if isRunning && phase === 'scanning'}<LoaderCircle class="h-3 w-3 mr-1 animate-spin" />{:else}<RefreshCw class="h-3 w-3 mr-1" />{/if}替换
-              </Button>
-              <Button variant="outline" size="sm" class="flex-1 h-7 text-xs" onclick={() => handleScan(true)} disabled={isRunning}>
-                <Download class="h-3 w-3 mr-1" />合并
-              </Button>
-            </div>
-            
-            <!-- 导入/导出 -->
-            <div class="flex gap-1">
-              <Button variant="ghost" size="sm" class="flex-1 h-7 text-xs" onclick={() => importJson(false)} disabled={isRunning} title="从剪贴板导入JSON">
-                <Upload class="h-3 w-3 mr-1" />剪贴板
-              </Button>
-              <Button variant="ghost" size="sm" class="flex-1 h-7 text-xs" onclick={() => showJsonInput = !showJsonInput} disabled={isRunning} title="输入JSON">
-                <FileJson class="h-3 w-3 mr-1" />输入
-              </Button>
-              <Button variant="ghost" size="sm" class="flex-1 h-7 text-xs" onclick={() => copySegment(currentSegment)} disabled={!segments.length} title="复制当前段">
-                {#if copied}<Check class="h-3 w-3 mr-1 text-green-500" />{:else}<Clipboard class="h-3 w-3 mr-1" />{/if}复制
-              </Button>
-              <Button variant="ghost" size="sm" class="h-7 w-7 p-0 shrink-0" onclick={() => downloadSegment(currentSegment)} disabled={!segments.length} title="下载">
-                <Download class="h-3 w-3" />
-              </Button>
+            <!-- 路径输入块 -->
+            <div class="col-span-2 bg-card rounded-2xl border p-3 shadow-sm">
+              <div class="flex items-center gap-1.5 mb-2">
+                <FolderOpen class="w-4 h-4 text-primary" />
+                <span class="text-xs font-semibold">路径</span>
+              </div>
+              <div class="flex gap-1">
+                <Input bind:value={scanPath} placeholder="输入路径..." disabled={isRunning} class="flex-1 h-7 text-xs" />
+                <Button variant="outline" size="icon" class="h-7 w-7 shrink-0" onclick={selectFolder} disabled={isRunning}>
+                  <FolderOpen class="h-3 w-3" />
+                </Button>
+                <Button variant="outline" size="icon" class="h-7 w-7 shrink-0" onclick={pastePath} disabled={isRunning}>
+                  <Clipboard class="h-3 w-3" />
+                </Button>
+              </div>
             </div>
             
-            <!-- JSON 输入框 -->
-            {#if showJsonInput}
-              <div class="border rounded p-2 space-y-2 bg-muted/20">
-                <textarea 
-                  bind:value={jsonInputText} 
-                  placeholder="粘贴 JSON 内容..." 
-                  class="w-full h-24 text-xs font-mono resize-none bg-background border rounded p-2 focus:outline-none focus:ring-1 focus:ring-primary"
-                ></textarea>
-                <div class="flex gap-1">
-                  <Button variant="default" size="sm" class="flex-1 h-6 text-xs" onclick={importFromInput} disabled={!jsonInputText.trim()}>
-                    导入
+            <!-- 扫描块 -->
+            <div class="col-span-1 bg-card rounded-2xl border p-3 shadow-sm">
+              <div class="flex items-center gap-1.5 mb-2">
+                <RefreshCw class="w-4 h-4 text-blue-500" />
+                <span class="text-xs font-semibold">扫描</span>
+              </div>
+              <div class="flex gap-1">
+                <Button variant="outline" size="sm" class="flex-1 h-7 text-xs" onclick={() => handleScan(false)} disabled={isRunning}>
+                  {#if isRunning && phase === 'scanning'}<LoaderCircle class="h-3 w-3 mr-1 animate-spin" />{/if}替换
+                </Button>
+                <Button variant="outline" size="sm" class="flex-1 h-7 text-xs" onclick={() => handleScan(true)} disabled={isRunning}>
+                  合并
+                </Button>
+              </div>
+            </div>
+            
+            <!-- 操作块 -->
+            <div class="col-span-1 bg-card rounded-2xl border p-3 shadow-sm flex flex-col">
+              <div class="flex items-center gap-1.5 mb-2">
+                <Play class="w-4 h-4 text-green-500" />
+                <span class="text-xs font-semibold">操作</span>
+              </div>
+              <div class="flex-1 flex flex-col gap-1.5">
+                {#if phase === 'idle' || phase === 'error'}
+                  <Button class="flex-1 h-8 text-xs" onclick={() => handleScan(false)} disabled={!scanPath.trim()}>
+                    <Search class="h-3 w-3 mr-1" />扫描
                   </Button>
-                  <Button variant="ghost" size="sm" class="h-6 text-xs" onclick={() => { showJsonInput = false; jsonInputText = ''; }}>
-                    取消
+                {:else if phase === 'scanning'}
+                  <Button class="flex-1 h-8 text-xs" disabled>
+                    <LoaderCircle class="h-3 w-3 mr-1 animate-spin" />扫描中
                   </Button>
+                {:else if phase === 'ready' || phase === 'completed'}
+                  <Button class="flex-1 h-8 text-xs" onclick={handleRename} disabled={!canRename}>
+                    <Play class="h-3 w-3 mr-1" />执行
+                  </Button>
+                  <Button variant="outline" class="h-6 text-xs" onclick={clear}>重置</Button>
+                {:else if phase === 'renaming'}
+                  <Button class="flex-1 h-8 text-xs" disabled>
+                    <LoaderCircle class="h-3 w-3 mr-1 animate-spin" />执行中
+                  </Button>
+                {/if}
+              </div>
+            </div>
+            
+            <!-- 统计块 -->
+            <div class="col-span-1 bg-card rounded-2xl border p-3 shadow-sm">
+              <div class="flex items-center gap-1.5 mb-2">
+                <FilePenLine class="w-4 h-4 text-yellow-500" />
+                <span class="text-xs font-semibold">统计</span>
+              </div>
+              <div class="grid grid-cols-3 gap-1 text-xs">
+                <div class="text-center p-1.5 bg-muted/50 rounded-lg">
+                  <div class="font-bold">{stats.total}</div>
+                  <div class="text-muted-foreground text-[10px]">总计</div>
+                </div>
+                <div class="text-center p-1.5 bg-yellow-500/10 rounded-lg">
+                  <div class="font-bold text-yellow-600">{stats.pending}</div>
+                  <div class="text-muted-foreground text-[10px]">待翻译</div>
+                </div>
+                <div class="text-center p-1.5 bg-green-500/10 rounded-lg">
+                  <div class="font-bold text-green-600">{stats.ready}</div>
+                  <div class="text-muted-foreground text-[10px]">就绪</div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 导入导出/状态块 -->
+            <div class="col-span-1 bg-card rounded-2xl border p-3 shadow-sm">
+              <div class="flex items-center gap-1.5 mb-2">
+                <Upload class="w-4 h-4 text-muted-foreground" />
+                <span class="text-xs font-semibold">导入/导出</span>
+              </div>
+              <div class="flex gap-1 flex-wrap">
+                <Button variant="ghost" size="sm" class="h-6 text-xs px-2" onclick={() => importJson(false)} disabled={isRunning}>
+                  <Upload class="h-3 w-3 mr-1" />导入
+                </Button>
+                <Button variant="ghost" size="sm" class="h-6 text-xs px-2" onclick={() => copySegment(currentSegment)} disabled={!segments.length}>
+                  {#if copied}<Check class="h-3 w-3 mr-1 text-green-500" />{:else}<Clipboard class="h-3 w-3 mr-1" />{/if}复制
+                </Button>
+                <Button variant="ghost" size="sm" class="h-6 w-6 p-0" onclick={() => downloadSegment(currentSegment)} disabled={!segments.length}>
+                  <Download class="h-3 w-3" />
+                </Button>
+              </div>
+              {#if segments.length > 1}
+                <div class="flex items-center gap-1 text-xs mt-2">
+                  <span class="text-muted-foreground">段:</span>
+                  {#each segments as _, i}
+                    <Button variant={currentSegment === i ? 'default' : 'ghost'} size="sm" class="h-5 w-5 p-0 text-xs"
+                      onclick={() => { currentSegment = i; treeData = parseTree(segments[i]); }}>{i + 1}</Button>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+            
+            <!-- 文件树块 (可展开) -->
+            {#if showTree}
+              <div class="col-span-2 bg-card rounded-2xl border shadow-sm overflow-hidden">
+                <div class="flex items-center justify-between p-2 border-b bg-muted/30">
+                  <span class="text-xs font-semibold flex items-center gap-1">
+                    <Folder class="w-3 h-3 text-yellow-500" />文件树
+                  </span>
+                  <div class="flex items-center gap-2 text-[10px]">
+                    <span class="flex items-center gap-0.5"><span class="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>{stats.pending}</span>
+                    <span class="flex items-center gap-0.5"><span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>{stats.ready}</span>
+                    {#if stats.conflicts > 0}
+                      <span class="flex items-center gap-0.5"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>{stats.conflicts}</span>
+                    {/if}
+                  </div>
+                </div>
+                <div class="p-2 max-h-40 overflow-y-auto">
+                  {#if treeData.length > 0}
+                    <TreeView.Root class="text-xs">
+                      {#each treeData as node}{@render renderTreeNode(node)}{/each}
+                    </TreeView.Root>
+                  {:else}
+                    <div class="text-xs text-muted-foreground text-center py-3">扫描后显示</div>
+                  {/if}
                 </div>
               </div>
             {/if}
             
-            <!-- 分段选择器 -->
-            {#if segments.length > 1}
-              <div class="flex items-center gap-1 text-xs flex-wrap">
-                <span class="text-muted-foreground">段:</span>
-                {#each segments as _, i}
-                  <Button variant={currentSegment === i ? 'default' : 'ghost'} size="sm" class="h-5 w-5 p-0 text-xs"
-                    onclick={() => { currentSegment = i; treeData = parseTree(segments[i]); }}>{i + 1}</Button>
-                {/each}
-                <Button variant="ghost" size="sm" class="h-5 px-1 text-xs" onclick={downloadAllSegments} title="下载全部段">
-                  <Download class="h-3 w-3" />
-                </Button>
-              </div>
-            {/if}
-
-            
-            <!-- 统计信息 -->
-            {#if stats.total > 0}
-              <div class="flex gap-2 text-xs flex-wrap">
-                <span class="text-muted-foreground">总计: <span class="text-foreground">{stats.total}</span></span>
-                <span class="text-yellow-500">待翻译: {stats.pending}</span>
-                <span class="text-green-500">就绪: {stats.ready}</span>
-                {#if stats.conflicts > 0}<span class="text-red-500">冲突: {stats.conflicts}</span>{/if}
-              </div>
-            {/if}
-            
-            <!-- 操作按钮 -->
-            <div class="flex gap-1">
-              <Button variant="outline" size="sm" class="flex-1 h-7 text-xs" onclick={validate} disabled={isRunning || !segments.length}>
-                <Search class="h-3 w-3 mr-1" />冲突
-              </Button>
-              <Button variant={canRename ? 'default' : 'outline'} size="sm" class="flex-1 h-7 text-xs" onclick={handleRename} disabled={isRunning || !canRename}>
-                {#if phase === 'renaming'}<LoaderCircle class="h-3 w-3 mr-1 animate-spin" />{:else}<Play class="h-3 w-3 mr-1" />{/if}执行
-              </Button>
-              <Button variant="ghost" size="sm" class="h-7 w-7 p-0 shrink-0" onclick={clear} title="清空">
-                <Trash2 class="h-3 w-3" />
-              </Button>
-            </div>
-            
-            <!-- 高级选项 -->
+            <!-- 高级选项块 -->
             {#if showOptions}
-              <div class="border rounded p-2 space-y-2 bg-muted/20">
-                <div class="flex flex-wrap gap-2 text-xs">
+              <div class="col-span-2 bg-card rounded-2xl border p-3 shadow-sm">
+                <div class="flex items-center gap-1.5 mb-2">
+                  <Settings2 class="w-4 h-4 text-muted-foreground" />
+                  <span class="text-xs font-semibold">高级选项</span>
+                </div>
+                <div class="flex flex-wrap gap-2 text-xs mb-2">
                   <label class="flex items-center gap-1"><Checkbox bind:checked={includeHidden} class="h-3 w-3" /><span>隐藏文件</span></label>
                   <label class="flex items-center gap-1"><Checkbox bind:checked={dryRun} class="h-3 w-3" /><span>模拟执行</span></label>
                   <label class="flex items-center gap-1"><Checkbox bind:checked={useCompact} class="h-3 w-3" /><span>紧凑格式</span></label>
@@ -674,86 +725,60 @@
               </div>
             {/if}
             
-            <!-- 冲突列表 -->
+            <!-- 冲突块 -->
             {#if conflicts.length > 0}
-              <div class="border border-red-500/30 rounded p-2 bg-red-500/5 max-h-20 overflow-y-auto">
+              <div class="col-span-2 bg-card rounded-2xl border border-red-500/30 p-3 shadow-sm">
                 <div class="text-xs text-red-500 font-medium mb-1 flex items-center gap-1">
                   <TriangleAlert class="h-3 w-3" />冲突 ({conflicts.length})
                 </div>
-                {#each conflicts as c}<div class="text-xs text-red-400 truncate" title={c}>{c}</div>{/each}
+                <div class="max-h-16 overflow-y-auto">
+                  {#each conflicts as c}<div class="text-xs text-red-400 truncate" title={c}>{c}</div>{/each}
+                </div>
               </div>
             {/if}
-
             
-            <!-- 日志区域 -->
+            <!-- 日志块 -->
             {#if logs.length > 0}
-              <div class="border rounded bg-muted/20 min-h-12 max-h-24 overflow-hidden flex flex-col">
-                <div class="flex items-center justify-between px-1 py-0.5 border-b bg-muted/30 shrink-0">
-                  <span class="text-xs text-muted-foreground">日志</span>
-                  <Button variant="ghost" size="sm" class="h-4 w-4 p-0" onclick={copyLogs} title="复制日志"><Clipboard class="h-2 w-2" /></Button>
+              <div class="col-span-2 bg-card rounded-2xl border p-2 shadow-sm">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="text-xs font-semibold">日志</span>
+                  <Button variant="ghost" size="icon" class="h-5 w-5" onclick={copyLogs}>
+                    {#if copied}<Check class="h-2.5 w-2.5 text-green-500" />{:else}<Clipboard class="h-2.5 w-2.5" />{/if}
+                  </Button>
                 </div>
-                <div class="p-1 space-y-0.5 overflow-y-auto flex-1">
-                  {#each logs as logItem}<div class="text-xs font-mono text-muted-foreground truncate" title={logItem}>{logItem}</div>{/each}
+                <div class="bg-muted/30 rounded-lg p-1.5 font-mono text-[10px] max-h-16 overflow-y-auto space-y-0.5">
+                  {#each logs.slice(-4) as log}
+                    <div class="text-muted-foreground break-all">{log}</div>
+                  {/each}
                 </div>
               </div>
             {/if}
             
-            <!-- 撤销历史区块 -->
-            <div class="border rounded bg-muted/20 overflow-hidden">
-              <div class="flex items-center justify-between px-2 py-1 border-b bg-muted/30">
-                <span class="text-xs text-muted-foreground flex items-center gap-1">
-                  <Undo2 class="h-3 w-3" />操作历史
-                </span>
-                {#if operationHistory.length > 0}
+            <!-- 操作历史块 -->
+            {#if operationHistory.length > 0}
+              <div class="col-span-2 bg-card rounded-2xl border p-2 shadow-sm">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="text-xs font-semibold flex items-center gap-1">
+                    <Undo2 class="h-3 w-3" />操作历史
+                  </span>
                   <span class="text-xs text-muted-foreground">{operationHistory.filter(o => o.canUndo).length} 可撤销</span>
-                {/if}
-              </div>
-              {#if operationHistory.length > 0}
-                <div class="max-h-24 overflow-y-auto">
-                  <Table.Root class="text-xs">
-                    <Table.Body>
-                      {#each operationHistory as op}
-                        <Table.Row class="h-7">
-                          <Table.Cell class="py-1 px-2 text-muted-foreground">{op.time}</Table.Cell>
-                          <Table.Cell class="py-1 px-2">{op.count} 项</Table.Cell>
-                          <Table.Cell class="py-1 px-2 text-right">
-                            {#if op.canUndo}
-                              <Button variant="ghost" size="sm" class="h-5 px-2 text-xs" onclick={() => handleUndo(op.id)}>
-                                <Undo2 class="h-3 w-3 mr-1" />撤销
-                              </Button>
-                            {:else}
-                              <span class="text-muted-foreground">已撤销</span>
-                            {/if}
-                          </Table.Cell>
-                        </Table.Row>
-                      {/each}
-                    </Table.Body>
-                  </Table.Root>
                 </div>
-              {:else}
-                <div class="p-2 text-xs text-muted-foreground text-center">暂无操作记录</div>
-              {/if}
-            </div>
+                <div class="max-h-20 overflow-y-auto">
+                  {#each operationHistory.slice(0, 3) as op}
+                    <div class="flex items-center justify-between p-1.5 bg-muted/30 rounded-lg mb-1 text-xs">
+                      <span class="text-muted-foreground">{op.time} - {op.count}项</span>
+                      {#if op.canUndo}
+                        <Button variant="ghost" size="sm" class="h-5 px-2 text-xs" onclick={() => handleUndo(op.id)}>撤销</Button>
+                      {:else}
+                        <span class="text-muted-foreground text-[10px]">已撤销</span>
+                      {/if}
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+            
           </div>
-          
-          <!-- 右侧：文件树面板 -->
-          {#if showTree}
-            <div class="w-1/2 flex flex-col overflow-hidden">
-              <div class="text-xs font-medium p-1 border-b bg-muted/30 flex items-center justify-between shrink-0">
-                <span>文件树</span>
-                <span class="text-muted-foreground">{stats.total} 项</span>
-              </div>
-              <div class="flex-1 overflow-y-auto p-1">
-                {#if treeData.length > 0}
-                  <TreeView.Root class="text-xs">
-                    {#each treeData as node}{@render renderTreeNode(node)}{/each}
-                  </TreeView.Root>
-                {:else}
-                  <div class="text-xs text-muted-foreground text-center py-4">暂无数据</div>
-                {/if}
-              </div>
-            </div>
-          {/if}
         </div>
       {/if}
     {/snippet}

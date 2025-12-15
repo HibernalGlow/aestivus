@@ -61,9 +61,10 @@
     }
   }
 
-  // 切换固定
+  // 切换固定 - 更新节点的 draggable 属性
   function togglePin() {
     pinned = !pinned;
+    flowStore.updateNode(nodeId, { draggable: !pinned });
   }
 </script>
 

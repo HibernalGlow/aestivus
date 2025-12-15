@@ -60,7 +60,10 @@
   
   function handleClose() { flowStore.removeNode(id); }
   function toggleCollapse() { collapsed = !collapsed; }
-  function togglePin() { pinned = !pinned; }
+  function togglePin() { 
+    pinned = !pinned; 
+    flowStore.updateNode(id, { draggable: !pinned });
+  }
   
   const maxLines = data?.maxLines ?? 200;
   const wsUrl = `ws://localhost:8009/ws/terminal`;

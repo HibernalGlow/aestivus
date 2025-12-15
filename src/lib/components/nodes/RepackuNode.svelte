@@ -77,7 +77,10 @@
   
   function handleClose() { flowStore.removeNode(id); }
   function toggleCollapse() { collapsed = !collapsed; }
-  function togglePin() { pinned = !pinned; }
+  function togglePin() { 
+    pinned = !pinned; 
+    flowStore.updateNode(id, { draggable: !pinned });
+  }
   
   // 进度状态
   let progress = 0;

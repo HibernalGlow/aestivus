@@ -22,7 +22,10 @@
   
   function handleClose() { flowStore.removeNode(id); }
   function toggleCollapse() { collapsed = !collapsed; }
-  function togglePin() { pinned = !pinned; }
+  function togglePin() { 
+    pinned = !pinned; 
+    flowStore.updateNode(id, { draggable: !pinned });
+  }
   
   // 计算按钮是否可用
   $: canExecute = status !== 'running' && (path.trim() !== '' || hasInputConnection);

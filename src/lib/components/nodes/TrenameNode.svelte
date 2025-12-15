@@ -60,7 +60,10 @@
   
   function handleClose() { flowStore.removeNode(id); }
   function toggleCollapse() { collapsed = !collapsed; }
-  function togglePin() { pinned = !pinned; }
+  function togglePin() { 
+    pinned = !pinned; 
+    flowStore.updateNode(id, { draggable: !pinned });
+  }
 
   // 计算
   $: isRunning = phase === 'scanning' || phase === 'renaming';

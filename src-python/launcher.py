@@ -184,16 +184,14 @@ class AestivalFlowApp:
             # 生产模式：使用后端服务器（需要构建前端）
             window_url = f"http://{self.host}:{self.port}"
         
-        # 创建窗口（无边框，使用自定义标题栏）
+        # 创建窗口（使用原生标题栏）
         self.window = webview.create_window(
             title=self.WINDOW_TITLE,
             url=window_url,
             width=self.WINDOW_WIDTH,
             height=self.WINDOW_HEIGHT,
             js_api=self.api,
-            min_size=(800, 600),
-            frameless=True,  # 无边框窗口
-            easy_drag=False  # 禁用内置拖拽，使用自定义实现
+            min_size=(800, 600)
         )
         
         # 将窗口引用传递给桥接 API

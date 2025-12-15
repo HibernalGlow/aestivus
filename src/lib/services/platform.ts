@@ -11,10 +11,13 @@ declare global {
   interface Window {
     pywebview?: {
       api: {
+        // 文件对话框
         open_folder_dialog: (title?: string) => Promise<string | null>;
         open_file_dialog: (title?: string, fileTypes?: string[], allowMultiple?: boolean) => Promise<string[] | null>;
+        // 剪贴板
         read_clipboard: () => Promise<string>;
         write_clipboard: (text: string) => Promise<boolean>;
+        // 路径验证
         validate_path: (path: string) => Promise<{
           valid: boolean;
           exists: boolean;
@@ -27,6 +30,12 @@ declare global {
           valid: boolean;
           message: string;
         }>;
+        // 窗口控制
+        minimize_window: () => void;
+        toggle_maximize: () => void;
+        close_window: () => void;
+        start_drag: () => void;
+        move_window: (x: number, y: number) => void;
       };
     };
   }

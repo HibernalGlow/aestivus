@@ -247,3 +247,57 @@ class BridgeAPI:
             return process.returncode == 0
         except Exception:
             return False
+
+    # ==================== 窗口控制 API ====================
+
+    def minimize_window(self):
+        """最小化窗口"""
+        if self._window:
+            self._window.minimize()
+
+    def toggle_maximize(self):
+        """切换最大化/还原窗口"""
+        if self._window:
+            # pywebview 没有 toggle_maximize，用 maximize/restore 模拟
+            try:
+                if getattr(self, '_is_maximized', False):
+                    self._window.restore()
+                    self._is_maximized = False
+                else:
+                    self._window.maximize()
+                    self._is_maximized = True
+            except Exception as e:
+                print(f"[BridgeAPI] 切换最大化失败: {e}")
+
+    def close_window(self):
+        """关闭窗口"""
+        if self._window:
+            self._window.destroy()
+
+    def start_drag(self):
+        """开始拖拽窗口（Windows 原生拖拽）"""
+        if self._window:
+            try:
+                # pywebview 4.x 支持 start_drag
+                if hasattr(self._window, 'start_drag'):
+                    self._window.start_drag()
+                else:
+                    # 备用方案：使用 Windows API
+                    import ctypes
+                    hwnd = self._window.hwnd if hasattr(self._window, 'hwnd') else None
+                    if hwnd:
+                        # 发送 WM_NCLBUTTONDOWN 消息模拟标题栏拖拽
+                        WM_NCLBUTTONDOWN = 0x00A1
+                        HTCAPTION = 2
+                        ctypes.windll.user32.ReleaseCapture()
+                        ctypes.windll.user32.SendMessageW(hwnd, WM_NCLBUTTONDOWN, HTCAPTION, 0)
+            except Exception as e:
+                print(f"[BridgeAPI] 拖拽窗口失败: {e}")
+
+    def move_window(self, x: int, y: int):
+        """移动窗口到指定位置"""
+        if self._window:
+            try:
+                self._window.move(x, y)
+            except Exception as e:
+                print(f"[BridgeAPI] 移动窗口失败: {e}")

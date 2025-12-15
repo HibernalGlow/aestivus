@@ -36,6 +36,9 @@
     canUndo: boolean;
   }
   
+  // 卡片尺寸类型
+  interface CardSize { cols: number; rows: number; }
+  
   // 节点状态类型
   type Phase = 'idle' | 'scanning' | 'ready' | 'renaming' | 'completed' | 'error';
   interface TrenameState {
@@ -59,6 +62,8 @@
     conflicts: string[];
     lastOperationId: string;
     operationHistory: OperationRecord[];
+    // 卡片尺寸记忆
+    cardSizes?: Record<string, CardSize>;
   }
   
   // 从 TanStack Store 恢复状态
@@ -91,12 +96,29 @@
   let lastOperationId = savedState?.lastOperationId ?? '';
   let operationHistory: OperationRecord[] = savedState?.operationHistory ?? [];
   
+  // 卡片尺寸记忆（默认值）
+  let cardSizes: Record<string, CardSize> = savedState?.cardSizes ?? {
+    path: { cols: 2, rows: 2 },
+    operation: { cols: 1, rows: 2 },
+    stats: { cols: 1, rows: 2 },
+    importExport: { cols: 2, rows: 1 },
+    tree: { cols: 3, rows: 4 },
+    log: { cols: 1, rows: 4 }
+  };
+  
+  // 更新卡片尺寸
+  function updateCardSize(cardId: string, cols: number, rows: number) {
+    cardSizes = { ...cardSizes, [cardId]: { cols, rows } };
+    saveState();
+  }
+  
   // 保存状态到 TanStack Store
   function saveState() {
     setNodeState<TrenameState>(id, {
       phase, logs, showTree, showOptions, showJsonInput, jsonInputText,
       scanPath, includeHidden, excludeExts, maxLines, useCompact, basePath, dryRun,
-      treeData, segments, currentSegment, stats, conflicts, lastOperationId, operationHistory
+      treeData, segments, currentSegment, stats, conflicts, lastOperationId, operationHistory,
+      cardSizes
     });
   }
   
@@ -356,12 +378,15 @@
     
     {#snippet children()}
       {#if isFullscreenRender}
-        <!-- 全屏模式：Bento Grid 布局 -->
+        <!-- 全屏模式：Bento Grid 布局 - 可调整大小 -->
         <div class="h-full overflow-y-auto p-4">
           <div class="grid grid-cols-4 gap-4" style="grid-auto-rows: minmax(80px, auto);">
             
-            <!-- 路径输入 + 扫描 (2列2行) -->
-            <div class="col-span-2 row-span-2 bg-card rounded-3xl border p-6 shadow-sm flex flex-col">
+            <!-- 路径输入 + 扫描 -->
+            <div 
+              class="bg-card rounded-3xl border p-6 shadow-sm flex flex-col resize overflow-auto"
+              style="grid-column: span {cardSizes.path?.cols ?? 2}; grid-row: span {cardSizes.path?.rows ?? 2}; min-width: 200px; min-height: 160px;"
+            >
               <div class="flex items-center gap-2 mb-4">
                 <FolderOpen class="w-5 h-5 text-primary" />
                 <span class="font-semibold">扫描路径</span>
@@ -385,8 +410,11 @@
               </div>
             </div>
             
-            <!-- 操作按钮 (1列2行) -->
-            <div class="col-span-1 row-span-2 bg-card rounded-3xl border p-5 shadow-sm flex flex-col">
+            <!-- 操作按钮 -->
+            <div 
+              class="bg-card rounded-3xl border p-5 shadow-sm flex flex-col resize overflow-auto"
+              style="grid-column: span {cardSizes.operation?.cols ?? 1}; grid-row: span {cardSizes.operation?.rows ?? 2}; min-width: 150px; min-height: 120px;"
+            >
               <div class="flex items-center gap-2 mb-4">
                 <Play class="w-5 h-5 text-green-500" />
                 <span class="font-semibold">操作</span>
@@ -404,8 +432,11 @@
               </div>
             </div>
             
-            <!-- 统计信息 (1列2行) -->
-            <div class="col-span-1 row-span-2 bg-card rounded-3xl border p-5 shadow-sm">
+            <!-- 统计信息 -->
+            <div 
+              class="bg-card rounded-3xl border p-5 shadow-sm resize overflow-auto"
+              style="grid-column: span {cardSizes.stats?.cols ?? 1}; grid-row: span {cardSizes.stats?.rows ?? 2}; min-width: 150px; min-height: 120px;"
+            >
               <div class="flex items-center gap-2 mb-3">
                 <FilePenLine class="w-5 h-5 text-blue-500" />
                 <span class="font-semibold">统计</span>
@@ -432,8 +463,11 @@
               </div>
             </div>
             
-            <!-- 导入/导出 (2列1行) -->
-            <div class="col-span-2 row-span-1 bg-card rounded-3xl border p-4 shadow-sm">
+            <!-- 导入/导出 -->
+            <div 
+              class="bg-card rounded-3xl border p-4 shadow-sm resize overflow-auto"
+              style="grid-column: span {cardSizes.importExport?.cols ?? 2}; grid-row: span {cardSizes.importExport?.rows ?? 1}; min-width: 200px; min-height: 80px;"
+            >
               <div class="flex items-center gap-4">
                 <Button variant="outline" class="flex-1 h-10" onclick={() => importJson(false)} disabled={isRunning}>
                   <Upload class="h-4 w-4 mr-2" />从剪贴板导入
@@ -447,8 +481,11 @@
               </div>
             </div>
             
-            <!-- 文件树 (3列4行) -->
-            <div class="col-span-3 row-span-4 bg-card rounded-3xl border shadow-sm overflow-hidden">
+            <!-- 文件树 -->
+            <div 
+              class="bg-card rounded-3xl border shadow-sm overflow-hidden resize"
+              style="grid-column: span {cardSizes.tree?.cols ?? 3}; grid-row: span {cardSizes.tree?.rows ?? 4}; min-width: 250px; min-height: 200px;"
+            >
               <div class="flex items-center justify-between p-4 border-b bg-muted/30">
                 <span class="font-semibold flex items-center gap-2">
                   <Folder class="w-5 h-5 text-yellow-500" />文件树
@@ -466,8 +503,11 @@
               </div>
             </div>
             
-            <!-- 日志 + 历史 (1列4行) -->
-            <div class="col-span-1 row-span-4 bg-card rounded-3xl border p-4 shadow-sm flex flex-col">
+            <!-- 日志 + 历史 -->
+            <div 
+              class="bg-card rounded-3xl border p-4 shadow-sm flex flex-col resize overflow-auto"
+              style="grid-column: span {cardSizes.log?.cols ?? 1}; grid-row: span {cardSizes.log?.rows ?? 4}; min-width: 150px; min-height: 200px;"
+            >
               <div class="flex items-center justify-between mb-2 shrink-0">
                 <span class="font-semibold text-sm">日志</span>
                 <Button variant="ghost" size="icon" class="h-6 w-6" onclick={copyLogs}>

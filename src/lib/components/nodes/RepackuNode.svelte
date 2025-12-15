@@ -60,6 +60,9 @@
     total: number;
   }
   
+  // 卡片尺寸类型
+  interface CardSize { cols: number; rows: number; }
+  
   // 节点内部状态类型
   interface RepackuState {
     phase: Phase;
@@ -71,6 +74,8 @@
     selectedTypes: string[];
     expandedFolders: string[];
     expandedCards: string[];
+    // 卡片尺寸记忆
+    cardSizes?: Record<string, CardSize>;
   }
   
   // 从 nodeStateStore 获取或初始化状态
@@ -98,6 +103,22 @@
   
   let analysisResult: AnalysisResult | null = savedState?.analysisResult ?? null;
   let compressionResult: CompressionResultData | null = savedState?.compressionResult ?? null;
+  
+  // 卡片尺寸记忆（默认值）
+  let cardSizes: Record<string, CardSize> = savedState?.cardSizes ?? {
+    path: { cols: 2, rows: 3 },
+    operation: { cols: 1, rows: 2 },
+    stats: { cols: 1, rows: 2 },
+    progress: { cols: 2, rows: 1 },
+    tree: { cols: 3, rows: 4 },
+    log: { cols: 1, rows: 4 }
+  };
+  
+  // 更新卡片尺寸
+  function updateCardSize(cardId: string, cols: number, rows: number) {
+    cardSizes = { ...cardSizes, [cardId]: { cols, rows } };
+    saveState();
+  }
 
   const typeOptions = [
     { value: 'image', label: '图片' },
@@ -119,7 +140,8 @@
       compressionResult,
       selectedTypes,
       expandedFolders: Array.from(expandedFolders),
-      expandedCards: Array.from(expandedCards)
+      expandedCards: Array.from(expandedCards),
+      cardSizes
     });
   }
   
@@ -460,8 +482,11 @@
         <div class="h-full overflow-y-auto p-4">
           <div class="grid grid-cols-4 gap-4" style="grid-auto-rows: minmax(80px, auto);">
             
-            <!-- 左侧大卡片: 路径输入 + 类型过滤 (占2列3行，竖向) -->
-            <div class="col-span-2 row-span-3 bg-card rounded-3xl border p-6 shadow-sm flex flex-col">
+            <!-- 左侧大卡片: 路径输入 + 类型过滤 -->
+            <div 
+              class="bg-card rounded-3xl border p-6 shadow-sm flex flex-col resize overflow-auto"
+              style="grid-column: span {cardSizes.path?.cols ?? 2}; grid-row: span {cardSizes.path?.rows ?? 3}; min-width: 200px; min-height: 160px;"
+            >
               <!-- 路径输入 -->
               <div class="mb-6">
                 <div class="flex items-center gap-2 mb-3">
@@ -512,8 +537,11 @@
               </div>
             </div>
             
-            <!-- 右上: 操作按钮 (占1列2行，高卡片) -->
-            <div class="col-span-1 row-span-2 bg-card rounded-3xl border p-5 shadow-sm flex flex-col">
+            <!-- 右上: 操作按钮 -->
+            <div 
+              class="bg-card rounded-3xl border p-5 shadow-sm flex flex-col resize overflow-auto"
+              style="grid-column: span {cardSizes.operation?.cols ?? 1}; grid-row: span {cardSizes.operation?.rows ?? 2}; min-width: 150px; min-height: 120px;"
+            >
               <div class="flex items-center gap-2 mb-4">
                 <Play class="w-5 h-5 text-green-500" />
                 <span class="font-semibold">操作</span>
@@ -544,8 +572,11 @@
               </div>
             </div>
             
-            <!-- 右上角: 统计数字 (占1列2行) -->
-            <div class="col-span-1 row-span-2 bg-card rounded-3xl border p-5 shadow-sm">
+            <!-- 右上角: 统计数字 -->
+            <div 
+              class="bg-card rounded-3xl border p-5 shadow-sm resize overflow-auto"
+              style="grid-column: span {cardSizes.stats?.cols ?? 1}; grid-row: span {cardSizes.stats?.rows ?? 2}; min-width: 150px; min-height: 120px;"
+            >
               <div class="flex items-center gap-2 mb-3">
                 <FolderTree class="w-5 h-5 text-yellow-500" />
                 <span class="font-semibold">统计</span>
@@ -566,8 +597,11 @@
               </div>
             </div>
             
-            <!-- 进度/结果卡片 (占2列1行，始终显示) -->
-            <div class="col-span-2 row-span-1 bg-card rounded-3xl border p-4 shadow-sm">
+            <!-- 进度/结果卡片 -->
+            <div 
+              class="bg-card rounded-3xl border p-4 shadow-sm resize overflow-auto"
+              style="grid-column: span {cardSizes.progress?.cols ?? 2}; grid-row: span {cardSizes.progress?.rows ?? 1}; min-width: 200px; min-height: 80px;"
+            >
               <div class="flex items-center gap-3">
                 {#if compressionResult}
                   {#if compressionResult.success}
@@ -602,8 +636,11 @@
               </div>
             </div>
             
-            <!-- 文件树预览 (占3列，高度自适应) -->
-            <div class="col-span-3 row-span-4 bg-card rounded-3xl border shadow-sm overflow-hidden">
+            <!-- 文件树预览 -->
+            <div 
+              class="bg-card rounded-3xl border shadow-sm overflow-hidden resize"
+              style="grid-column: span {cardSizes.tree?.cols ?? 3}; grid-row: span {cardSizes.tree?.rows ?? 4}; min-width: 250px; min-height: 200px;"
+            >
               <div class="flex items-center justify-between p-4 border-b bg-muted/30">
                 <div class="flex items-center gap-2">
                   <FolderTree class="w-5 h-5 text-yellow-500" />
@@ -627,8 +664,11 @@
               </div>
             </div>
             
-            <!-- 日志卡片 (占1列，竖向) -->
-            <div class="col-span-1 row-span-4 bg-card rounded-3xl border p-4 shadow-sm flex flex-col">
+            <!-- 日志卡片 -->
+            <div 
+              class="bg-card rounded-3xl border p-4 shadow-sm flex flex-col resize overflow-auto"
+              style="grid-column: span {cardSizes.log?.cols ?? 1}; grid-row: span {cardSizes.log?.rows ?? 4}; min-width: 150px; min-height: 200px;"
+            >
               <div class="flex items-center justify-between mb-2 shrink-0">
                 <span class="font-semibold text-sm">日志</span>
                 <Button variant="ghost" size="icon" class="h-6 w-6" onclick={copyLogs}>

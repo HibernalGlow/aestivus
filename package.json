@@ -21,7 +21,9 @@
   "license": "MIT",
   "dependencies": {
     "@tailwindcss/vite": "^4.1.11",
+    "@tanstack/table-core": "^8.21.3",
     "@xyflow/svelte": "^1.5.0",
+    "ansi-to-html": "^0.7.2",
     "tailwindcss": "^4.1.11"
   },
   "devDependencies": {

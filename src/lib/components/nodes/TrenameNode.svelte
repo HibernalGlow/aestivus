@@ -85,7 +85,7 @@
   }
   
   // 状态变化时自动保存
-  $: if (phase || treeData || segments || stats) {
+  $: if (phase || treeData || segments || stats || gridLayout) {
     saveState();
   }
 

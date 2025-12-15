@@ -7,13 +7,42 @@ repacku 适配器
 2. compress: 根据配置文件执行压缩
 """
 
+import io
 import os
+import sys
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
 from pydantic import Field
 
 from .base import BaseAdapter, AdapterInput, AdapterOutput
+
+
+def _ensure_utf8_output():
+    """确保 stdout/stderr 使用 UTF-8 编码，避免 Windows GBK 编码问题"""
+    if sys.platform == 'win32':
+        # 设置环境变量强制 Python 使用 UTF-8
+        os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
+        
+        # 重新包装 stdout/stderr 使用 UTF-8 编码，忽略无法编码的字符
+        if hasattr(sys.stdout, 'buffer'):
+            sys.stdout = io.TextIOWrapper(
+                sys.stdout.buffer, 
+                encoding='utf-8', 
+                errors='replace',
+                line_buffering=True
+            )
+        if hasattr(sys.stderr, 'buffer'):
+            sys.stderr = io.TextIOWrapper(
+                sys.stderr.buffer, 
+                encoding='utf-8', 
+                errors='replace',
+                line_buffering=True
+            )
+
+
+# 在模块加载时执行编码适配
+_ensure_utf8_output()
 
 
 class RepackuInput(AdapterInput):

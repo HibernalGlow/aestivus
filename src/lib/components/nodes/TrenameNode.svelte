@@ -324,6 +324,7 @@
             cellHeight={80} 
             margin={12}
             onLayoutChange={handleLayoutChange}
+            onReset={() => { gridLayout = [...DEFAULT_GRID_LAYOUT]; saveState(); }}
           >
             <!-- 路径输入 + 扫描 -->
             {@const pathItem = getLayoutItem('path')}

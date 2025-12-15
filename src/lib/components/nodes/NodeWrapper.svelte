@@ -5,7 +5,7 @@
    * 
    * 全屏模式：自动检测并应用全屏样式，节点组件无需任何修改
    */
-  import { X, ChevronDown, ChevronRight, Pin, PinOff, Maximize2, Minimize2 } from '@lucide/svelte';
+  import { X, ChevronDown, ChevronRight, Pin, PinOff, Maximize2, Minimize2, LayoutGrid, RotateCcw } from '@lucide/svelte';
   import { Badge } from '$lib/components/ui/badge';
   import { flowStore } from '$lib/stores';
   import { fullscreenNodeStore } from '$lib/stores/fullscreenNode.svelte';
@@ -52,6 +52,10 @@
     onCollapse?: (collapsed: boolean) => void;
     /** 固定回调 */
     onPin?: (pinned: boolean) => void;
+    /** 整理布局回调（全屏模式） */
+    onCompact?: () => void;
+    /** 重置布局回调（全屏模式） */
+    onResetLayout?: () => void;
   }
 
   // 默认状态标签映射
@@ -100,7 +104,9 @@
     children,
     headerExtra,
     onCollapse,
-    onPin
+    onPin,
+    onCompact,
+    onResetLayout
   }: Props = $props();
 
   // 状态
@@ -192,6 +198,27 @@
     <div class="flex items-center gap-0.5 ml-2">
       {#if headerExtra}
         {@render headerExtra()}
+      {/if}
+      
+      <!-- 全屏模式下的布局工具 -->
+      {#if isFullscreenRender && onCompact}
+        <button
+          class="p-1 rounded hover:bg-muted transition-colors text-muted-foreground"
+          onclick={onCompact}
+          title="整理布局"
+        >
+          <LayoutGrid class="w-3.5 h-3.5" />
+        </button>
+      {/if}
+      
+      {#if isFullscreenRender && onResetLayout}
+        <button
+          class="p-1 rounded hover:bg-muted transition-colors text-muted-foreground"
+          onclick={onResetLayout}
+          title="重置布局"
+        >
+          <RotateCcw class="w-3.5 h-3.5" />
+        </button>
       {/if}
       
       {#if hasFullscreen}

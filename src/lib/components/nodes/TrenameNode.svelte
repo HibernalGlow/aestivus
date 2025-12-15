@@ -137,6 +137,38 @@
     try { await navigator.clipboard.writeText(segments[i]); copied = true; log(`📋 段${i+1}已复制`); setTimeout(() => copied = false, 2000); }
     catch (e) { log(`复制失败: ${e}`); }
   }
+  
+  // 下载当前段 JSON 文件
+  function downloadSegment(i: number) {
+    if (i >= segments.length) return;
+    try {
+      const content = segments[i];
+      const blob = new Blob([content], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      // 生成文件名：trename_段号_时间戳.json
+      const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      a.download = `trename_seg${i + 1}_${timestamp}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      log(`💾 段${i + 1}已下载`);
+    } catch (e) { log(`下载失败: ${e}`); }
+  }
+  
+  // 下载所有段（合并为一个文件或分别下载）
+  function downloadAllSegments() {
+    if (segments.length === 0) return;
+    if (segments.length === 1) {
+      downloadSegment(0);
+      return;
+    }
+    // 多段时逐个下载
+    segments.forEach((_, i) => downloadSegment(i));
+    log(`💾 已下载全部 ${segments.length} 段`);
+  }
   async function validate() {
     if (!segments.length) return;
     log('🔍 检测冲突...');
@@ -254,11 +286,11 @@
             <Button variant="ghost" size="sm" class="flex-1 h-7 text-xs" onclick={() => importJson(false)} disabled={isRunning} title="从剪贴板导入JSON">
               <Upload class="h-3 w-3 mr-1" />导入
             </Button>
-            <Button variant="ghost" size="sm" class="flex-1 h-7 text-xs" onclick={() => importJson(true)} disabled={isRunning} title="替换当前数据">
-              <Copy class="h-3 w-3 mr-1" />替换
-            </Button>
             <Button variant="ghost" size="sm" class="flex-1 h-7 text-xs" onclick={() => copySegment(currentSegment)} disabled={!segments.length} title="复制当前段">
               {#if copied}<Check class="h-3 w-3 mr-1 text-green-500" />{:else}<Clipboard class="h-3 w-3 mr-1" />{/if}复制
+            </Button>
+            <Button variant="ghost" size="sm" class="flex-1 h-7 text-xs" onclick={() => downloadSegment(currentSegment)} disabled={!segments.length} title="下载当前段JSON">
+              <Download class="h-3 w-3 mr-1" />下载
             </Button>
           </div>
           
@@ -270,6 +302,9 @@
                 <Button variant={currentSegment === i ? 'default' : 'ghost'} size="sm" class="h-5 w-5 p-0 text-xs"
                   onclick={() => { currentSegment = i; treeData = parseTree(segments[i]); }}>{i + 1}</Button>
               {/each}
+              <Button variant="ghost" size="sm" class="h-5 px-1 text-xs" onclick={downloadAllSegments} title="下载全部段">
+                <Download class="h-3 w-3" />
+              </Button>
             </div>
           {/if}
           

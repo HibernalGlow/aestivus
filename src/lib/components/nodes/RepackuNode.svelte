@@ -607,37 +607,43 @@
           </div>
         </div>
       {:else}
-        <!-- 普通模式：左右分栏 -->
-        <div class="flex flex-1 min-h-0 overflow-hidden">
-          <!-- 左侧：控制面板 -->
-          <div class="flex flex-col p-3 space-y-2 {showTree ? 'w-1/2 border-r' : 'flex-1'} overflow-y-auto">
-            <!-- 路径输入区域 -->
-            {#if !hasInputConnection}
-              <div class="space-y-1">
-                <Label class="text-xs text-muted-foreground">目标路径</Label>
+        <!-- 普通模式：便当块纵向排列 -->
+        <div class="flex-1 overflow-y-auto p-2">
+          <div class="grid grid-cols-2 gap-2" style="grid-auto-rows: minmax(auto, max-content);">
+            
+            <!-- 路径输入块 -->
+            <div class="col-span-2 bg-card rounded-2xl border p-3 shadow-sm">
+              <div class="flex items-center gap-1.5 mb-2">
+                <FolderOpen class="w-4 h-4 text-primary" />
+                <span class="text-xs font-semibold">路径</span>
+              </div>
+              {#if !hasInputConnection}
                 <div class="flex gap-1">
-                  <Input bind:value={path} placeholder="输入或选择文件夹路径..." disabled={isRunning} class="flex-1 h-7 text-xs" />
-                  <Button variant="outline" size="icon" class="h-7 w-7 shrink-0" onclick={selectFolder} disabled={isRunning} title="选择文件夹">
+                  <Input bind:value={path} placeholder="输入路径..." disabled={isRunning} class="flex-1 h-7 text-xs" />
+                  <Button variant="outline" size="icon" class="h-7 w-7 shrink-0" onclick={selectFolder} disabled={isRunning}>
                     <FolderOpen class="h-3 w-3" />
                   </Button>
-                  <Button variant="outline" size="icon" class="h-7 w-7 shrink-0" onclick={pasteFromClipboard} disabled={isRunning} title="从剪贴板粘贴">
+                  <Button variant="outline" size="icon" class="h-7 w-7 shrink-0" onclick={pasteFromClipboard} disabled={isRunning}>
                     <Clipboard class="h-3 w-3" />
                   </Button>
                 </div>
-              </div>
-            {:else}
-              <div class="text-xs text-muted-foreground p-2 bg-muted rounded flex items-center gap-2">
-                <span>←</span><span>输入来自上游节点</span>
-              </div>
-            {/if}
+              {:else}
+                <div class="text-xs text-muted-foreground p-2 bg-muted rounded-xl flex items-center gap-2">
+                  <span>←</span><span>来自上游节点</span>
+                </div>
+              {/if}
+            </div>
             
-            <!-- 文件类型过滤 -->
-            <div class="space-y-1">
-              <Label class="text-xs text-muted-foreground">文件类型过滤</Label>
+            <!-- 类型过滤块 -->
+            <div class="col-span-1 bg-card rounded-2xl border p-3 shadow-sm">
+              <div class="flex items-center gap-1.5 mb-2">
+                <FileText class="w-4 h-4 text-blue-500" />
+                <span class="text-xs font-semibold">类型</span>
+              </div>
               <div class="flex flex-wrap gap-1">
                 {#each typeOptions as option}
                   <button
-                    class="px-2 py-0.5 text-xs rounded border transition-colors {selectedTypes.includes(option.value) ? 'bg-primary text-primary-foreground border-primary' : 'bg-background border-border hover:border-primary'}"
+                    class="px-2 py-1 text-xs rounded-lg border transition-colors {selectedTypes.includes(option.value) ? 'bg-primary text-primary-foreground border-primary' : 'bg-background border-border hover:border-primary'}"
                     onclick={() => toggleType(option.value)}
                     disabled={isRunning}
                   >{option.label}</button>
@@ -645,98 +651,130 @@
               </div>
             </div>
             
-            <!-- 选项 -->
-            <div class="flex items-center gap-2">
-              <Checkbox id="delete-after-{id}" bind:checked={deleteAfter} disabled={isRunning} />
-              <Label for="delete-after-{id}" class="text-xs cursor-pointer flex items-center gap-1">
-                <Trash2 class="w-3 h-3" />压缩后删除源文件
-              </Label>
-            </div>
-            
-            <!-- 进度条 -->
-            {#if isRunning}
-              <div class="space-y-1">
-                <div class="flex justify-between text-xs text-muted-foreground"><span>{progressText}</span><span>{progress}%</span></div>
-                <Progress value={progress} class="h-1.5" />
+            <!-- 操作块 -->
+            <div class="col-span-1 bg-card rounded-2xl border p-3 shadow-sm flex flex-col">
+              <div class="flex items-center gap-1.5 mb-2">
+                <Play class="w-4 h-4 text-green-500" />
+                <span class="text-xs font-semibold">操作</span>
               </div>
-            {/if}
-            
-            <!-- 分析结果统计 -->
-            {#if analysisResult && phase !== 'idle'}
-              <div class="p-2 rounded bg-muted space-y-1">
-                <div class="flex items-center gap-2 text-xs font-medium"><FolderTree class="w-3 h-3 text-yellow-500" /><span>分析结果</span></div>
-                <div class="grid grid-cols-3 gap-1 text-xs">
-                  <div class="text-center p-1 bg-background rounded"><div class="font-semibold text-green-600">{analysisResult.entireCount}</div><div class="text-muted-foreground">整体</div></div>
-                  <div class="text-center p-1 bg-background rounded"><div class="font-semibold text-yellow-600">{analysisResult.selectiveCount}</div><div class="text-muted-foreground">选择性</div></div>
-                  <div class="text-center p-1 bg-background rounded"><div class="font-semibold text-gray-500">{analysisResult.skipCount}</div><div class="text-muted-foreground">跳过</div></div>
-                </div>
-              </div>
-            {/if}
-            
-            <!-- 压缩结果 -->
-            {#if compressionResult}
-              <div class="p-2 rounded bg-muted space-y-1">
-                <div class="flex items-center gap-2 text-xs">
-                  {#if compressionResult.success}<CircleCheck class="w-3 h-3 text-green-500" /><span class="text-green-600">压缩完成</span>
-                  {:else}<CircleX class="w-3 h-3 text-red-500" /><span class="text-red-600">压缩失败</span>{/if}
-                </div>
-                <div class="grid grid-cols-2 gap-1 text-xs">
-                  <div class="text-center p-1 bg-background rounded"><div class="font-semibold text-green-600">{compressionResult.compressed}</div><div class="text-muted-foreground">成功</div></div>
-                  <div class="text-center p-1 bg-background rounded"><div class="font-semibold text-red-600">{compressionResult.failed}</div><div class="text-muted-foreground">失败</div></div>
-                </div>
-              </div>
-            {/if}
-            
-            <!-- 操作按钮 -->
-            <div class="flex gap-1">
-              {#if phase === 'idle' || phase === 'error'}
-                <Button class="flex-1 h-7 text-xs" onclick={handleAnalyze} disabled={!canAnalyze}><Search class="h-3 w-3 mr-1" />扫描</Button>
-              {:else if phase === 'analyzing'}
-                <Button class="flex-1 h-7 text-xs" disabled><LoaderCircle class="h-3 w-3 mr-1 animate-spin" />分析中</Button>
-              {:else if phase === 'analyzed'}
-                <Button class="flex-1 h-7 text-xs" onclick={handleCompress} disabled={!canCompress}><FileArchive class="h-3 w-3 mr-1" />压缩</Button>
-                <Button variant="outline" class="h-7 text-xs" onclick={handleReset}>重置</Button>
-              {:else if phase === 'compressing'}
-                <Button class="flex-1 h-7 text-xs" disabled><LoaderCircle class="h-3 w-3 mr-1 animate-spin" />压缩中</Button>
-              {:else if phase === 'completed'}
-                <Button class="flex-1 h-7 text-xs" variant="outline" onclick={handleReset}><Play class="h-3 w-3 mr-1" />重新开始</Button>
-              {/if}
-            </div>
-            
-            <!-- 日志输出 -->
-            {#if logs.length > 0}
-              <div class="relative">
-                <div class="absolute top-1 right-1 z-10">
-                  <Button variant="ghost" size="icon" class="h-5 w-5 opacity-60 hover:opacity-100" onclick={copyLogs} title="复制日志">
-                    {#if copied}<Check class="h-2 w-2 text-green-500" />{:else}<Copy class="h-2 w-2" />{/if}
+              <div class="flex-1 flex flex-col gap-1.5">
+                {#if phase === 'idle' || phase === 'error'}
+                  <Button class="flex-1 h-8 text-xs" onclick={handleAnalyze} disabled={!canAnalyze}>
+                    <Search class="h-3 w-3 mr-1" />扫描
                   </Button>
-                </div>
-                <div class="p-1.5 pr-6 bg-muted rounded text-xs font-mono max-h-16 overflow-y-auto space-y-0.5 select-text cursor-text">
-                  {#each logs.slice(-4) as log}<div class="text-muted-foreground break-all whitespace-pre-wrap">{log}</div>{/each}
-                </div>
-              </div>
-            {/if}
-          </div>
-          
-          <!-- 右侧：文件树面板 -->
-          {#if showTree}
-            <div class="w-1/2 flex flex-col overflow-hidden">
-              <div class="text-xs font-medium p-1.5 border-b bg-muted/30 flex items-center justify-between shrink-0">
-                <span class="flex items-center gap-1">
-                  <FolderTree class="w-3 h-3 text-yellow-500" />
-                  文件树
-                </span>
-                <span class="text-muted-foreground">{stats.total} 项</span>
-              </div>
-              <div class="flex-1 overflow-y-auto p-1">
-                {#if folderTree}
-                  {@render renderFolderNode(folderTree)}
-                {:else}
-                  <div class="text-xs text-muted-foreground text-center py-4">扫描后显示文件树</div>
+                {:else if phase === 'analyzing'}
+                  <Button class="flex-1 h-8 text-xs" disabled>
+                    <LoaderCircle class="h-3 w-3 mr-1 animate-spin" />分析中
+                  </Button>
+                {:else if phase === 'analyzed'}
+                  <Button class="flex-1 h-8 text-xs" onclick={handleCompress} disabled={!canCompress}>
+                    <FileArchive class="h-3 w-3 mr-1" />压缩
+                  </Button>
+                  <Button variant="outline" class="h-6 text-xs" onclick={handleReset}>重置</Button>
+                {:else if phase === 'compressing'}
+                  <Button class="flex-1 h-8 text-xs" disabled>
+                    <LoaderCircle class="h-3 w-3 mr-1 animate-spin" />压缩中
+                  </Button>
+                {:else if phase === 'completed'}
+                  <Button class="flex-1 h-8 text-xs" variant="outline" onclick={handleReset}>
+                    <Play class="h-3 w-3 mr-1" />重新开始
+                  </Button>
                 {/if}
               </div>
             </div>
-          {/if}
+            
+            <!-- 统计块 -->
+            <div class="col-span-1 bg-card rounded-2xl border p-3 shadow-sm">
+              <div class="flex items-center gap-1.5 mb-2">
+                <FolderTree class="w-4 h-4 text-yellow-500" />
+                <span class="text-xs font-semibold">统计</span>
+              </div>
+              <div class="grid grid-cols-3 gap-1 text-xs">
+                <div class="text-center p-1.5 bg-green-500/10 rounded-lg">
+                  <div class="font-bold text-green-600">{analysisResult?.entireCount ?? '-'}</div>
+                  <div class="text-muted-foreground text-[10px]">整体</div>
+                </div>
+                <div class="text-center p-1.5 bg-yellow-500/10 rounded-lg">
+                  <div class="font-bold text-yellow-600">{analysisResult?.selectiveCount ?? '-'}</div>
+                  <div class="text-muted-foreground text-[10px]">选择</div>
+                </div>
+                <div class="text-center p-1.5 bg-gray-500/10 rounded-lg">
+                  <div class="font-bold text-gray-500">{analysisResult?.skipCount ?? '-'}</div>
+                  <div class="text-muted-foreground text-[10px]">跳过</div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 进度/选项块 -->
+            <div class="col-span-1 bg-card rounded-2xl border p-3 shadow-sm">
+              <div class="flex items-center gap-1.5 mb-2">
+                <Package class="w-4 h-4 text-muted-foreground" />
+                <span class="text-xs font-semibold">状态</span>
+              </div>
+              {#if compressionResult}
+                <div class="flex items-center gap-2 text-xs">
+                  {#if compressionResult.success}
+                    <CircleCheck class="w-4 h-4 text-green-500" />
+                    <span class="text-green-600">成功 {compressionResult.compressed}</span>
+                  {:else}
+                    <CircleX class="w-4 h-4 text-red-500" />
+                    <span class="text-red-600">失败</span>
+                  {/if}
+                </div>
+              {:else if isRunning}
+                <div class="space-y-1">
+                  <Progress value={progress} class="h-1.5" />
+                  <div class="text-xs text-muted-foreground">{progress}%</div>
+                </div>
+              {:else}
+                <label class="flex items-center gap-2 cursor-pointer text-xs">
+                  <Checkbox id="delete-after-{id}" bind:checked={deleteAfter} disabled={isRunning} class="h-3 w-3" />
+                  <span class="flex items-center gap-1"><Trash2 class="w-3 h-3 text-orange-500" />删除源</span>
+                </label>
+              {/if}
+            </div>
+            
+            <!-- 文件树块 (可展开) -->
+            {#if showTree}
+              <div class="col-span-2 bg-card rounded-2xl border shadow-sm overflow-hidden">
+                <div class="flex items-center justify-between p-2 border-b bg-muted/30">
+                  <span class="text-xs font-semibold flex items-center gap-1">
+                    <FolderTree class="w-3 h-3 text-yellow-500" />文件树
+                  </span>
+                  <div class="flex items-center gap-2 text-[10px]">
+                    <span class="flex items-center gap-0.5"><span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>{stats.entire}</span>
+                    <span class="flex items-center gap-0.5"><span class="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>{stats.selective}</span>
+                    <span class="flex items-center gap-0.5"><span class="w-1.5 h-1.5 rounded-full bg-gray-400"></span>{stats.skip}</span>
+                  </div>
+                </div>
+                <div class="p-2 max-h-40 overflow-y-auto">
+                  {#if folderTree}
+                    {@render renderFolderNode(folderTree)}
+                  {:else}
+                    <div class="text-xs text-muted-foreground text-center py-3">扫描后显示</div>
+                  {/if}
+                </div>
+              </div>
+            {/if}
+            
+            <!-- 日志块 -->
+            {#if logs.length > 0}
+              <div class="col-span-2 bg-card rounded-2xl border p-2 shadow-sm">
+                <div class="flex items-center justify-between mb-1">
+                  <span class="text-xs font-semibold">日志</span>
+                  <Button variant="ghost" size="icon" class="h-5 w-5" onclick={copyLogs}>
+                    {#if copied}<Check class="h-2.5 w-2.5 text-green-500" />{:else}<Copy class="h-2.5 w-2.5" />{/if}
+                  </Button>
+                </div>
+                <div class="bg-muted/30 rounded-lg p-1.5 font-mono text-[10px] max-h-16 overflow-y-auto space-y-0.5">
+                  {#each logs.slice(-4) as log}
+                    <div class="text-muted-foreground break-all">{log}</div>
+                  {/each}
+                </div>
+              </div>
+            {/if}
+            
+          </div>
         </div>
       {/if}
     {/snippet}

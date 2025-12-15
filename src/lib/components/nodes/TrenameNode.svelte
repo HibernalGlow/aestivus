@@ -179,32 +179,31 @@
 {#snippet renderTreeNode(node: TreeNode)}
   {@const dir = isDir(node)}
   {@const status = getStatus(node)}
-  {@const name = dir ? node.src_dir : node.src}
+  {@const srcName = dir ? node.src_dir : node.src}
   {@const tgt = dir ? node.tgt_dir : node.tgt}
   {@const statusClass = status === 'ready' ? 'bg-green-500' : status === 'pending' ? 'bg-yellow-500' : 'bg-gray-300'}
+  {@const displayName = tgt && tgt !== srcName ? `${srcName} → ${tgt}` : srcName}
   
   {#if dir}
-    <TreeView.Folder name="" open={true} class="text-xs">
+    <TreeView.Folder name={displayName} open={true} class="text-xs">
       {#snippet icon()}
-        <Folder class="w-3 h-3 text-yellow-500 shrink-0" />
+        <div class="flex items-center gap-1">
+          <Folder class="w-3 h-3 text-yellow-500 shrink-0" />
+        </div>
       {/snippet}
-      <span class="truncate" title={name}>{name}</span>
-      {#if tgt && tgt !== name}
-        <span class="text-muted-foreground mx-1">→</span>
-        <span class="text-green-600 truncate max-w-20" title={tgt}>{tgt}</span>
-      {/if}
-      <span class="w-2 h-2 rounded-full ml-1 shrink-0 {statusClass}"></span>
-      {#if node.children}
-        {#each node.children as child}
-          {@render renderTreeNode(child)}
-        {/each}
-      {/if}
+      {#snippet children()}
+        {#if node.children}
+          {#each node.children as child}
+            {@render renderTreeNode(child)}
+          {/each}
+        {/if}
+      {/snippet}
     </TreeView.Folder>
   {:else}
     <div class="flex items-center gap-1 py-0.5 text-xs pl-1">
       <File class="w-3 h-3 text-blue-500 shrink-0" />
-      <span class="truncate" title={name}>{name}</span>
-      {#if tgt && tgt !== name}
+      <span class="truncate" title={srcName}>{srcName}</span>
+      {#if tgt && tgt !== srcName}
         <span class="text-muted-foreground mx-1">→</span>
         <span class="text-green-600 truncate max-w-20" title={tgt}>{tgt}</span>
       {/if}

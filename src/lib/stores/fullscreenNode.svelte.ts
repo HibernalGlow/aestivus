@@ -1,36 +1,33 @@
 /**
  * 全屏节点状态管理
  * 用于控制节点的全屏显示
+ * 
+ * 新方案：记录全屏的 nodeId，让 NodeWrapper 自动处理全屏样式
+ * 节点组件完全不需要知道全屏的存在
  */
-import { writable } from 'svelte/store';
+import { writable, get } from 'svelte/store';
 
 export interface FullscreenNodeState {
   isOpen: boolean;
-  nodeType: string | null;
   nodeId: string | null;
-  nodeData: Record<string, unknown> | null;
 }
 
 const initialState: FullscreenNodeState = {
   isOpen: false,
-  nodeType: null,
-  nodeId: null,
-  nodeData: null
+  nodeId: null
 };
 
 function createFullscreenNodeStore() {
-  const { subscribe, set, update } = writable<FullscreenNodeState>(initialState);
+  const { subscribe, set } = writable<FullscreenNodeState>(initialState);
 
   return {
     subscribe,
     
-    /** 打开全屏节点 */
-    open(nodeType: string, nodeId?: string, nodeData?: Record<string, unknown>) {
+    /** 打开全屏节点 - 只需要 nodeId */
+    open(nodeId: string) {
       set({
         isOpen: true,
-        nodeType,
-        nodeId: nodeId || `fullscreen-${Date.now()}`,
-        nodeData: nodeData || {}
+        nodeId
       });
     },
     
@@ -39,12 +36,10 @@ function createFullscreenNodeStore() {
       set(initialState);
     },
     
-    /** 更新节点数据 */
-    updateData(data: Partial<Record<string, unknown>>) {
-      update(state => ({
-        ...state,
-        nodeData: { ...state.nodeData, ...data }
-      }));
+    /** 检查某个节点是否在全屏模式 */
+    isFullscreen(nodeId: string): boolean {
+      const state = get({ subscribe });
+      return state.isOpen && state.nodeId === nodeId;
     }
   };
 }

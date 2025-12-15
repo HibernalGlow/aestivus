@@ -2,8 +2,10 @@
   /**
    * 通用节点包装器
    * 提供：关闭、折叠/展开、固定、状态显示、全屏 功能
+   * 
+   * 全屏模式：自动检测并应用全屏样式，节点组件无需任何修改
    */
-  import { X, ChevronDown, ChevronRight, Pin, PinOff, Maximize2 } from '@lucide/svelte';
+  import { X, ChevronDown, ChevronRight, Pin, PinOff, Maximize2, Minimize2 } from '@lucide/svelte';
   import { Badge } from '$lib/components/ui/badge';
   import { flowStore } from '$lib/stores';
   import { fullscreenNodeStore } from '$lib/stores/fullscreenNode.svelte';
@@ -34,12 +36,10 @@
     closable?: boolean;
     /** 是否可固定，默认 true */
     pinnable?: boolean;
-    /** 是否有全屏功能 */
+    /** 是否有全屏功能，默认 true */
     hasFullscreen?: boolean;
-    /** 全屏节点类型 */
-    fullscreenType?: string;
-    /** 全屏传递数据 */
-    fullscreenData?: any;
+    /** 是否是全屏渲染模式（由页面级别传入） */
+    isFullscreenRender?: boolean;
     /** 初始折叠状态 */
     defaultCollapsed?: boolean;
     /** 边框样式类 */
@@ -93,9 +93,8 @@
     collapsible = true,
     closable = true,
     pinnable = true,
-    hasFullscreen = false,
-    fullscreenType,
-    fullscreenData,
+    hasFullscreen = true,
+    isFullscreenRender = false,
     defaultCollapsed = false,
     borderClass = 'border-border',
     children,
@@ -107,6 +106,11 @@
   // 状态
   let collapsed = $state.raw(false);
   let pinned = $state(false);
+  
+  // 检测是否在全屏模式（原节点需要变淡）
+  let isNodeInFullscreen = $derived($fullscreenNodeStore.isOpen && $fullscreenNodeStore.nodeId === nodeId);
+  // 原节点变淡：当节点在全屏模式但不是全屏渲染版本时
+  let shouldFade = $derived(isNodeInFullscreen && !isFullscreenRender);
   
   // 初始化折叠状态
   $effect(() => {
@@ -137,17 +141,22 @@
     onPin?.(pinned);
   }
 
-  // 打开全屏
-  function openFullscreen() {
-    if (hasFullscreen && fullscreenType) {
-      fullscreenNodeStore.open(fullscreenType, nodeId, fullscreenData);
+  // 切换全屏
+  function toggleFullscreen() {
+    if (hasFullscreen) {
+      if (isNodeInFullscreen) {
+        fullscreenNodeStore.close();
+      } else {
+        fullscreenNodeStore.open(nodeId);
+      }
     }
   }
 </script>
 
-<div class="bg-card/95 backdrop-blur border rounded-lg shadow-lg overflow-hidden min-w-[160px] {borderClass}">
+<!-- 全屏时原节点变淡，页面级别会渲染全屏版本 -->
+<div class="{shouldFade ? 'opacity-30 pointer-events-none' : ''} {isFullscreenRender ? 'h-full flex flex-col' : 'min-w-[160px]'} bg-card/95 backdrop-blur border rounded-lg shadow-lg overflow-hidden {borderClass}">
   <!-- 标题栏 -->
-  <div class="flex items-center justify-between px-3 py-2 bg-muted/30 border-b select-none {pinned ? 'cursor-not-allowed' : 'cursor-move'}">
+  <div class="flex items-center justify-between px-3 py-2 bg-muted/30 border-b select-none {pinned ? 'cursor-not-allowed' : 'cursor-move'} shrink-0">
     <!-- 左侧：折叠按钮 + 图标 + 标题 + 状态 -->
     <div class="flex items-center gap-2 flex-1 min-w-0">
       {#if collapsible}
@@ -188,10 +197,14 @@
       {#if hasFullscreen}
         <button
           class="p-1 rounded hover:bg-muted transition-colors text-muted-foreground"
-          onclick={openFullscreen}
-          title="全屏"
+          onclick={toggleFullscreen}
+          title={isNodeInFullscreen ? '退出全屏' : '全屏'}
         >
-          <Maximize2 class="w-3.5 h-3.5" />
+          {#if isNodeInFullscreen}
+            <Minimize2 class="w-3.5 h-3.5" />
+          {:else}
+            <Maximize2 class="w-3.5 h-3.5" />
+          {/if}
         </button>
       {/if}
       
@@ -222,8 +235,8 @@
   </div>
 
   <!-- 内容区 -->
-  {#if !collapsed}
-    <div class="nodrag">
+  {#if !collapsed || isFullscreenRender}
+    <div class="nodrag {isFullscreenRender ? 'flex-1 overflow-auto' : ''}">
       {@render children()}
     </div>
   {/if}

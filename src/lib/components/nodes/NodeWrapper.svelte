@@ -147,7 +147,7 @@
 
 <div class="bg-card/95 backdrop-blur border rounded-lg shadow-lg overflow-hidden min-w-[160px] {borderClass}">
   <!-- 标题栏 -->
-  <div class="flex items-center justify-between px-3 py-2 bg-muted/30 border-b cursor-move select-none">
+  <div class="flex items-center justify-between px-3 py-2 bg-muted/30 border-b select-none {pinned ? 'cursor-not-allowed' : 'cursor-move'}">
     <!-- 左侧：折叠按钮 + 图标 + 标题 + 状态 -->
     <div class="flex items-center gap-2 flex-1 min-w-0">
       {#if collapsible}

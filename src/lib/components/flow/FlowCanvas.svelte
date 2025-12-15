@@ -15,18 +15,10 @@
   let nodeIdCounter = 1;
   let containerRef: HTMLDivElement;
 
-  // 使用 $state.raw 创建响应式数组
-  let nodes = $state.raw<any[]>([]);
-  let edges = $state.raw<any[]>([]);
-
-  // 同步 flowStore 到本地状态
-  $effect(() => {
-    nodes = $flowStore.nodes as any[];
-  });
-
-  $effect(() => {
-    edges = $flowStore.edges as any[];
-  });
+  // 使用 $derived 确保节点变化时自动更新
+  // 深拷贝节点确保 SvelteFlow 检测到属性变化（如 draggable）
+  let nodes = $derived($flowStore.nodes.map(n => ({ ...n })) as any[]);
+  let edges = $derived($flowStore.edges.map(e => ({ ...e })) as any[]);
 
   // 从注册表获取节点类型映射
   const nodeTypes: NodeTypes = getNodeTypes();
@@ -77,6 +69,20 @@
       event.dataTransfer.dropEffect = 'move';
     }
   }
+  
+  // 记录节点的原始位置，用于固定节点时恢复
+  let pinnedPositions: Map<string, { x: number; y: number }> = new Map();
+  
+  // 监听 flowStore 变化，记录固定节点的位置
+  $effect(() => {
+    $flowStore.nodes.forEach(node => {
+      if (node.draggable === false && node.position) {
+        pinnedPositions.set(node.id, { ...node.position });
+      } else {
+        pinnedPositions.delete(node.id);
+      }
+    });
+  });
 </script>
 
 <svelte:window onkeydown={handleKeyDown} />
@@ -95,7 +101,15 @@
       {nodeTypes}
       onnodeclick={({ node }) => flowStore.selectNode(node.id)}
       onnodedragstop={({ targetNode }) => {
-        flowStore.updateNode(targetNode.id, { position: targetNode.position });
+        // 检查节点是否被固定
+        const originalPos = pinnedPositions.get(targetNode.id);
+        if (originalPos) {
+          // 固定节点：恢复到原始位置
+          flowStore.updateNode(targetNode.id, { position: originalPos });
+        } else {
+          // 非固定节点：更新到新位置
+          flowStore.updateNode(targetNode.id, { position: targetNode.position });
+        }
       }}
       onpaneclick={() => flowStore.selectNode(null)}
       onconnect={(conn) => {
@@ -115,7 +129,7 @@
       fitView
       snapGrid={[15, 15]}
     >
-      <Background gap={20} color="currentColor" class="opacity-10" />
+      <Background gap={20} class="opacity-10" />
       <Controls />
       <MiniMap
         nodeColor={(node) => {

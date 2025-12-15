@@ -17,8 +17,14 @@
     Wifi,
     WifiOff,
     Pause,
-    Play
+    Play,
+    ChevronDown,
+    ChevronRight,
+    X,
+    Pin,
+    PinOff
   } from '@lucide/svelte';
+  import { flowStore } from '$lib/stores';
   import AnsiToHtml from 'ansi-to-html';
   
   // Props from SvelteFlow
@@ -47,6 +53,14 @@
   let lines: { text: string; html: string }[] = [];
   let ws: WebSocket | null = null;
   let terminalEl: HTMLDivElement;
+  
+  // 节点控制状态
+  let collapsed = false;
+  let pinned = false;
+  
+  function handleClose() { flowStore.removeNode(id); }
+  function toggleCollapse() { collapsed = !collapsed; }
+  function togglePin() { pinned = !pinned; }
   
   const maxLines = data?.maxLines ?? 200;
   const wsUrl = `ws://localhost:8009/ws/terminal`;
@@ -162,12 +176,13 @@
   <Handle type="target" position={Position.Left} class="bg-primary!" />
   
   <!-- 标题栏 -->
-  <div class="flex items-center justify-between p-3 border-b border-border">
+  <div class="flex items-center justify-between px-3 py-2 border-b border-border bg-muted/30">
     <div class="flex items-center gap-2">
+      <button class="p-0.5 rounded hover:bg-muted" onclick={toggleCollapse} title={collapsed ? '展开' : '折叠'}>
+        {#if collapsed}<ChevronRight class="w-4 h-4" />{:else}<ChevronDown class="w-4 h-4" />{/if}
+      </button>
       <Terminal class="w-5 h-5 text-green-500" />
       <span class="font-semibold">{data?.label ?? '终端输出'}</span>
-    </div>
-    <div class="flex items-center gap-2">
       <Badge variant={connected ? 'default' : 'secondary'} class="text-xs">
         {#if connected}
           <Wifi class="w-3 h-3 mr-1" />
@@ -178,12 +193,22 @@
         {/if}
       </Badge>
     </div>
+    <div class="flex items-center gap-0.5">
+      <button class="p-1 rounded hover:bg-muted {pinned ? 'text-primary' : 'text-muted-foreground'}" onclick={togglePin} title={pinned ? '取消固定' : '固定'}>
+        {#if pinned}<Pin class="w-3.5 h-3.5" />{:else}<PinOff class="w-3.5 h-3.5" />{/if}
+      </button>
+      <button class="p-1 rounded hover:bg-destructive hover:text-destructive-foreground text-muted-foreground" onclick={handleClose} title="关闭">
+        <X class="w-3.5 h-3.5" />
+      </button>
+    </div>
   </div>
   
+  <!-- 内容区（折叠时隐藏） -->
+  {#if !collapsed}
   <!-- 终端内容 -->
   <div 
     bind:this={terminalEl}
-    class="bg-zinc-900 text-zinc-100 p-3 font-mono text-xs h-[300px] overflow-y-auto select-text cursor-text"
+    class="bg-zinc-900 text-zinc-100 p-3 font-mono text-xs h-[300px] overflow-y-auto select-text cursor-text nodrag"
   >
     {#each lines as line}
       <div class="whitespace-pre-wrap break-all leading-relaxed">{@html line.html}</div>
@@ -194,7 +219,7 @@
   </div>
   
   <!-- 工具栏 -->
-  <div class="flex items-center justify-between p-2 border-t border-border bg-muted/50">
+  <div class="flex items-center justify-between p-2 border-t border-border bg-muted/50 nodrag">
     <div class="flex items-center gap-1">
       <Button 
         variant="ghost" 
@@ -246,6 +271,7 @@
       {/if}
     </div>
   </div>
+  {/if}
   
   <!-- 输出端口 -->
   <Handle type="source" position={Position.Right} class="bg-primary!" />

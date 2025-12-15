@@ -35,8 +35,14 @@
     FolderTree,
     Trash2,
     Copy,
-    Check
+    Check,
+    ChevronDown,
+    ChevronRight,
+    X,
+    Pin,
+    PinOff
   } from '@lucide/svelte';
+  import { flowStore } from '$lib/stores';
   
   // 复制状态
   let copied = false;
@@ -64,6 +70,14 @@
   let phase: Phase = 'idle';
   let logs: string[] = data?.logs ? [...data.logs] : [];
   let hasInputConnection = data?.hasInputConnection ?? false;
+  
+  // 节点控制状态
+  let collapsed = false;
+  let pinned = false;
+  
+  function handleClose() { flowStore.removeNode(id); }
+  function toggleCollapse() { collapsed = !collapsed; }
+  function togglePin() { pinned = !pinned; }
   
   // 进度状态
   let progress = 0;
@@ -299,25 +313,39 @@
   void id;
 </script>
 
-<div class="rounded-lg border-2 bg-card p-4 min-w-[340px] max-w-[420px] {borderClass}">
+<div class="rounded-lg border-2 bg-card min-w-[340px] max-w-[420px] {borderClass}">
   <!-- 输入端口 -->
   <Handle type="target" position={Position.Left} class="bg-primary!" />
   
   <!-- 标题栏 -->
-  <div class="flex items-center justify-between mb-3">
+  <div class="flex items-center justify-between px-3 py-2 border-b bg-muted/30">
     <div class="flex items-center gap-2">
+      <button class="p-0.5 rounded hover:bg-muted" onclick={toggleCollapse} title={collapsed ? '展开' : '折叠'}>
+        {#if collapsed}<ChevronRight class="w-4 h-4" />{:else}<ChevronDown class="w-4 h-4" />{/if}
+      </button>
       <Package class="w-5 h-5 text-blue-500" />
       <span class="font-semibold">文件重打包</span>
+      <Badge variant={phase === 'error' ? 'destructive' : phase === 'completed' ? 'default' : 'secondary'} class="text-xs">
+        {phase === 'idle' ? '就绪' : 
+         phase === 'analyzing' ? '分析中' : 
+         phase === 'analyzed' ? '待压缩' :
+         phase === 'compressing' ? '压缩中' : 
+         phase === 'completed' ? '完成' : '错误'}
+      </Badge>
     </div>
-    <Badge variant={phase === 'error' ? 'destructive' : phase === 'completed' ? 'default' : 'secondary'}>
-      {phase === 'idle' ? '就绪' : 
-       phase === 'analyzing' ? '分析中' : 
-       phase === 'analyzed' ? '待压缩' :
-       phase === 'compressing' ? '压缩中' : 
-       phase === 'completed' ? '完成' : '错误'}
-    </Badge>
+    <div class="flex items-center gap-0.5">
+      <button class="p-1 rounded hover:bg-muted {pinned ? 'text-primary' : 'text-muted-foreground'}" onclick={togglePin} title={pinned ? '取消固定' : '固定'}>
+        {#if pinned}<Pin class="w-3.5 h-3.5" />{:else}<PinOff class="w-3.5 h-3.5" />{/if}
+      </button>
+      <button class="p-1 rounded hover:bg-destructive hover:text-destructive-foreground text-muted-foreground" onclick={handleClose} title="关闭">
+        <X class="w-3.5 h-3.5" />
+      </button>
+    </div>
   </div>
   
+  <!-- 内容区（折叠时隐藏） -->
+  {#if !collapsed}
+  <div class="p-4 nodrag">
   <!-- 路径输入区域 -->
   {#if !hasInputConnection}
     <div class="mb-3 space-y-2">
@@ -522,6 +550,8 @@
         {/each}
       </div>
     </div>
+  {/if}
+  </div>
   {/if}
   
   <!-- 输出端口 -->

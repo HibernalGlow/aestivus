@@ -63,7 +63,7 @@
   void id;
 </script>
 
-<div class="rounded-lg border-2 bg-card min-w-[300px] {statusStyles[status]}">
+<div class="rounded-lg border-2 bg-card min-w-[240px] max-w-[300px] {statusStyles[status]}">
   <!-- 输入端口 -->
   <Handle type="target" position={Position.Left} class="bg-primary!" />
   

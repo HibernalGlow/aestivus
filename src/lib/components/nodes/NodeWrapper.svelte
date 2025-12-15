@@ -68,7 +68,7 @@
   }
 </script>
 
-<div class="bg-card/95 backdrop-blur border rounded-lg shadow-lg overflow-hidden min-w-[200px]">
+<div class="bg-card/95 backdrop-blur border rounded-lg shadow-lg overflow-hidden min-w-[160px]">
   <!-- 标题栏 -->
   <div 
     class="flex items-center justify-between px-3 py-2 bg-muted/50 border-b cursor-move select-none"

@@ -174,7 +174,7 @@
   void id;
 </script>
 
-<div class="rounded-lg border-2 bg-card min-w-[400px] max-w-[600px] {connected ? 'border-green-500/50' : 'border-border'}">
+<div class="rounded-lg border-2 bg-card min-w-[280px] max-w-[400px] {connected ? 'border-green-500/50' : 'border-border'}">
   <!-- 输入端口 -->
   <Handle type="target" position={Position.Left} class="bg-primary!" />
   
@@ -211,7 +211,7 @@
   <!-- 终端内容 -->
   <div 
     bind:this={terminalEl}
-    class="bg-zinc-900 text-zinc-100 p-3 font-mono text-xs h-[300px] overflow-y-auto select-text cursor-text nodrag"
+    class="bg-zinc-900 text-zinc-100 p-2 font-mono text-xs h-[180px] overflow-y-auto select-text cursor-text nodrag"
   >
     {#each lines as line}
       <div class="whitespace-pre-wrap break-all leading-relaxed">{@html line.html}</div>

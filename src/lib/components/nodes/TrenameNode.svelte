@@ -225,7 +225,7 @@
   {phase === 'error' ? 'border-red-500' : phase === 'completed' ? 'border-green-500' : phase === 'scanning' || phase === 'renaming' ? 'border-blue-500 shadow-lg' : 'border-border'}">
   
   <!-- NodeResizer 支持任意拖拽调整大小 -->
-  <NodeResizer minWidth={280} minHeight={200} />
+  <NodeResizer minWidth={240} minHeight={180} />
   
   <Handle type="target" position={Position.Left} class="bg-primary!" />
   

@@ -316,7 +316,7 @@
   void id;
 </script>
 
-<div class="rounded-lg border-2 bg-card min-w-[340px] max-w-[420px] {borderClass}">
+<div class="rounded-lg border-2 bg-card min-w-[260px] max-w-[320px] {borderClass}">
   <!-- 输入端口 -->
   <Handle type="target" position={Position.Left} class="bg-primary!" />
   

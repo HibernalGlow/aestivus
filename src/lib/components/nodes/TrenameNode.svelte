@@ -10,10 +10,11 @@
   import * as TreeView from '$lib/components/ui/tree-view';
   import { api } from '$lib/services/api';
   import NodeWrapper from './NodeWrapper.svelte';
+  import * as Table from '$lib/components/ui/table';
   import { 
-    LoaderCircle, FolderOpen, Clipboard, FilePenLine, Search, Undo2, Copy, Check,
-    Download, Upload, TriangleAlert, Play, RefreshCw,
-    File, Folder, Trash2, PanelRightOpen, PanelRightClose, Settings2
+    LoaderCircle, FolderOpen, Clipboard, FilePenLine, Search, Undo2,
+    Download, Upload, TriangleAlert, Play, RefreshCw, FileJson,
+    File, Folder, Trash2, PanelRightOpen, PanelRightClose, Settings2, Check
   } from '@lucide/svelte';
   
   export let id: string;
@@ -32,6 +33,8 @@
   let copied = false;
   let showTree = data?.showTree ?? true;
   let showOptions = false;
+  let showJsonInput = false;
+  let jsonInputText = '';
   
   // 配置
   let scanPath = data?.config?.path ?? '';
@@ -49,6 +52,15 @@
   let stats = { total: 0, pending: 0, ready: 0, conflicts: 0 };
   let conflicts: string[] = [];
   let lastOperationId = '';
+  
+  // 操作历史记录
+  interface OperationRecord {
+    id: string;
+    time: string;
+    count: number;
+    canUndo: boolean;
+  }
+  let operationHistory: OperationRecord[] = [];
 
   // 计算
   $: isRunning = phase === 'scanning' || phase === 'renaming';
@@ -114,7 +126,22 @@
     try {
       const text = await navigator.clipboard.readText();
       if (!text.trim()) { log('❌ 剪贴板为空'); return; }
-      log('📋 导入中...');
+      await processJsonImport(text, replace);
+    } catch (e) { log(`❌ ${e}`); }
+  }
+  
+  // 从输入框导入 JSON
+  async function importFromInput() {
+    if (!jsonInputText.trim()) { log('❌ 输入为空'); return; }
+    await processJsonImport(jsonInputText, true);
+    jsonInputText = '';
+    showJsonInput = false;
+  }
+  
+  // 处理 JSON 导入的通用函数
+  async function processJsonImport(text: string, replace: boolean) {
+    log('📋 导入中...');
+    try {
       const r = await api.executeNode('trename', { action: 'import', json_content: text }) as any;
       if (r.success && r.data) {
         if (replace || segments.length === 0) {
@@ -185,16 +212,35 @@
       const r = await api.executeNode('trename', { action: 'rename', json_content: segments[currentSegment], base_path: basePath, dry_run: dryRun }) as any;
       if (r.success) {
         lastOperationId = r.data?.operation_id || ''; phase = 'completed';
-        log(`✅ 成功${r.data?.success_count || 0} 失败${r.data?.failed_count || 0}`);
-        if (lastOperationId) log(`🔄 撤销ID: ${lastOperationId}`);
+        const successCount = r.data?.success_count || 0;
+        log(`✅ 成功${successCount} 失败${r.data?.failed_count || 0}`);
+        // 记录操作历史
+        if (lastOperationId && !dryRun) {
+          operationHistory = [{
+            id: lastOperationId,
+            time: new Date().toLocaleTimeString(),
+            count: successCount,
+            canUndo: true
+          }, ...operationHistory].slice(0, 10); // 最多保留10条
+        }
       } else { phase = 'error'; log(`❌ ${r.message}`); }
     } catch (e) { phase = 'error'; log(`❌ ${e}`); }
   }
-  async function handleUndo() {
+  async function handleUndo(opId?: string) {
+    const targetId = opId || lastOperationId;
+    if (!targetId) { log('❌ 无可撤销操作'); return; }
     log('🔄 撤销...');
     try {
-      const r = await api.executeNode('trename', { action: 'undo', batch_id: lastOperationId }) as any;
-      if (r.success) { log(`✅ ${r.message}`); lastOperationId = ''; phase = 'ready'; }
+      const r = await api.executeNode('trename', { action: 'undo', batch_id: targetId }) as any;
+      if (r.success) { 
+        log(`✅ ${r.message}`); 
+        // 更新操作历史
+        operationHistory = operationHistory.map(op => 
+          op.id === targetId ? { ...op, canUndo: false } : op
+        );
+        if (targetId === lastOperationId) lastOperationId = '';
+        phase = 'ready'; 
+      }
       else log(`❌ ${r.message}`);
     } catch (e) { log(`❌ ${e}`); }
   }
@@ -214,16 +260,20 @@
   {@const srcName = dir ? node.src_dir : node.src}
   {@const tgt = dir ? node.tgt_dir : node.tgt}
   {@const statusClass = status === 'ready' ? 'bg-green-500' : status === 'pending' ? 'bg-yellow-500' : 'bg-gray-300'}
-  {@const displayName = tgt && tgt !== srcName ? `${srcName} → ${tgt}` : srcName}
+  {@const hasChange = tgt && tgt !== srcName}
   
   {#if dir}
-    <TreeView.Folder name={displayName} open={true} class="text-xs">
+    <TreeView.Folder name={srcName} open={true} class="text-xs">
       {#snippet icon()}
         <div class="flex items-center gap-1">
           <Folder class="w-3 h-3 text-yellow-500 shrink-0" />
+          <span class="w-2 h-2 rounded-full shrink-0 {statusClass}"></span>
         </div>
       {/snippet}
       {#snippet children()}
+        {#if hasChange}
+          <div class="text-xs text-green-600 pl-4 py-0.5 truncate" title={tgt}>→ {tgt}</div>
+        {/if}
         {#if node.children}
           {#each node.children as child}
             {@render renderTreeNode(child)}
@@ -232,14 +282,15 @@
       {/snippet}
     </TreeView.Folder>
   {:else}
-    <div class="flex items-center gap-1 py-0.5 text-xs pl-1">
-      <File class="w-3 h-3 text-blue-500 shrink-0" />
-      <span class="truncate" title={srcName}>{srcName}</span>
-      {#if tgt && tgt !== srcName}
-        <span class="text-muted-foreground mx-1">→</span>
-        <span class="text-green-600 truncate max-w-20" title={tgt}>{tgt}</span>
+    <div class="flex flex-col py-0.5 text-xs pl-1">
+      <div class="flex items-center gap-1">
+        <File class="w-3 h-3 text-blue-500 shrink-0" />
+        <span class="truncate flex-1" title={srcName}>{srcName}</span>
+        <span class="w-2 h-2 rounded-full shrink-0 {statusClass}"></span>
+      </div>
+      {#if hasChange}
+        <div class="text-green-600 pl-4 truncate" title={tgt}>→ {tgt}</div>
       {/if}
-      <span class="w-2 h-2 rounded-full ml-1 shrink-0 {statusClass}"></span>
     </div>
   {/if}
 {/snippet}
@@ -284,15 +335,37 @@
           <!-- 导入/导出 -->
           <div class="flex gap-1">
             <Button variant="ghost" size="sm" class="flex-1 h-7 text-xs" onclick={() => importJson(false)} disabled={isRunning} title="从剪贴板导入JSON">
-              <Upload class="h-3 w-3 mr-1" />导入
+              <Upload class="h-3 w-3 mr-1" />剪贴板
+            </Button>
+            <Button variant="ghost" size="sm" class="flex-1 h-7 text-xs" onclick={() => showJsonInput = !showJsonInput} disabled={isRunning} title="输入JSON">
+              <FileJson class="h-3 w-3 mr-1" />输入
             </Button>
             <Button variant="ghost" size="sm" class="flex-1 h-7 text-xs" onclick={() => copySegment(currentSegment)} disabled={!segments.length} title="复制当前段">
               {#if copied}<Check class="h-3 w-3 mr-1 text-green-500" />{:else}<Clipboard class="h-3 w-3 mr-1" />{/if}复制
             </Button>
-            <Button variant="ghost" size="sm" class="flex-1 h-7 text-xs" onclick={() => downloadSegment(currentSegment)} disabled={!segments.length} title="下载当前段JSON">
-              <Download class="h-3 w-3 mr-1" />下载
+            <Button variant="ghost" size="sm" class="h-7 w-7 p-0 shrink-0" onclick={() => downloadSegment(currentSegment)} disabled={!segments.length} title="下载">
+              <Download class="h-3 w-3" />
             </Button>
           </div>
+          
+          <!-- JSON 输入框 -->
+          {#if showJsonInput}
+            <div class="border rounded p-2 space-y-2 bg-muted/20">
+              <textarea 
+                bind:value={jsonInputText} 
+                placeholder="粘贴 JSON 内容..." 
+                class="w-full h-24 text-xs font-mono resize-none bg-background border rounded p-2 focus:outline-none focus:ring-1 focus:ring-primary"
+              ></textarea>
+              <div class="flex gap-1">
+                <Button variant="default" size="sm" class="flex-1 h-6 text-xs" onclick={importFromInput} disabled={!jsonInputText.trim()}>
+                  导入
+                </Button>
+                <Button variant="ghost" size="sm" class="h-6 text-xs" onclick={() => { showJsonInput = false; jsonInputText = ''; }}>
+                  取消
+                </Button>
+              </div>
+            </div>
+          {/if}
           
           <!-- 分段选择器 -->
           {#if segments.length > 1}
@@ -325,9 +398,6 @@
             </Button>
             <Button variant={canRename ? 'default' : 'outline'} size="sm" class="flex-1 h-7 text-xs" onclick={handleRename} disabled={isRunning || !canRename}>
               {#if phase === 'renaming'}<LoaderCircle class="h-3 w-3 mr-1 animate-spin" />{:else}<Play class="h-3 w-3 mr-1" />{/if}执行
-            </Button>
-            <Button variant="ghost" size="sm" class="h-7 w-7 p-0 shrink-0" onclick={handleUndo} disabled={!lastOperationId} title="撤销">
-              <Undo2 class="h-3 w-3" />
             </Button>
             <Button variant="ghost" size="sm" class="h-7 w-7 p-0 shrink-0" onclick={clear} title="清空">
               <Trash2 class="h-3 w-3" />
@@ -367,13 +437,46 @@
           
           <!-- 日志区域 -->
           {#if logs.length > 0}
-            <div class="border rounded bg-muted/20 flex-1 min-h-16 max-h-32 overflow-hidden flex flex-col">
+            <div class="border rounded bg-muted/20 min-h-12 max-h-24 overflow-hidden flex flex-col">
               <div class="flex items-center justify-between px-1 py-0.5 border-b bg-muted/30 shrink-0">
                 <span class="text-xs text-muted-foreground">日志</span>
                 <Button variant="ghost" size="sm" class="h-4 w-4 p-0" onclick={copyLogs} title="复制日志"><Clipboard class="h-2 w-2" /></Button>
               </div>
               <div class="p-1 space-y-0.5 overflow-y-auto flex-1">
                 {#each logs as logItem}<div class="text-xs font-mono text-muted-foreground truncate" title={logItem}>{logItem}</div>{/each}
+              </div>
+            </div>
+          {/if}
+          
+          <!-- 撤销历史区块 -->
+          {#if operationHistory.length > 0}
+            <div class="border rounded bg-muted/20 overflow-hidden">
+              <div class="flex items-center justify-between px-2 py-1 border-b bg-muted/30">
+                <span class="text-xs text-muted-foreground flex items-center gap-1">
+                  <Undo2 class="h-3 w-3" />操作历史
+                </span>
+                <span class="text-xs text-muted-foreground">{operationHistory.filter(o => o.canUndo).length} 可撤销</span>
+              </div>
+              <div class="max-h-24 overflow-y-auto">
+                <Table.Root class="text-xs">
+                  <Table.Body>
+                    {#each operationHistory as op}
+                      <Table.Row class="h-7">
+                        <Table.Cell class="py-1 px-2 text-muted-foreground">{op.time}</Table.Cell>
+                        <Table.Cell class="py-1 px-2">{op.count} 项</Table.Cell>
+                        <Table.Cell class="py-1 px-2 text-right">
+                          {#if op.canUndo}
+                            <Button variant="ghost" size="sm" class="h-5 px-2 text-xs" onclick={() => handleUndo(op.id)}>
+                              <Undo2 class="h-3 w-3 mr-1" />撤销
+                            </Button>
+                          {:else}
+                            <span class="text-muted-foreground">已撤销</span>
+                          {/if}
+                        </Table.Cell>
+                      </Table.Row>
+                    {/each}
+                  </Table.Body>
+                </Table.Root>
               </div>
             </div>
           {/if}

@@ -1,5 +1,8 @@
 use std::sync::{Arc, Mutex};
 use std::process::{Child, Command};
+use std::net::TcpListener;
+use std::fs::{self, OpenOptions};
+use std::path::PathBuf;
 
 // 非 Windows 平台需要 Stdio
 #[cfg(not(target_os = "windows"))]
@@ -12,6 +15,103 @@ use serde::{Deserialize, Serialize};
 use std::os::windows::process::CommandExt;
 #[cfg(target_os = "windows")]
 const CREATE_NEW_CONSOLE: u32 = 0x00000010;
+
+// ============== 实例管理 ==============
+
+/// 检查端口是否被占用
+fn is_port_in_use(port: u16) -> bool {
+    TcpListener::bind(("127.0.0.1", port)).is_err()
+}
+
+/// 检查 8009 端口是否有 aestivus 服务在运行（通过 HTTP 请求）
+fn check_aestivus_service(port: u16) -> bool {
+    // 使用同步 HTTP 请求检查服务
+    let url = format!("http://127.0.0.1:{}/health", port);
+    
+    #[cfg(target_os = "windows")]
+    {
+        // Windows: 使用 curl 或 PowerShell
+        if let Ok(output) = Command::new("curl")
+            .args(["-s", "-m", "1", &url])
+            .output()
+        {
+            let body = String::from_utf8_lossy(&output.stdout);
+            return body.contains("aestiv") || body.contains("ok");
+        }
+    }
+    
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Ok(output) = Command::new("curl")
+            .args(["-s", "-m", "1", &url])
+            .output()
+        {
+            let body = String::from_utf8_lossy(&output.stdout);
+            return body.contains("aestiv") || body.contains("ok");
+        }
+    }
+    
+    false
+}
+
+/// 获取锁文件路径
+fn get_lock_file_path() -> PathBuf {
+    let app_data = dirs::data_local_dir()
+        .unwrap_or_else(|| PathBuf::from("."));
+    let lock_dir = app_data.join("aestivus");
+    let _ = fs::create_dir_all(&lock_dir);
+    lock_dir.join("instance.lock")
+}
+
+/// 尝试获取主实例锁
+fn try_acquire_primary_lock() -> bool {
+    let lock_path = get_lock_file_path();
+    
+    // 尝试独占创建锁文件
+    match OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&lock_path)
+    {
+        Ok(_) => {
+            println!("[tauri] Primary instance lock acquired");
+            true
+        }
+        Err(_) => {
+            // 检查锁文件是否过期（进程可能已崩溃）
+            if let Ok(metadata) = fs::metadata(&lock_path) {
+                if let Ok(modified) = metadata.modified() {
+                    if let Ok(elapsed) = modified.elapsed() {
+                        // 锁文件超过 1 小时认为过期
+                        if elapsed.as_secs() > 3600 {
+                            let _ = fs::remove_file(&lock_path);
+                            return try_acquire_primary_lock();
+                        }
+                    }
+                }
+            }
+            println!("[tauri] Secondary instance detected");
+            false
+        }
+    }
+}
+
+/// 释放主实例锁
+fn release_primary_lock() {
+    let lock_path = get_lock_file_path();
+    let _ = fs::remove_file(&lock_path);
+    println!("[tauri] Primary instance lock released");
+}
+
+/// 为多开实例找一个可用端口
+fn find_available_port(start_port: u16) -> u16 {
+    for port in start_port..start_port + 100 {
+        if !is_port_in_use(port) {
+            return port;
+        }
+    }
+    start_port + 100 // fallback
+}
 
 // ============== Python 配置 ==============
 
@@ -140,15 +240,26 @@ fn is_python_available(python_path: &str) -> bool {
 struct PythonProcess {
     process: Option<Child>,
     config: PythonConfig,
+    is_primary: bool,        // 是否是主实例
+    owns_backend: bool,      // 是否拥有后端进程（自己启动的）
+    actual_port: u16,        // 实际使用的端口
 }
 
 impl PythonProcess {
     fn new(config: PythonConfig) -> Self {
-        Self { process: None, config }
+        let port = config.port;
+        Self { 
+            process: None, 
+            config,
+            is_primary: false,
+            owns_backend: false,
+            actual_port: port,
+        }
     }
     
     fn set_process(&mut self, process: Child) {
         self.process = Some(process);
+        self.owns_backend = true;
     }
     
     fn take_process(&mut self) -> Option<Child> {
@@ -162,13 +273,44 @@ impl PythonProcess {
     fn config(&self) -> &PythonConfig {
         &self.config
     }
+    
+    fn set_primary(&mut self, is_primary: bool) {
+        self.is_primary = is_primary;
+    }
+    
+    fn set_actual_port(&mut self, port: u16) {
+        self.actual_port = port;
+    }
+    
+    fn actual_port(&self) -> u16 {
+        self.actual_port
+    }
+    
+    fn is_primary(&self) -> bool {
+        self.is_primary
+    }
+    
+    fn owns_backend(&self) -> bool {
+        self.owns_backend
+    }
+    
+    fn set_reusing_backend(&mut self) {
+        self.owns_backend = false;
+    }
 }
 
 impl Drop for PythonProcess {
     fn drop(&mut self) {
-        if let Some(mut process) = self.process.take() {
-            println!("[tauri] PythonProcess dropping, killing process...");
-            let _ = process.kill();
+        // 只有自己启动的后端才需要清理
+        if self.owns_backend {
+            if let Some(mut process) = self.process.take() {
+                println!("[tauri] PythonProcess dropping, killing process...");
+                let _ = process.kill();
+            }
+        }
+        // 主实例释放锁
+        if self.is_primary {
+            release_primary_lock();
         }
     }
 }
@@ -230,20 +372,51 @@ fn toggle_fullscreen(window: tauri::Window) {
     }
 }
 
-/// 启动 Python 后端进程
-fn spawn_python_backend(app_handle: tauri::AppHandle) -> Result<(), String> {
+/// 启动 Python 后端进程（支持多实例）
+fn spawn_python_backend(app_handle: tauri::AppHandle, is_primary: bool) -> Result<u16, String> {
     let config = if let Some(state) = app_handle.try_state::<Arc<Mutex<PythonProcess>>>() {
-        let process_state = state.lock().unwrap();
+        let mut process_state = state.lock().unwrap();
         if process_state.has_process() {
             println!("[tauri] Python backend is already running.");
-            return Ok(());
+            return Ok(process_state.actual_port());
         }
+        process_state.set_primary(is_primary);
         process_state.config().clone()
     } else {
         return Err("Failed to access app state".to_string());
     };
 
-    println!("[tauri] Starting Python backend with config: {:?}", config);
+    let default_port = config.port;
+    
+    // 主实例逻辑：检查 8009 是否已有服务
+    if is_primary {
+        if is_port_in_use(default_port) {
+            // 端口被占用，检查是否是 aestivus 服务
+            if check_aestivus_service(default_port) {
+                println!("[tauri] Found existing aestivus service on port {}, reusing...", default_port);
+                if let Some(state) = app_handle.try_state::<Arc<Mutex<PythonProcess>>>() {
+                    let mut process_state = state.lock().unwrap();
+                    process_state.set_actual_port(default_port);
+                    process_state.set_reusing_backend();
+                }
+                let _ = app_handle.emit("python-ready", default_port);
+                return Ok(default_port);
+            } else {
+                // 端口被其他程序占用，找新端口
+                println!("[tauri] Port {} occupied by other service, finding new port...", default_port);
+            }
+        }
+    }
+    
+    // 确定要使用的端口
+    let actual_port = if is_primary && !is_port_in_use(default_port) {
+        default_port
+    } else {
+        // 多开实例或端口被占用，找可用端口
+        find_available_port(default_port + 1)
+    };
+    
+    println!("[tauri] Starting Python backend on port {} (primary: {})", actual_port, is_primary);
     
     if !is_python_available(&config.python_path) {
         let msg = format!("Python not found at '{}'.", config.python_path);
@@ -259,8 +432,9 @@ fn spawn_python_backend(app_handle: tauri::AppHandle) -> Result<(), String> {
         return Err(msg);
     }
     
-    // 构建启动参数
-    let mut args = vec!["-m", "aestiv"];
+    // 构建启动参数（带端口）
+    let port_str = actual_port.to_string();
+    let mut args = vec!["-m", "aestiv", "--port", &port_str];
     if config.dev_mode {
         args.push("--standalone");
     }
@@ -324,14 +498,18 @@ fn spawn_python_backend(app_handle: tauri::AppHandle) -> Result<(), String> {
     };
     
     let pid = child.id();
-    println!("[tauri] Python process spawned with PID: {} (in new console window)", pid);
+    println!("[tauri] Python process spawned with PID: {} on port {} (in new console window)", pid, actual_port);
     
-    // 存储进程
+    // 存储进程和端口
     if let Some(state) = app_handle.try_state::<Arc<Mutex<PythonProcess>>>() {
-        state.lock().unwrap().set_process(child);
+        let mut process_state = state.lock().unwrap();
+        process_state.set_process(child);
+        process_state.set_actual_port(actual_port);
     }
+    
+    let _ = app_handle.emit("python-ready", actual_port);
 
-    Ok(())
+    Ok(actual_port)
 }
 
 
@@ -346,8 +524,25 @@ fn shutdown_python(app_handle: tauri::AppHandle) -> Result<String, String> {
 #[tauri::command]
 fn start_python(app_handle: tauri::AppHandle) -> Result<String, String> {
     println!("[tauri] Starting Python backend...");
-    spawn_python_backend(app_handle)?;
-    Ok("Python backend started.".to_string())
+    // 手动启动时检查是否是主实例
+    let is_primary = if let Some(state) = app_handle.try_state::<Arc<Mutex<PythonProcess>>>() {
+        state.lock().unwrap().is_primary()
+    } else {
+        false
+    };
+    let port = spawn_python_backend(app_handle, is_primary)?;
+    Ok(format!("Python backend started on port {}.", port))
+}
+
+/// 获取当前实例使用的后端端口
+#[tauri::command]
+fn get_backend_port(app_handle: tauri::AppHandle) -> Result<u16, String> {
+    if let Some(state) = app_handle.try_state::<Arc<Mutex<PythonProcess>>>() {
+        let guard = state.lock().map_err(|_| "Lock failed")?;
+        Ok(guard.actual_port())
+    } else {
+        Err("State not found".to_string())
+    }
 }
 
 #[tauri::command]
@@ -395,11 +590,20 @@ pub fn run() {
                 });
             }
             
+            // 检测是否是主实例
+            let is_primary = try_acquire_primary_lock();
+            
+            // 更新状态
+            if let Some(state) = app.try_state::<Arc<Mutex<PythonProcess>>>() {
+                state.lock().unwrap().set_primary(is_primary);
+            }
+            
             // 启动 Python 后端
             let app_handle = app.handle().clone();
-            println!("[tauri] Starting Python backend...");
-            if let Err(e) = spawn_python_backend(app_handle) {
-                eprintln!("[tauri] Failed to start Python backend: {}", e);
+            println!("[tauri] Starting Python backend (primary: {})...", is_primary);
+            match spawn_python_backend(app_handle, is_primary) {
+                Ok(port) => println!("[tauri] Python backend ready on port {}", port),
+                Err(e) => eprintln!("[tauri] Failed to start Python backend: {}", e),
             }
             
             Ok(())
@@ -411,7 +615,8 @@ pub fn run() {
             start_sidecar,
             shutdown_sidecar,
             toggle_fullscreen,
-            get_python_config
+            get_python_config,
+            get_backend_port
         ])
         .build(tauri::generate_context!())
         .expect("Error building tauri application")

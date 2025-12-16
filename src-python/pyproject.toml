@@ -101,4 +101,9 @@ nofollow-imports = [
     "cv2",
     "PIL",
     "pillow",
+    # markdown 相关，编译时容易出问题
+    "markdown_it",
+    "markdown",
+    "mdurl",
+    "mdit_py_plugins",
 ]

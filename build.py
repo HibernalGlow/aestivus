@@ -177,10 +177,9 @@ def build_python_sidecar():
     # Windows 特定选项
     if platform_name == "windows":
         nuitka_cmd.append("--windows-console-mode=attach")
-        # CI 环境用 MSVC（GitHub Actions 自带），本地用 MinGW
-        import os
-        if not os.environ.get("CI"):
-            nuitka_cmd.append("--mingw64")
+        # 优先使用 MSVC（需要安装 Visual Studio Build Tools）
+        # 如果没有 MSVC，Nuitka 会自动回退到 MinGW
+        nuitka_cmd.append("--msvc=latest")
     
     # 入口文件
     nuitka_cmd.append("main.py")

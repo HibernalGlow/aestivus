@@ -24,6 +24,10 @@ jobs:
     runs-on: ${{ matrix.platform }}
 
     steps:
+      - name: Enable Git long paths (Windows)
+        if: matrix.platform == 'windows-latest'
+        run: git config --system core.longpaths true
+
       - name: Checkout
         uses: actions/checkout@v4
 

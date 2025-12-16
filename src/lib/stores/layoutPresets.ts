@@ -6,6 +6,7 @@ import type { GridItem } from '$lib/components/ui/dashboard-grid';
 
 // localStorage key
 const PRESETS_KEY = 'aestival-layout-presets';
+const DEFAULT_PRESET_KEY = 'aestival-default-preset';  // 存储每个 nodeType 的默认预设 ID
 
 /** 布局预设 */
 export interface LayoutPreset {
@@ -124,6 +125,16 @@ export function deletePreset(id: string): boolean {
   return true;
 }
 
+/** 重命名用户预设 */
+export function renamePreset(id: string, newName: string): boolean {
+  const userPresets = loadUserPresets();
+  const preset = userPresets.find(p => p.id === id);
+  if (!preset) return false;
+  preset.name = newName;
+  saveUserPresets(userPresets);
+  return true;
+}
+
 /** 导出预设为 JSON 字符串 */
 export function exportPreset(id: string): string | null {
   const preset = getPreset(id);
@@ -150,4 +161,50 @@ export function importPreset(json: string): LayoutPreset | null {
   } catch {
     return null;
   }
+}
+
+/** 加载默认预设配置 */
+function loadDefaultPresets(): Record<string, string> {
+  if (typeof window === 'undefined') return {};
+  try {
+    const stored = localStorage.getItem(DEFAULT_PRESET_KEY);
+    return stored ? JSON.parse(stored) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** 保存默认预设配置 */
+function saveDefaultPresets(defaults: Record<string, string>): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(DEFAULT_PRESET_KEY, JSON.stringify(defaults));
+  } catch (e) {
+    console.warn('[layoutPresets] Failed to save defaults:', e);
+  }
+}
+
+/** 设置默认预设 */
+export function setDefaultPreset(nodeType: string, presetId: string): void {
+  const defaults = loadDefaultPresets();
+  defaults[nodeType] = presetId;
+  saveDefaultPresets(defaults);
+}
+
+/** 获取默认预设 ID */
+export function getDefaultPresetId(nodeType: string): string | null {
+  const defaults = loadDefaultPresets();
+  return defaults[nodeType] || null;
+}
+
+/** 获取默认预设（如果没有设置，返回第一个内置预设） */
+export function getDefaultPreset(nodeType: string): LayoutPreset | null {
+  const defaultId = getDefaultPresetId(nodeType);
+  if (defaultId) {
+    const preset = getPreset(defaultId);
+    if (preset) return preset;
+  }
+  // 返回第一个内置预设作为默认
+  const builtinPreset = BUILTIN_PRESETS.find(p => p.nodeType === nodeType);
+  return builtinPreset || null;
 }

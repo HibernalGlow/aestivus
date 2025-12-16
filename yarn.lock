@@ -1385,22 +1385,15 @@ tabbable@^6.2.0:
   resolved "https://registry.npmmirror.com/tabbable/-/tabbable-6.3.0.tgz#2e0e6163935387cdeacd44e9334616ca0115a8d3"
   integrity sha512-EIHvdY5bPLuWForiR/AN2Bxngzpuwn1is4asboytXtpTgsArc+WmSJKVLlhdh71u7jFcryDqB2A8lQvj78MkyQ==
 
-tailwind-merge@3.0.2:
-  version "3.0.2"
-  resolved "https://registry.npmmirror.com/tailwind-merge/-/tailwind-merge-3.0.2.tgz#567eff76de12211e24dd909da0f5ed6f4f422b0c"
-  integrity sha512-l7z+OYZ7mu3DTqrL88RiKrKIqO3NcpEO8V/Od04bNpvk0kiIFndGEoqfuzvj4yuhRkHKjRkII2z+KS2HfPcSxw==
-
 tailwind-merge@^3.3.1:
   version "3.4.0"
   resolved "https://registry.npmmirror.com/tailwind-merge/-/tailwind-merge-3.4.0.tgz#5a264e131a096879965f1175d11f8c36e6b64eca"
   integrity sha512-uSaO4gnW+b3Y2aWoWfFpX62vn2sR3skfhbjsEnaBI81WD1wBLlHZe5sWf0AqjksNdYTbGBEd0UasQMT3SNV15g==
 
-tailwind-variants@^1.0.0:
-  version "1.0.0"
-  resolved "https://registry.npmmirror.com/tailwind-variants/-/tailwind-variants-1.0.0.tgz#dde2cc2a8689910ca1cdc95ba82c63cf9094bd51"
-  integrity sha512-2WSbv4ulEEyuBKomOunut65D8UZwxrHoRfYnxGcQNnHqlSCp2+B7Yz2W+yrNDrxRodOXtGD/1oCcKGNBnUqMqA==
-  dependencies:
-    tailwind-merge "3.0.2"
+tailwind-variants@^3.2.2:
+  version "3.2.2"
+  resolved "https://registry.npmmirror.com/tailwind-variants/-/tailwind-variants-3.2.2.tgz#3ac8ccc735cae8b6f416330070f5f7437a77a0f3"
+  integrity sha512-Mi4kHeMTLvKlM98XPnK+7HoBPmf4gygdFmqQPaDivc3DpYS6aIY6KiG/PgThrGvii5YZJqRsPz0aPyhoFzmZgg==
 
 tailwindcss@4.1.18, tailwindcss@^4.1.11:
   version "4.1.18"

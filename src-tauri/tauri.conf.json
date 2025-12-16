@@ -5,7 +5,7 @@
   "identifier": "com.aestivus.app",
   "build": {
     "beforeDevCommand": "yarn dev:tauri",
-    "devUrl": "http://localhost:1420",
+    "devUrl": "http://localhost:1096",
     "beforeBuildCommand": "yarn build",
     "frontendDist": "../build"
   },

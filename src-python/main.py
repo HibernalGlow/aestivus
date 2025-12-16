@@ -1,5 +1,5 @@
 """
-FastAPI Server for aestival
+FastAPI Server for Aestivus
 支持三种运行模式:
 - pywebview 模式: 作为桌面应用运行（推荐）
 - standalone 模式: 独立运行带热重载（开发用）
@@ -73,7 +73,7 @@ STANDALONE_MODE = RUNNING_MODE == "standalone"
 mode_label = RUNNING_MODE
 
 # Create FastAPI app
-app = FastAPI(title="Test App API", version="1.0.0")
+app = FastAPI(title="Aestivus API", version="1.0.0")
 
 # CORS 配置
 # 根据运行模式配置允许的来源
@@ -119,7 +119,7 @@ app.include_router(terminal_router)  # 终端 WebSocket，无前缀
 @app.get("/")
 async def root():
     return {
-        "message": "Test App API", 
+        "message": "Aestivus API", 
         "status": "running",
         "mode": mode_label,
         "port": PORT_API

@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    tauriv2_sveltekit_python_template_lib::run()
+    aestivus_lib::run()
 }

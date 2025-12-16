@@ -1,10 +1,10 @@
 """
-aestival-backend 包入口点
-支持通过 python -m aestival_backend 启动
+aestiv 包入口点
+支持通过 python -m aestiv 启动
 
 用法:
-    python -m aestival_backend              # sidecar 模式（Tauri 调用）
-    python -m aestival_backend --standalone # 开发模式（热重载）
+    python -m aestiv              # sidecar 模式（Tauri 调用）
+    python -m aestiv --standalone # 开发模式（热重载）
 """
 
 import sys

@@ -1,5 +1,5 @@
 """
-aestival 独立启动器（可选）
+Aestivus 独立启动器（可选）
 用于开发模式或不使用 Tauri 时的独立运行
 注意：生产环境请使用 Tauri 构建
 
@@ -20,14 +20,14 @@ from uvicorn import Config, Server
 from bridge import BridgeAPI
 
 
-class aestivalApp:
-    """aestival 应用程序主入口类"""
+class AestivusApp:
+    """Aestivus 应用程序主入口类"""
     
     # 默认配置
     DEFAULT_PORT = 8009
     DEFAULT_HOST = "127.0.0.1"
     FRONTEND_DEV_PORT = 5175  # Vite 开发服务器端口
-    WINDOW_TITLE = "aestival"
+    WINDOW_TITLE = "Aestivus"
     WINDOW_WIDTH = 1400
     WINDOW_HEIGHT = 900
     SERVER_TIMEOUT = 10  # 等待服务器启动的超时时间（秒）
@@ -52,7 +52,7 @@ class aestivalApp:
     
     def start(self):
         """启动应用程序"""
-        print(f"🚀 启动 aestival...")
+        print(f"🚀 启动 Aestivus...")
         
         # 1. 查找可用端口
         self.port = self._find_available_port()
@@ -227,7 +227,7 @@ def main():
         print("🔧 开发模式启动")
         print("📝 请确保前端开发服务器已运行: yarn dev")
     
-    app = aestivalApp(dev_mode=dev_mode)
+    app = AestivusApp(dev_mode=dev_mode)
     app.start()
 
 

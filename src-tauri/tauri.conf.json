@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "aestival",
+  "productName": "aestivus",
   "version": "3.1.0",
-  "identifier": "com.aestival.flow",
+  "identifier": "com.aestivus.app",
   "build": {
     "beforeDevCommand": "yarn dev:tauri",
     "devUrl": "http://localhost:1420",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "aestival",
+        "title": "Aestivus",
         "width": 1400,
         "height": 900,
         "minWidth": 1000,
@@ -38,7 +38,7 @@
     ],
     "category": "Business",
     "shortDescription": "Python工具链可视化编排与执行平台",
-    "longDescription": "AestivalFlow 是一个结合 Python 数据处理能力和现代化用户界面的桌面应用程序，支持可视化工具编排和执行。",
+    "longDescription": "Aestivus 是一个结合 Python 数据处理能力和现代化用户界面的桌面应用程序，支持可视化工具编排和执行。",
     "copyright": "© 2024 HibernalGlow. All rights reserved."
   }
 }

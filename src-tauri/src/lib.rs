@@ -109,22 +109,22 @@ fn detect_python_path() -> String {
     "python".to_string()
 }
 
-/// 检查 aestival-backend 包是否已安装
-fn check_aestival_backend_installed(python_path: &str) -> bool {
+/// 检查 aestiv 包是否已安装
+fn check_aestiv_installed(python_path: &str) -> bool {
     use std::process::Command;
     
     let result = Command::new(python_path)
-        .args(["-c", "import aestival_backend; print('ok')"])
+        .args(["-c", "import aestiv; print('ok')"])
         .output();
     
     if let Ok(output) = result {
         if output.status.success() {
-            println!("[tauri] aestival-backend package is installed");
+            println!("[tauri] aestiv package is installed");
             return true;
         }
     }
     
-    println!("[tauri] aestival-backend package is NOT installed");
+    println!("[tauri] aestiv package is NOT installed");
     false
 }
 
@@ -323,10 +323,10 @@ fn spawn_python_backend(app_handle: tauri::AppHandle) -> Result<(), String> {
         return Err(error_msg);
     }
     
-    // 检查 aestival-backend 包是否已安装
-    if !check_aestival_backend_installed(&config.python_path) {
+    // 检查 aestiv 包是否已安装
+    if !check_aestiv_installed(&config.python_path) {
         let error_msg = format!(
-            "aestival-backend package not found. Please install it with:\n  pip install aestival-backend\nor for development:\n  pip install -e ./src-python"
+            "aestiv package not found. Please install it with:\n  pip install aestiv\nor for development:\n  pip install -e ./src-python"
         );
         println!("[tauri] Error: {}", error_msg);
         let _ = app_handle.emit("python-error", error_msg.clone());
@@ -334,7 +334,7 @@ fn spawn_python_backend(app_handle: tauri::AppHandle) -> Result<(), String> {
     }
     
     // 构建启动参数
-    let mut args = vec!["-m".to_string(), "aestival_backend".to_string()];
+    let mut args = vec!["-m".to_string(), "aestiv".to_string()];
     
     // 开发模式添加 --standalone 参数
     if config.dev_mode {
@@ -348,7 +348,7 @@ fn spawn_python_backend(app_handle: tauri::AppHandle) -> Result<(), String> {
         .args(&args);
     
     let (mut rx, child) = command.spawn().map_err(|e| {
-        let error_msg = format!("Failed to spawn Python backend: {}. Make sure Python is installed and aestival-backend package is available.", e);
+        let error_msg = format!("Failed to spawn Python backend: {}. Make sure Python is installed and aestiv package is available.", e);
         let _ = app_handle.emit("python-error", error_msg.clone());
         error_msg
     })?;

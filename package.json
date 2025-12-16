@@ -1,5 +1,5 @@
 {
-  "name": "aestival",
+  "name": "aestivus",
   "version": "3.1.0",
   "description": "Python工具链可视化编排与执行平台 - Tauri 版本",
   "type": "module",
@@ -10,7 +10,7 @@
     "uvi": "concurrently \"cd src-python && uvicorn main:app --host 127.0.0.1 --port 8009 --reload\" \"vite dev --port 5173\"",
     "dev:standalone": "concurrently \"cd src-python && uvicorn main:app --host 127.0.0.1 --port 8009 --reload\" \"vite dev --port 5173\"",
     "dev:api": "cd src-python && uvicorn main:app --host 127.0.0.1 --port 8009 --reload",
-    "dev:python": "cd src-python && python -m aestival_backend --standalone",
+    "dev:python": "cd src-python && python -m aestiv --standalone",
     "web:dev": "vite dev --port 5173 --host 0.0.0.0",
     "build": "vite build",
     "tauri": "tauri",

@@ -1,4 +1,4 @@
-# AestivalFlow - Tauri + SvelteKit + Python
+# Aestivus - Tauri + SvelteKit + Python
 
 Python工具链可视化编排与执行平台，基于 Tauri (Rust) + SvelteKit (TypeScript) + Python FastAPI 构建。
 
@@ -18,9 +18,9 @@ Python工具链可视化编排与执行平台，基于 Tauri (Rust) + SvelteKit 
 │   SvelteKit     │◄──►│      Tauri       │◄──►│  Python Package │
 │   Frontend      │    │   (Rust Core)    │    │  (系统安装)      │
 │                 │    │                  │    │                 │
-│ • TypeScript    │    │ • Window Mgmt    │    │ • aestival-     │
-│ • Tailwind CSS  │    │ • Shell Plugin   │    │   backend       │
-│ • Component UI  │    │ • Process Mgmt   │    │ • FastAPI       │
+│ • TypeScript    │    │ • Window Mgmt    │    │ • aestiv        │
+│ • Tailwind CSS  │    │ • Shell Plugin   │    │ • FastAPI       │
+│ • Component UI  │    │ • Process Mgmt   │    │                 │
 └─────────────────┘    └──────────────────┘    └─────────────────┘
 ```
 
@@ -50,7 +50,7 @@ yarn install-reqs
 
 ```bash
 # 完整安装（包含所有工具包）
-pip install aestival-backend[tools]
+pip install aestiv[tools]
 
 # 或单独安装需要的工具
 pip install repacku trename rawfilter crashu
@@ -79,12 +79,12 @@ yarn tauri:build
 ## 📁 项目结构
 
 ```
-AestivalFlow/
+Aestivus/
 ├── src/                    # SvelteKit 前端
 │   ├── lib/               # 组件和工具
 │   └── routes/            # 页面路由
 ├── src-python/            # Python 后端
-│   ├── aestival_backend/  # 包入口点
+│   ├── aestiv/            # 包入口点
 │   ├── adapters/          # 工具适配器
 │   ├── api/               # API 端点
 │   └── pyproject.toml     # Python 包配置

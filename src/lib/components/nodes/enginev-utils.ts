@@ -25,6 +25,18 @@ export interface WallpaperItem {
   size: number;
 }
 
+/**
+ * 获取壁纸预览图的 URL
+ * 通过 Python 后端 API 提供文件访问
+ */
+export function getPreviewUrl(wallpaper: WallpaperItem, apiBase: string): string | null {
+  if (!wallpaper.preview || !wallpaper.path) return null;
+  // 拼接完整路径
+  const fullPath = `${wallpaper.path}/${wallpaper.preview}`.replace(/\\/g, '/');
+  // 通过后端 API 访问文件
+  return `${apiBase}/file?path=${encodeURIComponent(fullPath)}`;
+}
+
 /** 过滤条件 */
 export interface FilterOptions {
   title: string;

@@ -8,7 +8,7 @@
   import { Button } from '$lib/components/ui/button';
   import { Checkbox } from '$lib/components/ui/checkbox';
   import { Input } from '$lib/components/ui/input';
-  import * as Select from '$lib/components/ui/select';
+
   import { DashboardGrid, DashboardItem } from '$lib/components/ui/dashboard-grid';
   import type { GridItem } from '$lib/components/ui/dashboard-grid';
   import { BlockCard } from '$lib/components/blocks';
@@ -18,16 +18,16 @@
   import { getDefaultPreset } from '$lib/stores/layoutPresets';
   import NodeWrapper from './NodeWrapper.svelte';
   import { 
-    LoaderCircle, FolderOpen, Clipboard, Search, Play, Download,
+    LoaderCircle, FolderOpen, Clipboard, Play, Download,
     Filter, BarChart3, Pencil, Grid3X3, List, Copy, Check,
-    Video, Globe, Layers, Image, RefreshCw, Trash2
+    Image, RefreshCw, Trash2
   } from '@lucide/svelte';
   import {
     type WallpaperItem, type FilterOptions, type EngineVStats, type RenameConfig, type Phase, type EngineVState,
-    getPhaseBorderClass, getRatingInfo, getTypeInfo, formatSize, formatDate,
-    generateNewName, calculateStats, filterWallpapers, getAllTags,
-    DEFAULT_STATS, DEFAULT_FILTERS, DEFAULT_RENAME_CONFIG, DEFAULT_GRID_LAYOUT
+    getPhaseBorderClass, getRatingInfo, formatSize, calculateStats, filterWallpapers, getPreviewUrl,
+    DEFAULT_STATS, DEFAULT_FILTERS, DEFAULT_RENAME_CONFIG
   } from './enginev-utils';
+  import { getApiV1Url } from '$lib/stores/backend';
   
   export let id: string;
   export let data: { config?: { path?: string }; logs?: string[] } = {};
@@ -53,7 +53,9 @@
   let renameConfig: RenameConfig = savedState?.renameConfig ?? { ...DEFAULT_RENAME_CONFIG };
   let selectedIds: Set<string> = new Set(savedState?.selectedIds ?? []);
   let viewMode: 'grid' | 'list' = savedState?.viewMode ?? 'grid';
-  let allTags: string[] = [];
+  
+  // API 基础 URL（用于图片预览）
+  const apiBase = getApiV1Url();
   
   // GridStack 布局
   function getInitialLayout(): GridItem[] {
@@ -107,7 +109,6 @@
         wallpapers = r.data.wallpapers || [];
         filteredWallpapers = [...wallpapers];
         stats = calculateStats(wallpapers, filteredWallpapers);
-        allTags = getAllTags(wallpapers);
         phase = 'ready';
         log(`✅ 扫描完成: ${wallpapers.length} 个壁纸`);
       } else { phase = 'error'; log(`❌ ${r.message}`); }
@@ -199,16 +200,6 @@
   
   async function copyLogs() { 
     try { await navigator.clipboard.writeText(logs.join('\n')); copied = true; setTimeout(() => copied = false, 2000); } catch {} 
-  }
-
-  // 获取类型图标组件
-  function getTypeIcon(type: string) {
-    switch (type) {
-      case 'Video': return Video;
-      case 'Web': return Globe;
-      case 'Scene': return Layers;
-      default: return Image;
-    }
   }
 </script>
 
@@ -363,20 +354,49 @@
       <div class="flex-1 overflow-y-auto p-2">
         {#if filteredWallpapers.length > 0}
           {#if viewMode === 'grid'}
-            <div class="grid grid-cols-3 gap-2">
+            <div class="grid grid-cols-3 gap-3">
               {#each filteredWallpapers.slice(0, 50) as wallpaper}
                 {@const isSelected = selectedIds.has(wallpaper.workshop_id)}
                 {@const ratingInfo = getRatingInfo(wallpaper.content_rating)}
+                {@const previewUrl = getPreviewUrl(wallpaper, apiBase)}
                 <button 
-                  class="p-2 rounded-lg border text-left transition-all hover:bg-muted/50 {isSelected ? 'border-primary bg-primary/10' : 'border-border'}"
+                  class="rounded-lg border text-left transition-all hover:bg-muted/50 overflow-hidden {isSelected ? 'border-primary bg-primary/10 ring-2 ring-primary/30' : 'border-border'}"
                   onclick={() => toggleSelect(wallpaper.workshop_id)}
                 >
-                  <div class="text-sm font-medium truncate" title={wallpaper.title}>{wallpaper.title || wallpaper.folder_name}</div>
-                  <div class="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
-                    <span class={ratingInfo.color}>{ratingInfo.name}</span>
-                    <span>{wallpaper.wallpaper_type}</span>
+                  <!-- 预览图 -->
+                  <div class="aspect-video bg-muted/50 relative overflow-hidden">
+                    {#if previewUrl}
+                      <img 
+                        src={previewUrl} 
+                        alt={wallpaper.title || wallpaper.folder_name}
+                        class="w-full h-full object-cover"
+                        loading="lazy"
+                        onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    {:else}
+                      <div class="w-full h-full flex items-center justify-center">
+                        <Image class="w-8 h-8 text-muted-foreground/30" />
+                      </div>
+                    {/if}
+                    <!-- 类型标签 -->
+                    <div class="absolute top-1 right-1 px-1.5 py-0.5 rounded text-[10px] bg-black/60 text-white">
+                      {wallpaper.wallpaper_type}
+                    </div>
+                    <!-- 选中标记 -->
+                    {#if isSelected}
+                      <div class="absolute top-1 left-1 w-5 h-5 rounded-full bg-primary flex items-center justify-center">
+                        <Check class="w-3 h-3 text-primary-foreground" />
+                      </div>
+                    {/if}
                   </div>
-                  <div class="text-xs text-muted-foreground mt-1 truncate">{wallpaper.workshop_id}</div>
+                  <!-- 信息 -->
+                  <div class="p-2">
+                    <div class="text-sm font-medium truncate" title={wallpaper.title}>{wallpaper.title || wallpaper.folder_name}</div>
+                    <div class="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                      <span class={ratingInfo.color}>{ratingInfo.name}</span>
+                      <span class="truncate">{wallpaper.workshop_id}</span>
+                    </div>
+                  </div>
                 </button>
               {/each}
             </div>
@@ -385,11 +405,28 @@
               {#each filteredWallpapers.slice(0, 100) as wallpaper}
                 {@const isSelected = selectedIds.has(wallpaper.workshop_id)}
                 {@const ratingInfo = getRatingInfo(wallpaper.content_rating)}
+                {@const previewUrl = getPreviewUrl(wallpaper, apiBase)}
                 <button 
                   class="w-full p-2 rounded-lg border text-left flex items-center gap-3 transition-all hover:bg-muted/50 {isSelected ? 'border-primary bg-primary/10' : 'border-border'}"
                   onclick={() => toggleSelect(wallpaper.workshop_id)}
                 >
                   <Checkbox checked={isSelected} class="shrink-0" />
+                  <!-- 缩略图 -->
+                  <div class="w-16 h-10 rounded bg-muted/50 overflow-hidden shrink-0">
+                    {#if previewUrl}
+                      <img 
+                        src={previewUrl} 
+                        alt={wallpaper.title || wallpaper.folder_name}
+                        class="w-full h-full object-cover"
+                        loading="lazy"
+                        onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    {:else}
+                      <div class="w-full h-full flex items-center justify-center">
+                        <Image class="w-4 h-4 text-muted-foreground/30" />
+                      </div>
+                    {/if}
+                  </div>
                   <div class="flex-1 min-w-0">
                     <div class="text-sm font-medium truncate">{wallpaper.title || wallpaper.folder_name}</div>
                     <div class="text-xs text-muted-foreground truncate">{wallpaper.path}</div>
@@ -421,16 +458,31 @@
         <Button variant="ghost" size="sm" class="h-5 px-1 text-[10px]" onclick={clearSelection}>清除</Button>
       </div>
     </div>
-    <div class="max-h-32 overflow-y-auto space-y-1">
+    <div class="max-h-40 overflow-y-auto space-y-1">
       {#if filteredWallpapers.length > 0}
         {#each filteredWallpapers.slice(0, 10) as wallpaper}
           {@const isSelected = selectedIds.has(wallpaper.workshop_id)}
+          {@const previewUrl = getPreviewUrl(wallpaper, apiBase)}
           <button 
-            class="w-full p-1.5 rounded border text-left text-xs transition-all hover:bg-muted/50 {isSelected ? 'border-primary bg-primary/10' : 'border-border'}"
+            class="w-full p-1 rounded border text-left text-xs transition-all hover:bg-muted/50 flex items-center gap-2 {isSelected ? 'border-primary bg-primary/10' : 'border-border'}"
             onclick={() => toggleSelect(wallpaper.workshop_id)}
           >
-            <div class="truncate font-medium">{wallpaper.title || wallpaper.folder_name}</div>
-            <div class="text-muted-foreground text-[10px]">{wallpaper.wallpaper_type} · {wallpaper.workshop_id}</div>
+            <!-- 小缩略图 -->
+            <div class="w-10 h-7 rounded bg-muted/50 overflow-hidden shrink-0">
+              {#if previewUrl}
+                <img 
+                  src={previewUrl} 
+                  alt=""
+                  class="w-full h-full object-cover"
+                  loading="lazy"
+                  onerror={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                />
+              {/if}
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="truncate font-medium">{wallpaper.title || wallpaper.folder_name}</div>
+              <div class="text-muted-foreground text-[10px]">{wallpaper.wallpaper_type} · {wallpaper.workshop_id}</div>
+            </div>
           </button>
         {/each}
         {#if filteredWallpapers.length > 10}

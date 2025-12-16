@@ -76,6 +76,16 @@
     }
   }
 
+  /** 更新单个 item 的布局 */
+  export function updateItem(id: string, x: number, y: number, w: number, h: number) {
+    if (!grid) return;
+    const el = gridElement?.querySelector(`[gs-id="${id}"]`) as HTMLElement;
+    if (el) {
+      grid.update(el, { x, y, w, h });
+      handleLayoutChange();
+    }
+  }
+
   // 从 DOM 元素获取当前布局（优先从 DOM 属性读取，确保 resize 后数据正确）
   function getCurrentLayout(): GridItem[] {
     if (!grid) return [];
@@ -131,6 +141,19 @@
     grid.on('change', handleLayoutChange);
     grid.on('resizestop', handleLayoutChange);
     grid.on('dragstop', handleLayoutChange);
+  });
+
+  // 提供 context 给子组件
+  import { setContext } from 'svelte';
+  setContext('dashboard-grid', {
+    updateItem: (id: string, x: number, y: number, w: number, h: number) => {
+      if (!grid) return;
+      const el = gridElement?.querySelector(`[gs-id="${id}"]`) as HTMLElement;
+      if (el) {
+        grid.update(el, { x, y, w, h });
+        handleLayoutChange();
+      }
+    }
   });
 
   onDestroy(() => {

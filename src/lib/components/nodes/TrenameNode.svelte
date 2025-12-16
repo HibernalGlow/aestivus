@@ -9,7 +9,7 @@
   import { Checkbox } from '$lib/components/ui/checkbox';
   import { Input } from '$lib/components/ui/input';
   import * as TreeView from '$lib/components/ui/tree-view';
-  import { DashboardGrid, DashboardItem } from '$lib/components/ui/dashboard-grid';
+  import { DashboardGrid, DashboardItem, GridItemSettings } from '$lib/components/ui/dashboard-grid';
   import type { GridItem } from '$lib/components/ui/dashboard-grid';
   import { api } from '$lib/services/api';
   import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
@@ -345,6 +345,7 @@
                 <div class="flex items-center gap-2 mb-3">
                   <FolderOpen class="w-5 h-5 text-primary" />
                   <span class="font-semibold">扫描路径</span>
+                  <GridItemSettings id="path" x={pathItem.x} y={pathItem.y} w={pathItem.w} h={pathItem.h} minW={2} minH={2} />
                 </div>
                 <div class="flex gap-2 mb-4">
                   <Input bind:value={scanPath} placeholder="输入目录路径..." disabled={isRunning} class="flex-1 h-10" />
@@ -374,6 +375,7 @@
                 <div class="flex items-center gap-2 mb-3">
                   <Play class="w-5 h-5 text-green-500" />
                   <span class="font-semibold">操作</span>
+                  <GridItemSettings id="operation" x={opItem.x} y={opItem.y} w={opItem.w} h={opItem.h} minW={1} minH={2} />
                 </div>
                 <div class="flex flex-col gap-2 flex-1 justify-center">
                   <Button variant="outline" class="h-12" onclick={validate} disabled={isRunning || !segments.length}>
@@ -396,6 +398,7 @@
                 <div class="flex items-center gap-2 mb-3">
                   <FilePenLine class="w-5 h-5 text-blue-500" />
                   <span class="font-semibold">统计</span>
+                  <GridItemSettings id="stats" x={statsItem.x} y={statsItem.y} w={statsItem.w} h={statsItem.h} minW={1} minH={2} />
                 </div>
                 <div class="space-y-2 flex-1">
                   <div class="flex items-center justify-between p-2 bg-muted/50 rounded-lg">

@@ -55,7 +55,7 @@
     'gs-no-move': noMove || undefined
   }}
 >
-  <div class="grid-stack-item-content p-4">
+  <div class="grid-stack-item-content p-4 bg-card border border-primary/30 rounded-2xl">
     {#if children}
       {@render children()}
     {/if}

@@ -103,9 +103,19 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div 
-    class="fixed inset-0 z-[100] bg-background/80 backdrop-blur-sm"
+    class="fixed inset-0 z-[100]"
     onclick={() => fullscreenNodeStore.close()}
-  ></div>
+  >
+    <!-- 全屏背景图 -->
+    {#if $themeStore.backgroundImage}
+      <div 
+        class="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style="background-image: url({$themeStore.backgroundImage}); opacity: {$themeStore.backgroundOpacity / 100};"
+      ></div>
+    {/if}
+    <!-- 半透明遮罩 -->
+    <div class="absolute inset-0 bg-background/40 backdrop-blur-sm"></div>
+  </div>
   <div class="fixed inset-4 z-[101] flex flex-col">
     <FullscreenComponent 
       id={fullscreenNode.id} 

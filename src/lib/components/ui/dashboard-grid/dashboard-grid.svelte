@@ -246,12 +246,89 @@
     opacity: 0.6;
   }
 
+  /* 四角 resize 手柄 - 小圆点 */
   :global(.ui-resizable-se) {
-    width: 16px;
-    height: 16px;
+    width: 10px;
+    height: 10px;
     right: 8px;
     bottom: 8px;
-    background: hsl(var(--muted-foreground) / 0.4);
-    border-radius: 4px;
+    background: hsl(var(--muted-foreground) / 0.5) !important;
+    border-radius: 50%;
+    cursor: se-resize !important;
+  }
+
+  :global(.ui-resizable-sw) {
+    width: 10px;
+    height: 10px;
+    left: 8px;
+    bottom: 8px;
+    background: hsl(var(--muted-foreground) / 0.5) !important;
+    border-radius: 50%;
+    cursor: sw-resize !important;
+  }
+
+  :global(.ui-resizable-ne) {
+    width: 10px;
+    height: 10px;
+    right: 8px;
+    top: 8px;
+    background: hsl(var(--muted-foreground) / 0.5) !important;
+    border-radius: 50%;
+    cursor: ne-resize !important;
+  }
+
+  :global(.ui-resizable-nw) {
+    width: 10px;
+    height: 10px;
+    left: 8px;
+    top: 8px;
+    background: hsl(var(--muted-foreground) / 0.5) !important;
+    border-radius: 50%;
+    cursor: nw-resize !important;
+  }
+
+  /* 边缘 resize 手柄 - 小横条/竖条 */
+  :global(.ui-resizable-n) {
+    height: 6px;
+    width: 30px;
+    top: 6px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: hsl(var(--muted-foreground) / 0.4) !important;
+    border-radius: 3px;
+    cursor: n-resize !important;
+  }
+
+  :global(.ui-resizable-s) {
+    height: 6px;
+    width: 30px;
+    bottom: 6px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: hsl(var(--muted-foreground) / 0.4) !important;
+    border-radius: 3px;
+    cursor: s-resize !important;
+  }
+
+  :global(.ui-resizable-e) {
+    width: 6px;
+    height: 30px;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: hsl(var(--muted-foreground) / 0.4) !important;
+    border-radius: 3px;
+    cursor: e-resize !important;
+  }
+
+  :global(.ui-resizable-w) {
+    width: 6px;
+    height: 30px;
+    left: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: hsl(var(--muted-foreground) / 0.4) !important;
+    border-radius: 3px;
+    cursor: w-resize !important;
   }
 </style>

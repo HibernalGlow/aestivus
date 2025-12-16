@@ -1350,6 +1350,11 @@ svelte-check@^4.0.0:
     picocolors "^1.0.0"
     sade "^1.7.4"
 
+svelte-dnd-action@^0.9.68:
+  version "0.9.68"
+  resolved "https://registry.npmmirror.com/svelte-dnd-action/-/svelte-dnd-action-0.9.68.tgz#ac5a3182ac52df973586b0ebe78ea8faa75e3d95"
+  integrity sha512-maFNIHwimGYbvIG8uOHsU9T/4+VKBIaAaFEGWYFIyo4f8qwUs0BIqwvBfHkaN+MXt8MBB9rByPTvF7fRx0eIjw==
+
 svelte-toolbelt@^0.10.6:
   version "0.10.6"
   resolved "https://registry.npmmirror.com/svelte-toolbelt/-/svelte-toolbelt-0.10.6.tgz#573e25a69cdef3c3eb2bb6762e6c63b4db2d3355"

@@ -534,6 +534,18 @@
   {/if}
 {/snippet}
 
+<!-- 通用区块渲染器（用于 Tab 区块） -->
+{#snippet renderBlockById(blockId: string)}
+  {#if blockId === 'path'}{@render pathBlockContent()}
+  {:else if blockId === 'filter'}{@render filterBlockContent()}
+  {:else if blockId === 'stats'}{@render statsBlockContent()}
+  {:else if blockId === 'operation'}{@render operationBlockContent()}
+  {:else if blockId === 'rename'}{@render renameBlockContent()}
+  {:else if blockId === 'gallery'}{@render galleryBlockContent()}
+  {:else if blockId === 'log'}{@render logBlockContent()}
+  {/if}
+{/snippet}
+
 
 <!-- ========== 主渲染 ========== -->
 <div class="h-full w-full flex flex-col overflow-hidden">
@@ -603,25 +615,18 @@
               </BlockCard>
             </DashboardItem>
             
-            <!-- Tab 区块示例：统计/操作合并 -->
+            <!-- Tab 区块：动态添加子区块 -->
             {@const tabItem = getLayoutItem('tab-stats-op')}
             <DashboardItem id="tab-stats-op" x={tabItem.x} y={tabItem.y} w={tabItem.w} h={tabItem.h} minW={1} minH={2}>
               <TabBlockCard 
                 id="tab-stats-op" 
-                children={['stats', 'operation']} 
+                children={[]} 
                 nodeType="enginev"
                 isFullscreen={true}
                 initialState={tabStates['tab-stats-op']}
                 onStateChange={(state) => handleTabStateChange('tab-stats-op', state)}
-              >
-                {#snippet renderContent(blockId)}
-                  {#if blockId === 'stats'}
-                    {@render statsBlockContent()}
-                  {:else if blockId === 'operation'}
-                    {@render operationBlockContent()}
-                  {/if}
-                {/snippet}
-              </TabBlockCard>
+                renderContent={renderBlockById}
+              />
             </DashboardItem>
           </DashboardGrid>
         </div>

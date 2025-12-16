@@ -72,9 +72,9 @@ Thumbs.db
 app.config.json
 
 # Hidden files and directories (but keep important ones)
-.*
 !.gitignore
 !.gitkeep
 !.env.example
 src-python/config/flows/*.json
 ref/*
+src-python/.hypothesis/*

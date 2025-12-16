@@ -41,8 +41,9 @@
   let logs: string[] = savedState?.logs ?? (data?.logs ? [...data.logs] : []);
   let copied = false;
 
-  // 配置
-  let workshopPath = savedState?.workshopPath ?? data?.config?.path ?? '';
+  // 配置 - 默认 Wallpaper Engine 工坊目录
+  const DEFAULT_WORKSHOP_PATH = 'E:\\SteamLibrary\\steamapps\\workshop\\content\\431960';
+  let workshopPath = savedState?.workshopPath ?? data?.config?.path ?? DEFAULT_WORKSHOP_PATH;
   
   // 数据
   let wallpapers: WallpaperItem[] = savedState?.wallpapers ?? [];

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import '../app.css';
 	import ThemeImportDialog from '$lib/components/layout/ThemeImportDialog.svelte';
+	import SettingsOverlay from '$lib/components/settings/SettingsOverlay.svelte';
 	
 	let { children } = $props();
 </script>
@@ -12,3 +13,4 @@
 </div>
 
 <ThemeImportDialog />
+<SettingsOverlay />

@@ -2,13 +2,13 @@
   /**
    * 自定义标题栏 - 集成窗口控制和工具栏功能
    */
-  import { flowStore, taskStore, isRunning } from '$lib/stores';
+  import { flowStore, taskStore, isRunning, openSettingsOverlay } from '$lib/stores';
   import { api } from '$lib/services/api';
   import { 
     Save, Play, Square, RotateCcw, FileDown, FileUp, 
     Sun, Moon, Monitor, Palette, Image, X,
     Minus, Square as MaxIcon, X as CloseIcon,
-    FolderOpen
+    FolderOpen, Settings
   } from '@lucide/svelte';
   import { Button } from '$lib/components/ui/button';
   import { themeStore, toggleThemeMode, openThemeImport } from '$lib/stores/theme.svelte';
@@ -220,6 +220,9 @@
         <X class="w-3.5 h-3.5" />
       </Button>
     {/if}
+    <Button variant="ghost" size="icon" class="h-7 w-7" onclick={openSettingsOverlay} title="设置">
+      <Settings class="w-3.5 h-3.5" />
+    </Button>
     
     <div class="w-px h-5 bg-border mx-1"></div>
     

@@ -2,18 +2,28 @@
   /**
    * 通用节点包装器
    * 提供：关闭、折叠/展开、固定、状态显示、全屏 功能
-   * 
+   *
    * 全屏模式：自动检测并应用全屏样式，节点组件无需任何修改
    */
-  import { X, ChevronDown, ChevronRight, Pin, PinOff, Maximize2, Minimize2, LayoutGrid, RotateCcw } from '@lucide/svelte';
-  import { Badge } from '$lib/components/ui/badge';
-  import { flowStore } from '$lib/stores';
-  import { fullscreenNodeStore } from '$lib/stores/fullscreenNode.svelte';
-  import type { Snippet } from 'svelte';
+  import {
+    X,
+    ChevronDown,
+    ChevronRight,
+    Pin,
+    PinOff,
+    Maximize2,
+    Minimize2,
+    LayoutGrid,
+    RotateCcw,
+  } from "@lucide/svelte";
+  import { Badge } from "$lib/components/ui/badge";
+  import { flowStore } from "$lib/stores";
+  import { fullscreenNodeStore } from "$lib/stores/fullscreenNode.svelte";
+  import type { Snippet } from "svelte";
 
   // 状态类型
-  type NodeStatus = 'idle' | 'running' | 'completed' | 'error' | string;
-  type BadgeVariant = 'default' | 'secondary' | 'destructive' | 'outline';
+  type NodeStatus = "idle" | "running" | "completed" | "error" | string;
+  type BadgeVariant = "default" | "secondary" | "destructive" | "outline";
 
   interface Props {
     /** 节点 ID */
@@ -60,30 +70,30 @@
 
   // 默认状态标签映射
   const defaultStatusLabels: Record<string, string> = {
-    idle: '就绪',
-    running: '运行中',
-    completed: '完成',
-    error: '错误',
-    scanning: '扫描中',
-    analyzing: '分析中',
-    analyzed: '待压缩',
-    compressing: '压缩中',
-    ready: '待操作',
-    renaming: '执行中'
+    idle: "就绪",
+    running: "运行中",
+    completed: "完成",
+    error: "错误",
+    scanning: "扫描中",
+    analyzing: "分析中",
+    analyzed: "待压缩",
+    compressing: "压缩中",
+    ready: "待操作",
+    renaming: "执行中",
   };
 
   // 默认状态样式映射
   const defaultStatusVariants: Record<string, BadgeVariant> = {
-    idle: 'secondary',
-    running: 'default',
-    completed: 'default',
-    error: 'destructive',
-    scanning: 'default',
-    analyzing: 'default',
-    analyzed: 'secondary',
-    compressing: 'default',
-    ready: 'secondary',
-    renaming: 'default'
+    idle: "secondary",
+    running: "default",
+    completed: "default",
+    error: "destructive",
+    scanning: "default",
+    analyzing: "default",
+    analyzed: "secondary",
+    compressing: "default",
+    ready: "secondary",
+    renaming: "default",
   };
 
   let {
@@ -100,32 +110,39 @@
     hasFullscreen = true,
     isFullscreenRender = false,
     defaultCollapsed = false,
-    borderClass = 'border-border',
+    borderClass = "border-border",
     children,
     headerExtra,
     onCollapse,
     onPin,
     onCompact,
-    onResetLayout
+    onResetLayout,
   }: Props = $props();
 
   // 状态
   let collapsed = $state.raw(false);
   let pinned = $state(false);
-  
+
   // 检测是否在全屏模式（原节点需要变淡）
-  let isNodeInFullscreen = $derived($fullscreenNodeStore.isOpen && $fullscreenNodeStore.nodeId === nodeId);
+  let isNodeInFullscreen = $derived(
+    $fullscreenNodeStore.isOpen && $fullscreenNodeStore.nodeId === nodeId
+  );
   // 原节点变淡：当节点在全屏模式但不是全屏渲染版本时
   let shouldFade = $derived(isNodeInFullscreen && !isFullscreenRender);
-  
+
   // 初始化折叠状态
   $effect(() => {
     if (defaultCollapsed) collapsed = true;
   });
 
   // 计算状态显示
-  let displayLabel = $derived(statusLabel ?? (status ? defaultStatusLabels[status] ?? status : ''));
-  let displayVariant = $derived(statusVariant ?? (status ? defaultStatusVariants[status] ?? 'secondary' : 'secondary'));
+  let displayLabel = $derived(
+    statusLabel ?? (status ? (defaultStatusLabels[status] ?? status) : "")
+  );
+  let displayVariant = $derived(
+    statusVariant ??
+      (status ? (defaultStatusVariants[status] ?? "secondary") : "secondary")
+  );
 
   // 关闭节点
   function handleClose() {
@@ -160,16 +177,26 @@
 </script>
 
 <!-- 全屏时原节点变淡，页面级别会渲染全屏版本 -->
-<div class="{shouldFade ? 'opacity-30 pointer-events-none' : ''} {isFullscreenRender ? 'h-full flex flex-col' : 'min-w-[160px]'} bg-card/95 backdrop-blur border rounded-lg shadow-lg overflow-hidden {borderClass}">
+<div
+  class="{shouldFade
+    ? 'opacity-30 pointer-events-none'
+    : ''} {isFullscreenRender
+    ? 'h-full flex flex-col'
+    : 'min-w-[160px]'} bg-card/95 backdrop-blur border rounded-lg shadow-lg overflow-hidden {borderClass}"
+>
   <!-- 标题栏 -->
-  <div class="flex items-center justify-between px-3 py-2 bg-muted/30 border-b select-none {pinned ? 'cursor-not-allowed' : 'cursor-move'} shrink-0">
+  <div
+    class="flex items-center justify-between px-3 py-2 bg-muted/30 border-b select-none {pinned
+      ? 'cursor-not-allowed'
+      : 'cursor-move'} shrink-0"
+  >
     <!-- 左侧：折叠按钮 + 图标 + 标题 + 状态 -->
     <div class="flex items-center gap-2 flex-1 min-w-0">
       {#if collapsible}
         <button
           class="p-0.5 rounded hover:bg-muted transition-colors"
           onclick={toggleCollapse}
-          title={collapsed ? '展开' : '折叠'}
+          title={collapsed ? "展开" : "折叠"}
         >
           {#if collapsed}
             <ChevronRight class="w-4 h-4" />
@@ -178,15 +205,15 @@
           {/if}
         </button>
       {/if}
-      
+
       {#if emoji}
         <span class="text-lg shrink-0">{emoji}</span>
       {:else if Icon}
         <Icon class="w-4 h-4 text-muted-foreground shrink-0" />
       {/if}
-      
+
       <span class="text-sm font-semibold truncate">{title}</span>
-      
+
       {#if status && displayLabel}
         <Badge variant={displayVariant} class="text-xs ml-1">
           {displayLabel}
@@ -199,7 +226,7 @@
       {#if headerExtra}
         {@render headerExtra()}
       {/if}
-      
+
       <!-- 全屏模式下的布局工具 -->
       {#if isFullscreenRender && onCompact}
         <button
@@ -210,7 +237,7 @@
           <LayoutGrid class="w-3.5 h-3.5" />
         </button>
       {/if}
-      
+
       {#if isFullscreenRender && onResetLayout}
         <button
           class="p-1 rounded hover:bg-muted transition-colors text-muted-foreground"
@@ -220,12 +247,12 @@
           <RotateCcw class="w-3.5 h-3.5" />
         </button>
       {/if}
-      
+
       {#if hasFullscreen}
         <button
           class="p-1 rounded hover:bg-muted transition-colors text-muted-foreground"
           onclick={toggleFullscreen}
-          title={isNodeInFullscreen ? '退出全屏' : '全屏'}
+          title={isNodeInFullscreen ? "退出全屏" : "全屏"}
         >
           {#if isNodeInFullscreen}
             <Minimize2 class="w-3.5 h-3.5" />
@@ -234,12 +261,14 @@
           {/if}
         </button>
       {/if}
-      
+
       {#if pinnable}
         <button
-          class="p-1 rounded hover:bg-muted transition-colors {pinned ? 'text-primary' : 'text-muted-foreground'}"
+          class="p-1 rounded hover:bg-muted transition-colors {pinned
+            ? 'text-primary'
+            : 'text-muted-foreground'}"
           onclick={togglePin}
-          title={pinned ? '取消固定' : '固定'}
+          title={pinned ? "取消固定" : "固定"}
         >
           {#if pinned}
             <Pin class="w-3.5 h-3.5" />
@@ -248,7 +277,7 @@
           {/if}
         </button>
       {/if}
-      
+
       {#if closable}
         <button
           class="p-1 rounded hover:bg-destructive hover:text-destructive-foreground transition-colors text-muted-foreground"

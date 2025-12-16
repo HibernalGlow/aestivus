@@ -444,26 +444,16 @@ fn spawn_python_backend(app_handle: tauri::AppHandle, is_primary: bool) -> Resul
     // 使用 Windows Terminal + PowerShell 启动 Python（方便查看日志）
     #[cfg(target_os = "windows")]
     let child = {
-        // 构建 PowerShell 命令（使用 & 调用带空格路径的程序）
-        let python_cmd = format!("& '{}' {}", config.python_path, args.join(" "));
         // cmd 版本的命令
         let cmd_python = format!("\"{}\" {}", config.python_path, args.join(" "));
         
-        // 尝试使用 Windows Terminal (wt.exe) + pwsh
+        // 先尝试 Windows Terminal + cmd，不行再用 cmd.exe
         Command::new("wt.exe")
-            .args(["--title", "Aestivus Python Backend", "pwsh", "-NoExit", "-Command", &python_cmd])
+            .args(["--title", "Aestivus Python Backend", "cmd", "/K", &cmd_python])
             .spawn()
             .or_else(|e| {
-                // 回退：直接用 pwsh 打开新窗口
-                println!("[tauri] Windows Terminal not found ({}), trying pwsh...", e);
-                Command::new("pwsh")
-                    .args(["-NoExit", "-Command", &python_cmd])
-                    .creation_flags(CREATE_NEW_CONSOLE)
-                    .spawn()
-            })
-            .or_else(|e| {
-                // 再回退：用 cmd.exe
-                println!("[tauri] pwsh not found ({}), trying cmd...", e);
+                // 回退：直接用 cmd.exe
+                println!("[tauri] Windows Terminal not found ({}), using cmd...", e);
                 Command::new("cmd")
                     .args(["/K", &cmd_python])
                     .creation_flags(CREATE_NEW_CONSOLE)

@@ -216,16 +216,11 @@
   }
 
   :global(.grid-stack > .grid-stack-item > .grid-stack-item-content) {
-    background: hsl(var(--card)) !important;
-    border: 1.5px solid hsl(var(--primary) / 0.3) !important;
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--border));
     border-radius: 1.5rem;
     overflow: auto;
     inset: 6px;
-    transition: border-color 0.2s;
-  }
-  
-  :global(.grid-stack > .grid-stack-item:hover > .grid-stack-item-content) {
-    border-color: hsl(var(--primary) / 0.6);
   }
 
   :global(.grid-stack-item) {
@@ -242,8 +237,21 @@
     border-radius: 1.5rem;
   }
 
-  /* 隐藏所有 resize 把手 */
   :global(.ui-resizable-handle) {
-    display: none !important;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  :global(.grid-stack-item:hover .ui-resizable-handle) {
+    opacity: 0.6;
+  }
+
+  :global(.ui-resizable-se) {
+    width: 16px;
+    height: 16px;
+    right: 8px;
+    bottom: 8px;
+    background: hsl(var(--muted-foreground) / 0.4);
+    border-radius: 4px;
   }
 </style>

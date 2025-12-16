@@ -17,9 +17,9 @@
   // 获取面板设置
   let panelSettings = $state(settingsManager.getSettings().panels);
   
-  // 计算标题栏样式
+  // 计算标题栏样式 - 使用 color-mix 实现带颜色的透明效果
   let toolbarStyle = $derived(
-    `background-color: hsl(var(--card) / ${panelSettings.topToolbarOpacity / 100}); backdrop-filter: blur(${panelSettings.topToolbarBlur}px);`
+    `background: color-mix(in srgb, var(--card) ${panelSettings.topToolbarOpacity}%, transparent); backdrop-filter: blur(${panelSettings.topToolbarBlur}px);`
   );
 
   // Tauri 窗口 API

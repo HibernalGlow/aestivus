@@ -155,7 +155,7 @@
   }
   /* Controls 工具栏样式 */
   :global(.svelte-flow__controls) {
-    background: hsl(var(--card) / 0.85) !important;
+    background: color-mix(in srgb, var(--card) 85%, transparent) !important;
     backdrop-filter: blur(12px);
     border: none !important;
     border-radius: 0.5rem;
@@ -164,24 +164,24 @@
   :global(.svelte-flow__controls-button) {
     background: transparent !important;
     border: none !important;
-    color: hsl(var(--foreground)) !important;
-    fill: hsl(var(--foreground)) !important;
+    color: var(--foreground) !important;
+    fill: var(--foreground) !important;
   }
   :global(.svelte-flow__controls-button:hover) {
-    background: hsl(var(--muted)) !important;
+    background: color-mix(in srgb, var(--muted) 80%, transparent) !important;
   }
   :global(.svelte-flow__controls-button svg) {
     fill: currentColor !important;
   }
   /* MiniMap 样式 */
   :global(.svelte-flow__minimap) {
-    background: hsl(var(--card) / 0.85) !important;
+    background: color-mix(in srgb, var(--card) 85%, transparent) !important;
     backdrop-filter: blur(12px);
     border: none !important;
     border-radius: 0.5rem;
     box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
   }
   :global(.svelte-flow__minimap-mask) {
-    fill: hsl(var(--background) / 0.6) !important;
+    fill: color-mix(in srgb, var(--background) 60%, transparent) !important;
   }
 </style>

@@ -31,6 +31,15 @@ PORT_API = 8009
 server_instance = None
 
 
+def parse_port_arg() -> int:
+    """解析命令行 --port 参数"""
+    import argparse
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--port", type=int, default=PORT_API)
+    args, _ = parser.parse_known_args()
+    return args.port
+
+
 def detect_running_mode() -> str:
     """
     检测当前运行模式
@@ -138,18 +147,18 @@ def is_port_available(port):
         except OSError:
             return False
 
-def find_available_port():
-    """Find an available port starting from PORT_API"""
-    port = PORT_API
-    while port < PORT_API + 10:  # Try 10 ports
+def find_available_port(start_port: int = None):
+    """Find an available port starting from start_port or PORT_API"""
+    port = start_port if start_port is not None else PORT_API
+    while port < port + 10:  # Try 10 ports
         if is_port_available(port):
             print(f"[{mode_label}] Using available port {port}", flush=True)
             return port
         port += 1
     
-    # If no port is available, use the default
-    print(f"[{mode_label}] No available ports found, using default {PORT_API}", flush=True)
-    return PORT_API
+    # If no port is available, use the requested port
+    print(f"[{mode_label}] No available ports found, using {start_port or PORT_API}", flush=True)
+    return start_port or PORT_API
 
 def start_api_server(**kwargs):
     """Start the FastAPI server"""
@@ -197,7 +206,8 @@ def start_input_thread():
 
 def run_standalone():
     """Run in standalone mode with uvicorn auto-reload"""
-    port = find_available_port()
+    requested_port = parse_port_arg()
+    port = find_available_port(requested_port)
     
     print(f"🚀 Starting standalone development mode")
     print(f"🔗 API server starting at http://127.0.0.1:{port}")
@@ -224,8 +234,9 @@ def run_standalone():
 
 def run_sidecar():
     """Run in sidecar mode with stdin handling"""
+    requested_port = parse_port_arg()
     start_input_thread()
-    start_api_server()
+    start_api_server(port=requested_port)
 
 
 def run_pywebview():

@@ -25,20 +25,16 @@ dependencies = [
     "loguru>=0.7.0",
     
     # 工具适配器依赖 (从 GitHub 安装)
-    # repacku - 文件重打包工具
     "autorepack @ git+https://github.com/HibernalGlow/AutoRepack.git",
-    # rawfilter - 图片过滤工具
     "imagefilter @ git+https://github.com/HibernalGlow/ImageFilter.git",
-    # crashu - 损坏文件检测工具
     "previewa @ git+https://github.com/HibernalGlow/ArtistPreview.git",
-    # trename - 文件重命名工具
     "nameu @ git+https://github.com/HibernalGlow/NameU.git",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=7.4.3",
-    "pyinstaller>=6.10.0",
+    "nuitka>=2.0",
     "hypothesis>=6.0.0",
 ]
 
@@ -52,19 +48,53 @@ packages = ["adapters", "api", "core", "models", "storage", "config"]
 [tool.setuptools.package-data]
 "*" = ["*.json", "*.yaml", "*.toml"]
 
-# PyInstaller 配置
-[tool.pyinstaller]
+# Nuitka 打包配置
+[tool.nuitka]
 name = "main"
 onefile = true
-console = true
-clean = true
-strip = false
-upx = true
+standalone = true
 
-# 隐藏导入 - 只需配置 PyInstaller 无法自动检测的模块
-# 适配器依赖会由 build.py 自动扫描 adapters/*_adapter.py 中的 import 语句
-hiddenimports = [
-    # FastAPI/uvicorn 内部模块（动态加载，必须手动指定）
+# 需要包含的模块（Nuitka 的 --include-module）
+include-modules = [
+    # 适配器模块
+    "adapters",
+    "adapters.base",
+    "adapters.repacku_adapter",
+    "adapters.rawfilter_adapter",
+    "adapters.crashu_adapter",
+    "adapters.trename_adapter",
+    
+    # repacku 依赖
+    "repacku",
+    "repacku.cli",
+    "repacku.core",
+    "repacku.core.folder_analyzer",
+    "repacku.core.zip_compressor",
+    "repacku.core.single_packer",
+    "repacku.core.common_utils",
+    "repacku.config",
+    "repacku.config.config",
+    
+    # rawfilter 依赖
+    "rawfilter",
+    "rawfilter.__main__",
+    
+    # crashu 依赖
+    "crashu",
+    "crashu.__main__",
+    "crashu.core",
+    "crashu.core.folder_manager",
+    "crashu.core.output_manager",
+    
+    # trename 依赖
+    "trename",
+    "trename.scanner",
+    "trename.renamer",
+    "trename.undo",
+    "trename.models",
+    "trename.validator",
+    
+    # FastAPI/uvicorn 内部模块
     "uvicorn.logging",
     "uvicorn.loops",
     "uvicorn.loops.auto",
@@ -77,8 +107,20 @@ hiddenimports = [
     "uvicorn.lifespan.on",
 ]
 
-# 排除不需要的大型包
-excludes = [
+# 需要包含的包（Nuitka 的 --include-package）
+include-packages = [
+    "fastapi",
+    "starlette",
+    "pydantic",
+    "pydantic_core",
+    "uvicorn",
+    "loguru",
+    "rich",
+    "typer",
+]
+
+# 排除的模块
+nofollow-imports = [
     "matplotlib",
     "numpy",
     "pandas",

@@ -2,32 +2,41 @@
 """
 aestival 构建脚本
 支持 Tauri 桌面应用打包（Python Sidecar + Rust 前端）
+使用 uv 管理依赖，nuitka 打包
 """
-import json
 import sys
 import subprocess
 import platform
-import shutil
 from pathlib import Path
 
 
-def run_command(command, description, cwd=None):
+def run_command(command, description, cwd=None, capture=True):
     """运行命令并显示状态"""
     print(f"🔧 {description}...")
     try:
-        result = subprocess.run(
-            command,
-            shell=True,
-            check=True,
-            cwd=cwd,
-            capture_output=True,
-            text=True
-        )
+        if capture:
+            result = subprocess.run(
+                command,
+                shell=True,
+                check=True,
+                cwd=cwd,
+                capture_output=True,
+                text=True
+            )
+        else:
+            # 实时输出
+            result = subprocess.run(
+                command,
+                shell=True,
+                check=True,
+                cwd=cwd,
+            )
         print(f"✅ {description} 完成")
         return True
     except subprocess.CalledProcessError as e:
         print(f"❌ {description} 失败!")
-        print(f"错误: {e.stderr}")
+        if capture and e.stderr:
+            print(f"错误: {e.stderr}")
         return False
 
 
@@ -38,7 +47,7 @@ def check_dependencies():
     required_tools = {
         "yarn": "yarn --version",
         "python": "python --version",
-        "pip": "pip --version",
+        "uv": "uv --version",
         "cargo": "cargo --version",
     }
     
@@ -53,6 +62,8 @@ def check_dependencies():
     
     if missing_tools:
         print(f"\n❌ 缺少必要工具: {', '.join(missing_tools)}")
+        if "uv" in missing_tools:
+            print("   请安装 uv: https://docs.astral.sh/uv/getting-started/installation/")
         if "cargo" in missing_tools:
             print("   请安装 Rust: https://rustup.rs/")
         sys.exit(1)
@@ -80,60 +91,97 @@ def build_frontend():
 
 
 def install_python_deps():
-    """安装 Python 依赖"""
-    return run_command(
-        "pip install -r requirements.txt",
-        "安装 Python 依赖",
-        cwd="src-python"
-    )
+    """使用 uv 安装 Python 依赖到虚拟环境"""
+    src_python = Path("src-python")
+    
+    # 创建虚拟环境（如果不存在）
+    venv_path = src_python / ".venv"
+    if not venv_path.exists():
+        if not run_command("uv venv", "创建虚拟环境", cwd="src-python"):
+            return False
+    
+    # 使用 uv 同步依赖（包括 dev 依赖，实时输出）
+    return run_command("uv sync --dev", "安装 Python 依赖", cwd="src-python", capture=False)
+
+
+def load_nuitka_config():
+    """从 pyproject.toml 加载 Nuitka 配置"""
+    try:
+        import tomllib as tomli
+    except ImportError:
+        try:
+            import tomli
+        except ImportError:
+            print("⚠️  tomli 未安装，使用默认配置")
+            return {}
+    
+    pyproject_path = Path("src-python/pyproject.toml")
+    if not pyproject_path.exists():
+        return {}
+    
+    with open(pyproject_path, "rb") as f:
+        data = tomli.load(f)
+    
+    return data.get("tool", {}).get("nuitka", {})
 
 
 def build_python_sidecar():
-    """使用 PyInstaller 打包 Python Sidecar"""
+    """使用 Nuitka 打包 Python Sidecar"""
     platform_name = detect_platform()
     
-    # 检查 PyInstaller
-    try:
-        subprocess.run("pyinstaller --version", shell=True, check=True, capture_output=True)
-    except subprocess.CalledProcessError:
-        print("📦 安装 PyInstaller...")
-        if not run_command("pip install pyinstaller", "安装 PyInstaller"):
-            return False
+    # 从 pyproject.toml 加载配置
+    config = load_nuitka_config()
     
     # 确保输出目录存在
     bin_dir = Path("src-tauri/bin")
     bin_dir.mkdir(parents=True, exist_ok=True)
     
-    # Sidecar 名称（Tauri 要求特定格式）
-    sidecar_name = "main"
+    # Sidecar 名称
+    sidecar_name = config.get("name", "main")
     
     # 根据平台添加后缀
     if platform_name == "windows":
-        # Windows 需要 -x86_64-pc-windows-msvc 后缀
         target_suffix = "-x86_64-pc-windows-msvc"
     elif platform_name == "macos":
-        # macOS 需要架构后缀
         import platform as plat
         arch = plat.machine()
-        if arch == "arm64":
-            target_suffix = "-aarch64-apple-darwin"
-        else:
-            target_suffix = "-x86_64-apple-darwin"
+        target_suffix = "-aarch64-apple-darwin" if arch == "arm64" else "-x86_64-apple-darwin"
     else:
-        # Linux
         target_suffix = "-x86_64-unknown-linux-gnu"
     
-    # PyInstaller 构建命令
-    pyinstaller_cmd = [
-        "pyinstaller",
-        "--name", sidecar_name,
-        "--onefile",
-        "--clean",
-        "--distpath", str(bin_dir.absolute()),
-        "main.py"
+    # 构建 Nuitka 命令
+    nuitka_cmd = [
+        "uv", "run", "python", "-m", "nuitka",
+        f"--output-filename={sidecar_name}",
+        f"--output-dir={bin_dir.absolute()}",
     ]
     
-    cmd_str = " ".join(pyinstaller_cmd)
+    # 基本选项
+    if config.get("onefile", True):
+        nuitka_cmd.append("--onefile")
+    if config.get("standalone", True):
+        nuitka_cmd.append("--standalone")
+    
+    # 添加 include-module
+    for module in config.get("include-modules", []):
+        nuitka_cmd.append(f"--include-module={module}")
+    
+    # 添加 include-package
+    for package in config.get("include-packages", []):
+        nuitka_cmd.append(f"--include-package={package}")
+    
+    # 添加 nofollow-imports
+    for module in config.get("nofollow-imports", []):
+        nuitka_cmd.append(f"--nofollow-import-to={module}")
+    
+    # Windows 特定选项
+    if platform_name == "windows":
+        nuitka_cmd.append("--windows-console-mode=attach")
+    
+    # 入口文件
+    nuitka_cmd.append("main.py")
+    
+    cmd_str = " ".join(nuitka_cmd)
     if not run_command(cmd_str, f"打包 Python Sidecar ({platform_name})", cwd="src-python"):
         return False
     
@@ -188,7 +236,7 @@ def show_build_results():
 
 def main():
     """主函数"""
-    print("🏗️  aestival Tauri 构建")
+    print("🏗️  aestival Tauri 构建 (uv + nuitka)")
     print("=" * 50)
     
     args = sys.argv[1:]

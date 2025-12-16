@@ -3,14 +3,16 @@
 	 * 设置内容组件 - 纯内容，不包含窗口外壳
 	 * 可嵌入到独立窗口或覆盖层中使用
 	 */
-	import { Palette, Monitor, Info } from '@lucide/svelte';
+	import { Palette, Monitor, Info, LayoutGrid } from '@lucide/svelte';
 
 	// 导入设置面板组件
 	import ThemeSettingsPanel from '$lib/components/settings/ThemeSettingsPanel.svelte';
 	import DataSettingsPanel from '$lib/components/settings/DataSettingsPanel.svelte';
+	import BlockSettingsPanel from '$lib/components/settings/BlockSettingsPanel.svelte';
 
 	const tabs = [
 		{ value: 'theme', label: '外观', icon: Palette },
+		{ value: 'blocks', label: '区块', icon: LayoutGrid },
 		{ value: 'data', label: '数据', icon: Monitor },
 		{ value: 'about', label: '关于', icon: Info }
 	];
@@ -48,6 +50,8 @@
 		<div class="flex-1 overflow-auto bg-background/80">
 			{#if activeTab === 'theme'}
 				<ThemeSettingsPanel />
+			{:else if activeTab === 'blocks'}
+				<BlockSettingsPanel />
 			{:else if activeTab === 'data'}
 				<DataSettingsPanel />
 			{:else if activeTab === 'about'}

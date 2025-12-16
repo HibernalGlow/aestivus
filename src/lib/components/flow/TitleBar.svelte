@@ -199,7 +199,7 @@
 <!-- 标题栏容器 -->
 <div class="flex flex-col">
   <!-- 顶部标题栏 -->
-  <div class="h-10 border-b flex items-center select-none" style={toolbarStyle}>
+  <div class="h-10 flex items-center select-none" style={toolbarStyle}>
     <!-- 左侧：Logo 和流程名 -->
   <div class="flex items-center gap-2 px-3">
     <span class="text-sm font-bold text-primary">Aestivus</span>
@@ -300,30 +300,51 @@
 
 <!-- 背景图设置展开栏 -->
 {#if showBgBar}
-  <div class="h-9 border-b flex items-center gap-3 px-4" style={toolbarStyle}>
-    <span class="text-xs text-muted-foreground">背景</span>
-    <Button variant="outline" size="sm" class="h-6 text-xs" onclick={uploadBackground}>
-      <FileUp class="w-3 h-3 mr-1" />
-      上传
-    </Button>
-    {#if $themeStore.backgroundImage}
-      <Button variant="ghost" size="sm" class="h-6 text-xs text-destructive" onclick={clearBackground}>
-        <X class="w-3 h-3 mr-1" />
-        清除
+  <div class="h-8 flex items-center gap-4 px-4" style={toolbarStyle}>
+    <!-- 背景图 -->
+    <div class="flex items-center gap-1">
+      <span class="text-xs text-muted-foreground">背景</span>
+      <Button variant="ghost" size="sm" class="h-5 px-1.5 text-xs" onclick={uploadBackground}>
+        <FileUp class="w-3 h-3" />
       </Button>
-      <div class="flex items-center gap-2">
-        <span class="text-xs text-muted-foreground">透明度</span>
+      {#if $themeStore.backgroundImage}
+        <Button variant="ghost" size="sm" class="h-5 px-1.5 text-xs text-destructive" onclick={clearBackground}>
+          <X class="w-3 h-3" />
+        </Button>
         <input
-          type="range"
+          type="number"
           min="0"
           max="100"
           value={$themeStore.backgroundOpacity}
-          oninput={(e) => themeStore.setBackgroundOpacity(parseInt(e.currentTarget.value))}
-          class="w-24 h-1.5 accent-primary cursor-pointer"
+          onchange={(e) => themeStore.setBackgroundOpacity(parseInt(e.currentTarget.value) || 0)}
+          class="w-10 h-5 text-xs text-center bg-transparent rounded px-1"
         />
-        <span class="text-xs w-8">{$themeStore.backgroundOpacity}%</span>
-      </div>
-    {/if}
+      {/if}
+    </div>
+    <!-- UI 透明度 -->
+    <div class="flex items-center gap-1">
+      <span class="text-xs text-muted-foreground">透明</span>
+      <input
+        type="number"
+        min="0"
+        max="100"
+        value={panelSettings.topToolbarOpacity}
+        onchange={(e) => settingsManager.updateNestedSettings('panels', { topToolbarOpacity: parseInt(e.currentTarget.value) || 0, sidebarOpacity: parseInt(e.currentTarget.value) || 0 })}
+        class="w-10 h-5 text-xs text-center bg-transparent rounded px-1"
+      />
+    </div>
+    <!-- UI 模糊 -->
+    <div class="flex items-center gap-1">
+      <span class="text-xs text-muted-foreground">模糊</span>
+      <input
+        type="number"
+        min="0"
+        max="30"
+        value={panelSettings.topToolbarBlur}
+        onchange={(e) => settingsManager.updateNestedSettings('panels', { topToolbarBlur: parseInt(e.currentTarget.value) || 0, sidebarBlur: parseInt(e.currentTarget.value) || 0 })}
+        class="w-10 h-5 text-xs text-center bg-transparent rounded px-1"
+      />
+    </div>
   </div>
 {/if}
 </div>

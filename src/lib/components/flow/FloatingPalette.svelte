@@ -95,12 +95,12 @@
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <div
-  class="fixed z-50 border rounded-lg shadow-lg select-none w-48"
+  class="fixed z-50 rounded-lg shadow-lg select-none w-48"
   style="left: {position.x}px; top: {position.y}px; {sidebarStyle}"
   onmousedown={onMouseDown}
 >
   <!-- 标题栏 -->
-  <div class="flex items-center justify-between px-3 py-2 border-b cursor-move">
+  <div class="flex items-center justify-between px-3 py-2 cursor-move">
     <div class="flex items-center gap-2">
       <GripHorizontal class="w-4 h-4 text-muted-foreground" />
       <span class="text-sm font-semibold">节点</span>
@@ -119,7 +119,7 @@
 
   <!-- 节点列表 -->
   {#if !collapsed}
-    <div class="max-h-80 overflow-y-auto p-2 space-y-2">
+    <div class="max-h-80 overflow-y-auto p-2 space-y-2 scrollbar-hide">
       {#each categories as category}
         {@const nodes = getNodesByCategory(category.id)}
         {#if nodes.length > 0}

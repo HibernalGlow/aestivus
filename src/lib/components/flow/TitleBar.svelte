@@ -1,0 +1,300 @@
+<script lang="ts">
+  /**
+   * 自定义标题栏 - 集成窗口控制和工具栏功能
+   */
+  import { flowStore, taskStore, isRunning } from '$lib/stores';
+  import { api } from '$lib/services/api';
+  import { 
+    Save, Play, Square, RotateCcw, FileDown, FileUp, 
+    Sun, Moon, Monitor, Palette, Image, X,
+    Minus, Square as MaxIcon, X as CloseIcon,
+    FolderOpen
+  } from '@lucide/svelte';
+  import { Button } from '$lib/components/ui/button';
+  import { themeStore, toggleThemeMode, openThemeImport } from '$lib/stores/theme.svelte';
+
+  // Tauri 窗口 API
+  let windowApi: any = null;
+  
+  // 动态导入 Tauri API
+  import { onMount } from 'svelte';
+  onMount(async () => {
+    try {
+      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      windowApi = getCurrentWindow();
+    } catch (e) {
+      console.log('Not running in Tauri');
+    }
+  });
+
+  // 窗口控制
+  async function minimizeWindow() {
+    await windowApi?.minimize();
+  }
+
+  async function toggleMaximize() {
+    await windowApi?.toggleMaximize();
+  }
+
+  async function closeWindow() {
+    await windowApi?.close();
+  }
+
+  // 流程管理弹窗
+  let showFlowManager = $state(false);
+  let flows = $state<Array<{id: string, name: string, updatedAt: string}>>([]);
+
+  function loadFlowList() {
+    try {
+      const saved = localStorage.getItem('aestival_flows');
+      if (saved) flows = JSON.parse(saved);
+    } catch (e) {
+      console.error('加载流程列表失败:', e);
+    }
+  }
+
+  function openFlowManager() {
+    loadFlowList();
+    showFlowManager = true;
+  }
+
+  function closeFlowManager() {
+    showFlowManager = false;
+  }
+
+  function selectFlow(id: string) {
+    api.getFlow(id)
+      .then(flow => flowStore.load(flow))
+      .catch(e => console.error('加载流程失败:', e));
+    showFlowManager = false;
+  }
+
+  function createNewFlow() {
+    flowStore.reset();
+    showFlowManager = false;
+  }
+
+  function deleteFlow(id: string, event: MouseEvent) {
+    event.stopPropagation();
+    if (confirm('确定删除此流程？')) {
+      flows = flows.filter(f => f.id !== id);
+      localStorage.setItem('aestival_flows', JSON.stringify(flows));
+    }
+  }
+
+  // 背景图上传
+  function uploadBackground() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          themeStore.setBackgroundImage(reader.result as string);
+        };
+        reader.readAsDataURL(file);
+      }
+    };
+    input.click();
+  }
+
+  function clearBackground() {
+    themeStore.clearBackground();
+  }
+
+  // 流程操作
+  async function saveFlow() {
+    const flow = flowStore.toFlow();
+    try {
+      if (flow.id && flowStore.getState().id) {
+        await api.updateFlow(flow.id, flow);
+      } else {
+        const saved = await api.createFlow(flow);
+        flowStore.load(saved);
+      }
+      flowStore.markSaved();
+    } catch (e) { console.error('保存失败:', e); }
+  }
+
+  async function executeFlow() {
+    const state = flowStore.getState();
+    if (!state.id) await saveFlow();
+    try {
+      const { taskId } = await api.executeFlow(flowStore.getState().id!);
+      taskStore.startTask(taskId);
+    } catch (e) { console.error('执行失败:', e); }
+  }
+
+  function stopExecution() {
+    const taskId = taskStore.getState?.()?.taskId;
+    if (taskId) { api.cancelTask(taskId); taskStore.cancel(); }
+  }
+
+  function resetFlow() {
+    if (confirm('确定要重置流程吗？')) { flowStore.reset(); taskStore.reset(); }
+  }
+
+  function exportFlow() {
+    const flow = flowStore.toFlow();
+    const blob = new Blob([JSON.stringify(flow, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${flow.name || 'flow'}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function importFlow() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        const text = await file.text();
+        flowStore.load(JSON.parse(text));
+      }
+    };
+    input.click();
+  }
+</script>
+
+<!-- 顶部标题栏 -->
+<div class="h-10 bg-card/95 backdrop-blur border-b flex items-center select-none">
+  <!-- 左侧：Logo 和流程名 -->
+  <div class="flex items-center gap-2 px-3">
+    <span class="text-sm font-bold text-primary">Aestivus</span>
+    <div class="w-px h-4 bg-border"></div>
+    <Button variant="ghost" size="sm" class="h-7 px-2" onclick={openFlowManager} title="打开流程">
+      <FolderOpen class="w-3.5 h-3.5 mr-1" />
+      <span class="text-xs">流程</span>
+    </Button>
+    <input
+      type="text"
+      class="text-sm bg-transparent border-none focus:outline-none focus:ring-1 focus:ring-primary rounded px-2 py-1 w-32"
+      value={$flowStore.name}
+      onchange={(e) => flowStore.setName(e.currentTarget.value)}
+      placeholder="未命名流程"
+    />
+    {#if $flowStore.isDirty}
+      <span class="text-xs text-amber-600 bg-amber-100 dark:bg-amber-900/30 px-1.5 py-0.5 rounded">未保存</span>
+    {/if}
+  </div>
+
+  <!-- 中间：拖拽区域 -->
+  <div class="flex-1 h-full" data-tauri-drag-region></div>
+
+  <!-- 右侧：工具按钮 -->
+  <div class="flex items-center gap-0.5 px-2">
+    <!-- 主题 -->
+    <Button variant="ghost" size="icon" class="h-7 w-7" onclick={toggleThemeMode} title="主题">
+      {#if $themeStore.mode === 'dark'}<Moon class="w-3.5 h-3.5" />
+      {:else if $themeStore.mode === 'light'}<Sun class="w-3.5 h-3.5" />
+      {:else}<Monitor class="w-3.5 h-3.5" />{/if}
+    </Button>
+    <Button variant="ghost" size="icon" class="h-7 w-7" onclick={openThemeImport} title="导入主题">
+      <Palette class="w-3.5 h-3.5" />
+    </Button>
+    <Button variant="ghost" size="icon" class="h-7 w-7" onclick={uploadBackground} title="背景图">
+      <Image class="w-3.5 h-3.5" />
+    </Button>
+    {#if $themeStore.backgroundImage}
+      <Button variant="ghost" size="icon" class="h-7 w-7 text-destructive" onclick={clearBackground} title="清除背景">
+        <X class="w-3.5 h-3.5" />
+      </Button>
+    {/if}
+    
+    <div class="w-px h-5 bg-border mx-1"></div>
+    
+    <!-- 流程操作 -->
+    <Button variant="ghost" size="icon" class="h-7 w-7" onclick={importFlow} title="导入">
+      <FileUp class="w-3.5 h-3.5" />
+    </Button>
+    <Button variant="ghost" size="icon" class="h-7 w-7" onclick={exportFlow} title="导出">
+      <FileDown class="w-3.5 h-3.5" />
+    </Button>
+    <Button variant="ghost" size="icon" class="h-7 w-7" onclick={resetFlow} title="重置">
+      <RotateCcw class="w-3.5 h-3.5" />
+    </Button>
+    <Button variant="ghost" size="icon" class="h-7 w-7" onclick={saveFlow} disabled={!$flowStore.isDirty} title="保存">
+      <Save class="w-3.5 h-3.5" />
+    </Button>
+    {#if $isRunning}
+      <Button variant="destructive" size="icon" class="h-7 w-7" onclick={stopExecution} title="停止">
+        <Square class="w-3.5 h-3.5" />
+      </Button>
+    {:else}
+      <Button variant="default" size="icon" class="h-7 w-7" onclick={executeFlow} disabled={$flowStore.nodes.length === 0} title="执行">
+        <Play class="w-3.5 h-3.5" />
+      </Button>
+    {/if}
+    
+    <div class="w-px h-5 bg-border mx-1"></div>
+    
+    <!-- 窗口控制按钮 -->
+    <button 
+      class="h-7 w-10 flex items-center justify-center hover:bg-muted transition-colors"
+      onclick={minimizeWindow}
+      title="最小化"
+    >
+      <Minus class="w-4 h-4" />
+    </button>
+    <button 
+      class="h-7 w-10 flex items-center justify-center hover:bg-muted transition-colors"
+      onclick={toggleMaximize}
+      title="最大化"
+    >
+      <MaxIcon class="w-3.5 h-3.5" />
+    </button>
+    <button 
+      class="h-7 w-10 flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground transition-colors"
+      onclick={closeWindow}
+      title="关闭"
+    >
+      <CloseIcon class="w-4 h-4" />
+    </button>
+  </div>
+</div>
+
+<!-- 流程管理弹窗 -->
+{#if showFlowManager}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
+  <div class="fixed inset-0 z-[200] bg-black/50" onclick={closeFlowManager}></div>
+  <div class="fixed top-12 left-4 z-[201] w-80 bg-card border rounded-lg shadow-xl">
+    <div class="p-3 border-b flex items-center justify-between">
+      <span class="font-medium">流程列表</span>
+      <Button variant="outline" size="sm" onclick={createNewFlow}>新建</Button>
+    </div>
+    <div class="max-h-80 overflow-y-auto">
+      {#if flows.length === 0}
+        <div class="p-4 text-center text-muted-foreground text-sm">暂无保存的流程</div>
+      {:else}
+        {#each flows as flow}
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <div 
+            class="p-3 hover:bg-muted cursor-pointer flex items-center justify-between group"
+            onclick={() => selectFlow(flow.id)}
+          >
+            <div>
+              <div class="font-medium text-sm">{flow.name || '未命名'}</div>
+              <div class="text-xs text-muted-foreground">
+                {new Date(flow.updatedAt).toLocaleString('zh-CN')}
+              </div>
+            </div>
+            <button
+              class="opacity-0 group-hover:opacity-100 p-1 hover:text-destructive transition-all"
+              onclick={(e) => deleteFlow(flow.id, e)}
+            >
+              <X class="w-4 h-4" />
+            </button>
+          </div>
+        {/each}
+      {/if}
+    </div>
+  </div>
+{/if}

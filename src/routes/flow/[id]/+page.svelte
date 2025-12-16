@@ -4,7 +4,7 @@
   import { flowStore, taskStore } from '$lib/stores';
   import { api } from '$lib/services/api';
   import FlowCanvas from '$lib/components/flow/FlowCanvas.svelte';
-  import FloatingToolbar from '$lib/components/flow/FloatingToolbar.svelte';
+  import TitleBar from '$lib/components/flow/TitleBar.svelte';
   import FloatingPalette from '$lib/components/flow/FloatingPalette.svelte';
   import LogViewer from '$lib/components/execution/LogViewer.svelte';
   import { themeStore } from '$lib/stores/theme.svelte';
@@ -49,10 +49,13 @@
 <svelte:window onkeydown={handleKeyDown} />
 
 <div class="h-full flex flex-col bg-background relative">
+  <!-- 顶部标题栏 -->
+  <TitleBar />
+
   <!-- 背景图层 -->
   {#if $themeStore.backgroundImage}
     <div 
-      class="absolute inset-0 bg-cover bg-center bg-no-repeat pointer-events-none"
+      class="absolute inset-0 top-10 bg-cover bg-center bg-no-repeat pointer-events-none"
       style="background-image: url({$themeStore.backgroundImage}); opacity: {$themeStore.backgroundOpacity / 100};"
     ></div>
   {/if}
@@ -63,7 +66,6 @@
   </div>
 
   <!-- 浮动面板 -->
-  <FloatingToolbar />
   <FloatingPalette />
 
   <!-- 日志面板 -->

@@ -214,7 +214,7 @@
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border: 1px solid hsl(var(--border));
-    border-radius: 1.5rem;
+    border-radius: 0.5rem;
     overflow: auto;
     /* 使用绝对定位 + inset 实现居中 */
     position: absolute;
@@ -235,7 +235,7 @@
   :global(.grid-stack-placeholder > .placeholder-content) {
     background: hsl(var(--primary) / 0.1);
     border: 2px dashed hsl(var(--primary) / 0.5);
-    border-radius: 1.5rem;
+    border-radius: 0.5rem;
   }
 
   :global(.ui-resizable-handle) {

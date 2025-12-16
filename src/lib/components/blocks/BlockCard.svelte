@@ -61,7 +61,7 @@
 </script>
 
 <div 
-  class="block-card {isFullscreen ? 'h-full flex flex-col border border-primary/40 rounded-lg bg-card/50' : 'bg-card rounded-2xl border shadow-sm'} {fullHeight ? 'flex-1 min-h-0' : ''} {className}"
+  class="block-card {isFullscreen ? 'h-full flex flex-col border border-primary/40 rounded bg-card/50' : 'bg-card rounded-lg border shadow-sm'} {fullHeight ? 'flex-1 min-h-0' : ''} {className}"
 >
   <!-- 标题栏 -->
   {#if !hideHeader}

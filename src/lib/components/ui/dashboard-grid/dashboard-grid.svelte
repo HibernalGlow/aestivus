@@ -86,6 +86,24 @@
     }
   }
 
+  /** 批量应用布局 - 用于切换预设 */
+  export function applyLayout(newLayout: GridItem[]) {
+    if (!grid || !gridElement) return;
+    
+    // 批量更新模式，避免触发多次事件
+    grid.batchUpdate();
+    
+    for (const item of newLayout) {
+      const el = gridElement.querySelector(`[gs-id="${item.id}"]`) as HTMLElement;
+      if (el) {
+        grid.update(el, { x: item.x, y: item.y, w: item.w, h: item.h });
+      }
+    }
+    
+    grid.batchUpdate(false);
+    handleLayoutChange();
+  }
+
   // 从 DOM 元素获取当前布局（优先从 DOM 属性读取，确保 resize 后数据正确）
   function getCurrentLayout(): GridItem[] {
     if (!grid) return [];

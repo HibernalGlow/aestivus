@@ -15,8 +15,11 @@
     Minimize2,
     LayoutGrid,
     RotateCcw,
+    Layout,
   } from "@lucide/svelte";
   import { Badge } from "$lib/components/ui/badge";
+  import { LayoutPresetSelector } from "$lib/components/ui/dashboard-grid";
+  import type { GridItem } from "$lib/components/ui/dashboard-grid";
   import { flowStore } from "$lib/stores";
   import { fullscreenNodeStore } from "$lib/stores/fullscreenNode.svelte";
   import type { Snippet } from "svelte";
@@ -66,6 +69,12 @@
     onCompact?: () => void;
     /** 重置布局回调（全屏模式） */
     onResetLayout?: () => void;
+    /** 节点类型（用于布局预设） */
+    nodeType?: string;
+    /** 当前布局（用于布局预设） */
+    currentLayout?: GridItem[];
+    /** 应用布局回调（全屏模式） */
+    onApplyLayout?: (layout: GridItem[]) => void;
   }
 
   // 默认状态标签映射
@@ -117,11 +126,15 @@
     onPin,
     onCompact,
     onResetLayout,
+    nodeType,
+    currentLayout,
+    onApplyLayout,
   }: Props = $props();
 
   // 状态
   let collapsed = $state.raw(false);
   let pinned = $state(false);
+  let showLayoutBar = $state(false);  // 布局预设栏展开状态
 
   // 检测是否在全屏模式（原节点需要变淡）
   let isNodeInFullscreen = $derived(
@@ -248,6 +261,17 @@
         </button>
       {/if}
 
+      <!-- 布局预设按钮（全屏模式） -->
+      {#if isFullscreenRender && nodeType && currentLayout && onApplyLayout}
+        <button
+          class="p-1 rounded hover:bg-muted transition-colors {showLayoutBar ? 'text-primary' : 'text-muted-foreground'}"
+          onclick={() => showLayoutBar = !showLayoutBar}
+          title="布局预设"
+        >
+          <Layout class="w-3.5 h-3.5" />
+        </button>
+      {/if}
+
       {#if hasFullscreen}
         <button
           class="p-1 rounded hover:bg-muted transition-colors text-muted-foreground"
@@ -289,6 +313,17 @@
       {/if}
     </div>
   </div>
+
+  <!-- 布局预设横向展开栏（全屏模式，标题栏下方） -->
+  {#if isFullscreenRender && showLayoutBar && nodeType && currentLayout && onApplyLayout}
+    <div class="px-3 py-2 bg-muted/20 border-b shrink-0">
+      <LayoutPresetSelector 
+        {nodeType}
+        {currentLayout}
+        onApply={onApplyLayout}
+      />
+    </div>
+  {/if}
 
   <!-- 内容区 -->
   {#if !collapsed || isFullscreenRender}

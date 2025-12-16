@@ -64,7 +64,7 @@
   let gridLayout: GridItem[] = savedState?.gridLayout ?? [...DEFAULT_GRID_LAYOUT];
   
   // DashboardGrid 组件引用
-  let dashboardGrid: { compact: () => void } | undefined;
+  let dashboardGrid: { compact: () => void; applyLayout: (layout: GridItem[]) => void } | undefined;
 
   // 处理布局变化
   function handleLayoutChange(newLayout: GridItem[]) {
@@ -315,7 +315,18 @@
     {borderClass} 
     {isFullscreenRender}
     onCompact={() => dashboardGrid?.compact()}
-    onResetLayout={() => { gridLayout = [...DEFAULT_GRID_LAYOUT]; saveState(); }}
+    onResetLayout={() => { 
+      gridLayout = [...DEFAULT_GRID_LAYOUT]; 
+      dashboardGrid?.applyLayout(gridLayout);
+      saveState(); 
+    }}
+    nodeType="trename"
+    currentLayout={gridLayout}
+    onApplyLayout={(layout) => { 
+      gridLayout = layout; 
+      dashboardGrid?.applyLayout(layout);
+      saveState(); 
+    }}
   >
     {#snippet headerExtra()}
       <Button variant="ghost" size="icon" class="h-6 w-6" onclick={() => showOptions = !showOptions} title="选项">

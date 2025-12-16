@@ -31,6 +31,34 @@ export interface BlockDefinition {
   visibleInNormal?: boolean;
   /** 全屏模式下是否可见 */
   visibleInFullscreen?: boolean;
+  /** Tab 区块特有：子区块 ID 列表 */
+  tabChildren?: string[];
+  /** 是否为 Tab 容器类型 */
+  isTabContainer?: boolean;
+}
+
+// Tab 区块配置
+export interface TabBlockConfig {
+  /** 唯一标识符 */
+  id: string;
+  /** 子区块 ID 数组 */
+  children: string[];
+  /** 当前活动标签索引 */
+  activeTab: number;
+}
+
+// Tab 区块状态（用于持久化）
+export interface TabBlockState {
+  /** 当前活动标签索引 */
+  activeTab: number;
+  /** 子区块 ID 列表 */
+  children: string[];
+}
+
+// 扩展 GridItem 以支持 Tab 区块数据
+export interface TabGridItem extends GridItem {
+  /** Tab 区块扩展数据 */
+  tabData?: TabBlockState;
 }
 
 // 区块配置（运行时状态）
@@ -295,6 +323,18 @@ export const ENGINEV_BLOCKS: BlockDefinition[] = [
     collapsible: true,
     visibleInNormal: true,
     visibleInFullscreen: true
+  },
+  // Tab 区块示例：将统计和操作合并
+  {
+    id: 'tab-stats-op',
+    title: '统计/操作',
+    icon: Layers,
+    iconClass: 'text-cyan-500',
+    colSpan: 2,
+    visibleInNormal: false,
+    visibleInFullscreen: true,
+    isTabContainer: true,
+    tabChildren: ['stats', 'operation']
   }
 ];
 
@@ -305,7 +345,9 @@ export const ENGINEV_DEFAULT_GRID_LAYOUT: GridItem[] = [
   { id: 'operation', x: 1, y: 2, w: 1, h: 2, minW: 1, minH: 1 },
   { id: 'rename', x: 2, y: 2, w: 2, h: 2, minW: 1, minH: 1 },
   { id: 'gallery', x: 0, y: 4, w: 3, h: 4, minW: 2, minH: 2 },
-  { id: 'log', x: 3, y: 4, w: 1, h: 4, minW: 1, minH: 1 }
+  { id: 'log', x: 3, y: 4, w: 1, h: 4, minW: 1, minH: 1 },
+  // Tab 区块示例（默认隐藏，可通过布局编辑器启用）
+  { id: 'tab-stats-op', x: 0, y: 8, w: 2, h: 3, minW: 1, minH: 2 }
 ];
 
 // ============ 注册表 ============
@@ -336,4 +378,36 @@ export function getNodeBlockLayout(nodeType: string): NodeBlockLayout | undefine
 export function getBlockDefinition(nodeType: string, blockId: string): BlockDefinition | undefined {
   const layout = nodeBlockRegistry[nodeType];
   return layout?.blocks.find(b => b.id === blockId);
+}
+
+// 获取 Tab 区块的子区块定义列表（过滤无效 ID）
+export function getTabBlockChildren(nodeType: string, childIds: string[]): BlockDefinition[] {
+  const layout = nodeBlockRegistry[nodeType];
+  if (!layout) return [];
+  
+  return childIds
+    .map(id => layout.blocks.find(b => b.id === id))
+    .filter((b): b is BlockDefinition => b !== undefined);
+}
+
+// 序列化 TabBlockConfig 为 JSON
+export function serializeTabBlockConfig(config: TabBlockConfig): string {
+  return JSON.stringify(config);
+}
+
+// 从 JSON 反序列化 TabBlockConfig
+export function deserializeTabBlockConfig(json: string): TabBlockConfig | null {
+  try {
+    const parsed = JSON.parse(json);
+    if (
+      typeof parsed.id === 'string' &&
+      Array.isArray(parsed.children) &&
+      typeof parsed.activeTab === 'number'
+    ) {
+      return parsed as TabBlockConfig;
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }

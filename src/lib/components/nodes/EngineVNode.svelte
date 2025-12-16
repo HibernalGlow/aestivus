@@ -11,8 +11,8 @@
 
   import { DashboardGrid, DashboardItem } from '$lib/components/ui/dashboard-grid';
   import type { GridItem } from '$lib/components/ui/dashboard-grid';
-  import { BlockCard } from '$lib/components/blocks';
-  import { ENGINEV_DEFAULT_GRID_LAYOUT } from '$lib/components/blocks/blockRegistry';
+  import { BlockCard, TabBlockCard } from '$lib/components/blocks';
+  import { ENGINEV_DEFAULT_GRID_LAYOUT, type TabBlockState } from '$lib/components/blocks/blockRegistry';
   import { api } from '$lib/services/api';
   import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
   import { getDefaultPreset } from '$lib/stores/layoutPresets';
@@ -68,6 +68,14 @@
   
   let dashboardGrid: { compact: () => void; applyLayout: (layout: GridItem[]) => void } | undefined;
 
+  // Tab 区块状态
+  let tabStates: Record<string, TabBlockState> = savedState?.tabStates ?? {};
+  
+  function handleTabStateChange(tabId: string, state: TabBlockState) {
+    tabStates = { ...tabStates, [tabId]: state };
+    saveState();
+  }
+
   function handleLayoutChange(newLayout: GridItem[]) { gridLayout = newLayout; saveState(); }
   function getLayoutItem(itemId: string): GridItem {
     return gridLayout.find(item => item.id === itemId) ?? { id: itemId, x: 0, y: 0, w: 1, h: 1 };
@@ -76,7 +84,7 @@
   function saveState() {
     setNodeState<EngineVState>(id, {
       phase, logs, workshopPath, wallpapers, filteredWallpapers, stats, filters, renameConfig,
-      gridLayout, selectedIds, viewMode
+      gridLayout, selectedIds, viewMode, tabStates
     });
   }
   
@@ -593,6 +601,27 @@
               <BlockCard id="log" title="日志" icon={Copy} iconClass="text-muted-foreground" isFullscreen={true} fullHeight={true} hideHeader={true}>
                 {#snippet children()}{@render logBlockContent()}{/snippet}
               </BlockCard>
+            </DashboardItem>
+            
+            <!-- Tab 区块示例：统计/操作合并 -->
+            {@const tabItem = getLayoutItem('tab-stats-op')}
+            <DashboardItem id="tab-stats-op" x={tabItem.x} y={tabItem.y} w={tabItem.w} h={tabItem.h} minW={1} minH={2}>
+              <TabBlockCard 
+                id="tab-stats-op" 
+                children={['stats', 'operation']} 
+                nodeType="enginev"
+                isFullscreen={true}
+                initialState={tabStates['tab-stats-op']}
+                onStateChange={(state) => handleTabStateChange('tab-stats-op', state)}
+              >
+                {#snippet renderContent(blockId)}
+                  {#if blockId === 'stats'}
+                    {@render statsBlockContent()}
+                  {:else if blockId === 'operation'}
+                    {@render operationBlockContent()}
+                  {/if}
+                {/snippet}
+              </TabBlockCard>
             </DashboardItem>
           </DashboardGrid>
         </div>

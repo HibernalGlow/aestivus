@@ -3,6 +3,7 @@
  * Wallpaper Engine 工坊管理工具
  */
 import type { GridItem } from '$lib/components/ui/dashboard-grid';
+import type { TabBlockState } from '$lib/components/blocks/blockRegistry';
 
 // ============ 类型定义 ============
 
@@ -81,6 +82,8 @@ export interface EngineVState {
   gridLayout: GridItem[];
   selectedIds: Set<string>;
   viewMode: 'grid' | 'list';
+  /** Tab 区块状态 */
+  tabStates?: Record<string, TabBlockState>;
 }
 
 // ============ 默认值 ============

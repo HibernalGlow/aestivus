@@ -76,6 +76,14 @@
   function initNodeConfig(): NodeConfig {
     const config = getOrCreateNodeConfig(nodeId, nodeType, defaultFullscreenLayout, defaultNormalLayout);
     
+    console.log('[NodeLayoutRenderer] 初始化配置:', {
+      nodeType,
+      mode,
+      gridLayout: config[mode].gridLayout.map(i => i.id),
+      tabBlocks: config[mode].tabBlocks,
+      tabStates: Object.keys(config[mode].tabStates)
+    });
+    
     // 只有当模式完全没有保存状态时才初始化布局
     let needsUpdate = false;
     
@@ -95,9 +103,17 @@
     }
     
     // 如果有更新，重新获取配置
-    return needsUpdate 
+    const finalConfig = needsUpdate 
       ? getOrCreateNodeConfig(nodeId, nodeType, defaultFullscreenLayout, defaultNormalLayout)
       : config;
+    
+    console.log('[NodeLayoutRenderer] 最终配置:', {
+      gridLayoutIds: finalConfig[mode].gridLayout.map(i => i.id),
+      tabBlocks: finalConfig[mode].tabBlocks,
+      tabStatesKeys: Object.keys(finalConfig[mode].tabStates)
+    });
+    
+    return finalConfig;
   }
 
   // 节点配置
@@ -132,7 +148,15 @@
   // 获取可见区块（过滤掉被合并到 Tab 的）
   let visibleBlocks = $derived(() => {
     const usedIds = usedTabIds();
-    return currentLayout.filter(item => !usedIds.includes(item.id));
+    const visible = currentLayout.filter(item => !usedIds.includes(item.id));
+    console.log('[NodeLayoutRenderer] visibleBlocks:', {
+      mode,
+      currentLayoutIds: currentLayout.map(i => i.id),
+      usedIds,
+      visibleIds: visible.map(i => i.id),
+      tabBlocks: nodeConfig[mode].tabBlocks
+    });
+    return visible;
   });
 
   // 处理布局变化（使用 nodeType 作为 key）

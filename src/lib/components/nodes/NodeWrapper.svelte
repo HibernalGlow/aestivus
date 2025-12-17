@@ -21,6 +21,7 @@
   } from "@lucide/svelte";
   import { Badge } from "$lib/components/ui/badge";
   import { LayoutPresetSelector } from "$lib/components/ui/dashboard-grid";
+  import { TabConfigPanel } from "$lib/components/blocks";
   import type { GridItem } from "$lib/components/ui/dashboard-grid";
   import { flowStore } from "$lib/stores";
   import { fullscreenNodeStore } from "$lib/stores/fullscreenNode.svelte";
@@ -77,10 +78,12 @@
     currentLayout?: GridItem[];
     /** 应用布局回调（全屏模式） */
     onApplyLayout?: (layout: GridItem[]) => void;
-    /** 添加 Tab 区块回调（全屏模式） */
-    onAddTabBlock?: () => void;
-    /** 是否支持添加 Tab 区块 */
-    canAddTabBlock?: boolean;
+    /** 创建 Tab 区块回调（传入选中的区块 ID 列表） */
+    onCreateTab?: (blockIds: string[]) => void;
+    /** 是否支持创建 Tab 区块 */
+    canCreateTab?: boolean;
+    /** 已在 Tab 中使用的区块 ID（不可再选） */
+    usedTabBlockIds?: string[];
   }
 
   // 默认状态标签映射
@@ -135,14 +138,16 @@
     nodeType,
     currentLayout,
     onApplyLayout,
-    onAddTabBlock,
-    canAddTabBlock = false,
+    onCreateTab,
+    canCreateTab = false,
+    usedTabBlockIds = [],
   }: Props = $props();
 
   // 状态
   let collapsed = $state.raw(false);
   let pinned = $state(false);
   let showLayoutBar = $state(false);  // 布局预设栏展开状态
+  let showTabConfig = $state(false);  // Tab 配置面板展开状态
 
   // 检测是否在全屏模式（原节点需要变淡）
   let isNodeInFullscreen = $derived(
@@ -269,14 +274,14 @@
         </button>
       {/if}
 
-      <!-- 添加 Tab 区块按钮（全屏模式） -->
-      {#if isFullscreenRender && canAddTabBlock && onAddTabBlock}
+      <!-- 创建 Tab 区块按钮（全屏模式） -->
+      {#if isFullscreenRender && canCreateTab && onCreateTab && nodeType}
         <button
-          class="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-primary"
-          onclick={onAddTabBlock}
-          title="添加 Tab 区块"
+          class="p-1 rounded hover:bg-muted transition-colors {showTabConfig ? 'text-primary' : 'text-muted-foreground'}"
+          onclick={() => { showTabConfig = !showTabConfig; if (showTabConfig) showLayoutBar = false; }}
+          title="创建 Tab 区块"
         >
-          <Plus class="w-3.5 h-3.5" />
+          <Layers class="w-3.5 h-3.5" />
         </button>
       {/if}
 
@@ -284,7 +289,7 @@
       {#if isFullscreenRender && nodeType && currentLayout && onApplyLayout}
         <button
           class="p-1 rounded hover:bg-muted transition-colors {showLayoutBar ? 'text-primary' : 'text-muted-foreground'}"
-          onclick={() => showLayoutBar = !showLayoutBar}
+          onclick={() => { showLayoutBar = !showLayoutBar; if (showLayoutBar) showTabConfig = false; }}
           title="布局预设"
         >
           <Layout class="w-3.5 h-3.5" />
@@ -340,6 +345,18 @@
         {nodeType}
         {currentLayout}
         onApply={onApplyLayout}
+      />
+    </div>
+  {/if}
+
+  <!-- Tab 配置面板（全屏模式，标题栏下方） -->
+  {#if isFullscreenRender && showTabConfig && nodeType && onCreateTab}
+    <div class="px-3 py-2 bg-muted/20 border-b shrink-0">
+      <TabConfigPanel 
+        {nodeType}
+        usedBlockIds={usedTabBlockIds}
+        onCreate={(blockIds) => { onCreateTab(blockIds); showTabConfig = false; }}
+        onCancel={() => showTabConfig = false}
       />
     </div>
   {/if}

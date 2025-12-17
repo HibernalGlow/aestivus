@@ -12,7 +12,7 @@
   import { DashboardGrid, DashboardItem } from '$lib/components/ui/dashboard-grid';
   import type { GridItem } from '$lib/components/ui/dashboard-grid';
   import { BlockCard, TabBlockCard } from '$lib/components/blocks';
-  import { ENGINEV_DEFAULT_GRID_LAYOUT, type TabBlockState } from '$lib/components/blocks/blockRegistry';
+  import { ENGINEV_DEFAULT_GRID_LAYOUT, getBlockDefinition, type TabBlockState } from '$lib/components/blocks/blockRegistry';
   import { api } from '$lib/services/api';
   import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
   import { getDefaultPreset } from '$lib/stores/layoutPresets';
@@ -80,36 +80,71 @@
     saveState();
   }
 
-  // 添加新的 Tab 区块（自动找空位）
-  function addTabBlock() {
-    const newId = `tab-${++tabBlockCounter}`;
-    dynamicTabBlocks = [...dynamicTabBlocks, newId];
+  // 创建 Tab 区块（合并选中的区块）
+  // 方案：把第一个区块的位置变成 Tab 容器，其他区块隐藏
+  function createTab(blockIds: string[]) {
+    if (blockIds.length < 2) return;
     
-    // 找到一个合适的空位（GridStack 会自动调整，这里设置初始位置）
-    // 使用 x: -1 让 GridStack 自动找位置（autoPosition）
-    const newItem: GridItem = { 
-      id: newId, 
-      x: 0, 
-      y: 0, 
-      w: 2, 
-      h: 3, 
-      minW: 1, 
-      minH: 2 
-    };
-    gridLayout = [...gridLayout, newItem];
+    // 使用第一个区块的 ID 作为 Tab 容器 ID（复用位置）
+    const tabId = blockIds[0];
     
-    // 触发 GridStack 重新布局
-    setTimeout(() => {
-      dashboardGrid?.compact();
-    }, 100);
+    // 从布局中移除其他被合并的区块（保留第一个）
+    const otherBlockIds = blockIds.slice(1);
+    gridLayout = gridLayout.filter(item => !otherBlockIds.includes(item.id));
+    
+    // 记录这个区块现在是 Tab 模式
+    dynamicTabBlocks = [...dynamicTabBlocks, tabId];
+    
+    // 设置 Tab 的初始状态（包含所有选中的区块）
+    tabStates = { ...tabStates, [tabId]: { activeTab: 0, children: blockIds } };
     
     saveState();
   }
+  
+  // 获取已在 Tab 中使用的区块 ID（作为子区块）
+  let usedTabBlockIds = $derived(() => {
+    const ids: string[] = [];
+    for (const state of Object.values(tabStates)) {
+      // 跳过第一个（它是 Tab 容器本身）
+      ids.push(...state.children.slice(1));
+    }
+    return ids;
+  });
+  
+  // 检查某个区块是否是 Tab 容器
+  function isTabContainer(blockId: string): boolean {
+    return dynamicTabBlocks.includes(blockId);
+  }
+  
+  // 获取 Tab 容器的状态
+  function getTabState(blockId: string): TabBlockState | undefined {
+    return tabStates[blockId];
+  }
 
-  // 删除 Tab 区块
+  // 删除 Tab 区块（恢复为独立区块）
   function removeTabBlock(tabId: string) {
+    const state = tabStates[tabId];
+    if (state) {
+      // 恢复被隐藏的区块到布局中
+      const tabItem = gridLayout.find(item => item.id === tabId);
+      const baseY = tabItem?.y ?? 0;
+      const baseX = (tabItem?.x ?? 0) + (tabItem?.w ?? 2);
+      
+      // 把其他子区块添加回布局
+      state.children.slice(1).forEach((childId, index) => {
+        gridLayout = [...gridLayout, {
+          id: childId,
+          x: baseX,
+          y: baseY + index * 2,
+          w: 1,
+          h: 2,
+          minW: 1,
+          minH: 1
+        }];
+      });
+    }
+    
     dynamicTabBlocks = dynamicTabBlocks.filter(id => id !== tabId);
-    gridLayout = gridLayout.filter(item => item.id !== tabId);
     delete tabStates[tabId];
     saveState();
   }
@@ -600,80 +635,42 @@
   <NodeWrapper 
     nodeId={id} title="enginev" icon={Image} status={phase} {borderClass} {isFullscreenRender}
     onCompact={() => dashboardGrid?.compact()}
-    onResetLayout={() => { gridLayout = [...ENGINEV_DEFAULT_GRID_LAYOUT]; dynamicTabBlocks = []; dashboardGrid?.applyLayout(gridLayout); saveState(); }}
+    onResetLayout={() => { gridLayout = [...ENGINEV_DEFAULT_GRID_LAYOUT]; dynamicTabBlocks = []; tabStates = {}; dashboardGrid?.applyLayout(gridLayout); saveState(); }}
     nodeType="enginev" currentLayout={gridLayout}
     onApplyLayout={(layout) => { gridLayout = layout; dashboardGrid?.applyLayout(layout); saveState(); }}
-    canAddTabBlock={true}
-    onAddTabBlock={addTabBlock}
+    canCreateTab={true}
+    onCreateTab={createTab}
+    usedTabBlockIds={usedTabBlockIds()}
   >
     {#snippet children()}
       {#if isFullscreenRender}
         <!-- 全屏模式：GridStack -->
         <div class="h-full overflow-hidden">
           <DashboardGrid bind:this={dashboardGrid} columns={4} cellHeight={80} margin={12} showToolbar={false} onLayoutChange={handleLayoutChange}>
-            {@const pathItem = getLayoutItem('path')}
-            <DashboardItem id="path" x={pathItem.x} y={pathItem.y} w={pathItem.w} h={pathItem.h} minW={1} minH={1}>
-              <BlockCard id="path" title="工坊路径" icon={FolderOpen} iconClass="text-primary" isFullscreen={true}>
-                {#snippet children()}{@render pathBlockContent()}{/snippet}
-              </BlockCard>
-            </DashboardItem>
-            
-            {@const filterItem = getLayoutItem('filter')}
-            <DashboardItem id="filter" x={filterItem.x} y={filterItem.y} w={filterItem.w} h={filterItem.h} minW={1} minH={1}>
-              <BlockCard id="filter" title="过滤条件" icon={Filter} iconClass="text-blue-500" isFullscreen={true}>
-                {#snippet children()}{@render filterBlockContent()}{/snippet}
-              </BlockCard>
-            </DashboardItem>
-            
-            {@const statsItem = getLayoutItem('stats')}
-            <DashboardItem id="stats" x={statsItem.x} y={statsItem.y} w={statsItem.w} h={statsItem.h} minW={1} minH={1}>
-              <BlockCard id="stats" title="统计" icon={BarChart3} iconClass="text-yellow-500" isFullscreen={true}>
-                {#snippet children()}{@render statsBlockContent()}{/snippet}
-              </BlockCard>
-            </DashboardItem>
-            
-            {@const opItem = getLayoutItem('operation')}
-            <DashboardItem id="operation" x={opItem.x} y={opItem.y} w={opItem.w} h={opItem.h} minW={1} minH={1}>
-              <BlockCard id="operation" title="操作" icon={Play} iconClass="text-green-500" isFullscreen={true}>
-                {#snippet children()}{@render operationBlockContent()}{/snippet}
-              </BlockCard>
-            </DashboardItem>
-            
-            {@const renameItem = getLayoutItem('rename')}
-            <DashboardItem id="rename" x={renameItem.x} y={renameItem.y} w={renameItem.w} h={renameItem.h} minW={1} minH={1}>
-              <BlockCard id="rename" title="重命名配置" icon={Pencil} iconClass="text-orange-500" isFullscreen={true}>
-                {#snippet children()}{@render renameBlockContent()}{/snippet}
-              </BlockCard>
-            </DashboardItem>
-            
-            {@const galleryItem = getLayoutItem('gallery')}
-            <DashboardItem id="gallery" x={galleryItem.x} y={galleryItem.y} w={galleryItem.w} h={galleryItem.h} minW={2} minH={2}>
-              <BlockCard id="gallery" title="壁纸列表" icon={Grid3X3} iconClass="text-purple-500" isFullscreen={true} fullHeight={true} hideHeader={true}>
-                {#snippet children()}{@render galleryBlockContent()}{/snippet}
-              </BlockCard>
-            </DashboardItem>
-            
-            {@const logItem = getLayoutItem('log')}
-            <DashboardItem id="log" x={logItem.x} y={logItem.y} w={logItem.w} h={logItem.h} minW={1} minH={1}>
-              <BlockCard id="log" title="日志" icon={Copy} iconClass="text-muted-foreground" isFullscreen={true} fullHeight={true} hideHeader={true}>
-                {#snippet children()}{@render logBlockContent()}{/snippet}
-              </BlockCard>
-            </DashboardItem>
-            
-            <!-- 动态 Tab 区块 -->
-            {#each dynamicTabBlocks as tabId (tabId)}
-              {@const tabItem = getLayoutItem(tabId)}
-              <DashboardItem id={tabId} x={tabItem.x} y={tabItem.y} w={tabItem.w} h={tabItem.h} minW={1} minH={2}>
-                <TabBlockCard 
-                  id={tabId} 
-                  children={[]} 
-                  nodeType="enginev"
-                  isFullscreen={true}
-                  initialState={tabStates[tabId]}
-                  onStateChange={(state) => handleTabStateChange(tabId, state)}
-                  renderContent={renderBlockById}
-                  onRemove={() => removeTabBlock(tabId)}
-                />
+            <!-- 渲染所有布局中的区块（根据是否是 Tab 容器决定渲染方式） -->
+            {#each gridLayout as item (item.id)}
+              <DashboardItem id={item.id} x={item.x} y={item.y} w={item.w} h={item.h} minW={item.minW ?? 1} minH={item.minH ?? 1}>
+                {#if isTabContainer(item.id)}
+                  <!-- Tab 容器模式 -->
+                  <TabBlockCard 
+                    id={item.id} 
+                    children={getTabState(item.id)?.children ?? []} 
+                    nodeType="enginev"
+                    isFullscreen={true}
+                    initialState={getTabState(item.id)}
+                    onStateChange={(state) => handleTabStateChange(item.id, state)}
+                    renderContent={renderBlockById}
+                    onRemove={() => removeTabBlock(item.id)}
+                  />
+                {:else}
+                  <!-- 普通区块模式 -->
+                  {@const blockDef = getBlockDefinition('enginev', item.id)}
+                  {#if blockDef}
+                    <BlockCard id={item.id} title={blockDef.title} icon={blockDef.icon as any} iconClass={blockDef.iconClass} isFullscreen={true} fullHeight={blockDef.fullHeight} hideHeader={blockDef.hideHeader}>
+                      {#snippet children()}{@render renderBlockById(item.id)}{/snippet}
+                    </BlockCard>
+                  {/if}
+                {/if}
               </DashboardItem>
             {/each}
           </DashboardGrid>

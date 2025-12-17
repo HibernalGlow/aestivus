@@ -477,7 +477,7 @@
         nodeId={id}
         nodeType="enginev"
         isFullscreen={isFullscreenRender}
-        defaultGridLayout={ENGINEV_DEFAULT_GRID_LAYOUT}
+        defaultFullscreenLayout={ENGINEV_DEFAULT_GRID_LAYOUT}
       >
         {#snippet renderBlock(blockId: string, size: SizeMode)}
           {@render renderBlockContent(blockId, size)}

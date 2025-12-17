@@ -31,6 +31,8 @@
     renderContent: Snippet<[string]>;
     /** 自定义类名 */
     class?: string;
+    /** 删除此 Tab 区块的回调 */
+    onRemove?: () => void;
   }
 
   let {
@@ -43,7 +45,8 @@
     onStateChange,
     initialState,
     renderContent,
-    class: className = ''
+    class: className = '',
+    onRemove
   }: Props = $props();
 
   // 动态子区块列表（从初始状态恢复或使用传入的）
@@ -149,8 +152,12 @@
 <div 
   class="tab-block-card h-full flex flex-col {isFullscreen ? 'border border-primary/40 rounded-md bg-card/80 backdrop-blur-sm' : 'bg-card rounded-lg border shadow-sm'} {className}"
 >
-  <!-- 标签栏 -->
+  <!-- 标签栏（带拖动手柄） -->
   <div class="tab-bar flex items-center {isFullscreen ? 'p-1.5 border-b bg-muted/30' : 'p-1'} shrink-0">
+    <!-- 拖动手柄区域（用于 GridStack 拖动） -->
+    <div class="drag-handle cursor-move px-1 py-1 mr-1 hover:bg-muted/50 rounded transition-colors" title="拖动移动">
+      <GripVertical class="w-3.5 h-3.5 text-muted-foreground" />
+    </div>
     <!-- 标签列表（支持拖拽排序） -->
     {#if editMode && childBlocks.length > 0}
       <div 
@@ -214,6 +221,18 @@
           title={editMode ? '完成编辑' : '编辑标签'}
         >
           <GripVertical class="w-3.5 h-3.5" />
+        </button>
+      {/if}
+
+      <!-- 删除此 Tab 区块 -->
+      {#if onRemove}
+        <button
+          type="button"
+          class="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-all"
+          onclick={onRemove}
+          title="删除此 Tab 区块"
+        >
+          <X class="w-3.5 h-3.5" />
         </button>
       {/if}
       

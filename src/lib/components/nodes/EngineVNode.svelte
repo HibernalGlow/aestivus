@@ -29,33 +29,36 @@
   } from './enginev-utils';
   import { getApiV1Url } from '$lib/stores/backend';
   
-  export let id: string;
-  export let data: { config?: { path?: string }; logs?: string[] } = {};
-  export let isFullscreenRender = false;
+  interface Props {
+    id: string;
+    data?: { config?: { path?: string }; logs?: string[] };
+    isFullscreenRender?: boolean;
+  }
+  
+  let { id, data = {}, isFullscreenRender = false }: Props = $props();
   
   // 从 nodeStateStore 恢复状态
   const savedState = getNodeState<EngineVState>(id);
   
-  // 状态初始化
-  let phase: Phase = savedState?.phase ?? 'idle';
-  let logs: string[] = savedState?.logs ?? (data?.logs ? [...data.logs] : []);
-  let copied = false;
-
-  // 配置 - 默认 Wallpaper Engine 工坊目录
+  // 默认 Wallpaper Engine 工坊目录
   const DEFAULT_WORKSHOP_PATH = 'E:\\SteamLibrary\\steamapps\\workshop\\content\\431960';
-  let workshopPath = savedState?.workshopPath ?? data?.config?.path ?? DEFAULT_WORKSHOP_PATH;
-  
-  // 数据
-  let wallpapers: WallpaperItem[] = savedState?.wallpapers ?? [];
-  let filteredWallpapers: WallpaperItem[] = savedState?.filteredWallpapers ?? [];
-  let stats: EngineVStats = savedState?.stats ?? { ...DEFAULT_STATS };
-  let filters: FilterOptions = savedState?.filters ?? { ...DEFAULT_FILTERS };
-  let renameConfig: RenameConfig = savedState?.renameConfig ?? { ...DEFAULT_RENAME_CONFIG };
-  let selectedIds: Set<string> = new Set(savedState?.selectedIds ?? []);
-  let viewMode: 'grid' | 'list' = savedState?.viewMode ?? 'grid';
-  
   // API 基础 URL（用于图片预览）
   const apiBase = getApiV1Url();
+  
+  // 状态初始化（使用 $state）
+  let phase = $state<Phase>(savedState?.phase ?? 'idle');
+  let logs = $state<string[]>(savedState?.logs ?? (data?.logs ? [...data.logs] : []));
+  let copied = $state(false);
+  let workshopPath = $state(savedState?.workshopPath ?? data?.config?.path ?? DEFAULT_WORKSHOP_PATH);
+  
+  // 数据状态
+  let wallpapers = $state<WallpaperItem[]>(savedState?.wallpapers ?? []);
+  let filteredWallpapers = $state<WallpaperItem[]>(savedState?.filteredWallpapers ?? []);
+  let stats = $state<EngineVStats>(savedState?.stats ?? { ...DEFAULT_STATS });
+  let filters = $state<FilterOptions>(savedState?.filters ?? { ...DEFAULT_FILTERS });
+  let renameConfig = $state<RenameConfig>(savedState?.renameConfig ?? { ...DEFAULT_RENAME_CONFIG });
+  let selectedIds = $state<Set<string>>(new Set(savedState?.selectedIds ?? []));
+  let viewMode = $state<'grid' | 'list'>(savedState?.viewMode ?? 'grid');
   
   // GridStack 布局
   function getInitialLayout(): GridItem[] {
@@ -64,15 +67,50 @@
     if (defaultPreset) return [...defaultPreset.layout];
     return [...ENGINEV_DEFAULT_GRID_LAYOUT];
   }
-  let gridLayout: GridItem[] = getInitialLayout();
-  
-  let dashboardGrid: { compact: () => void; applyLayout: (layout: GridItem[]) => void } | undefined;
+  let gridLayout = $state<GridItem[]>(getInitialLayout());
+  let dashboardGrid = $state<{ compact: () => void; applyLayout: (layout: GridItem[]) => void } | undefined>(undefined);
 
   // Tab 区块状态
-  let tabStates: Record<string, TabBlockState> = savedState?.tabStates ?? {};
+  let tabStates = $state<Record<string, TabBlockState>>(savedState?.tabStates ?? {});
+  let dynamicTabBlocks = $state<string[]>(savedState?.dynamicTabBlocks ?? []);
+  let tabBlockCounter = $state(savedState?.tabBlockCounter ?? 0);
   
   function handleTabStateChange(tabId: string, state: TabBlockState) {
     tabStates = { ...tabStates, [tabId]: state };
+    saveState();
+  }
+
+  // 添加新的 Tab 区块（自动找空位）
+  function addTabBlock() {
+    const newId = `tab-${++tabBlockCounter}`;
+    dynamicTabBlocks = [...dynamicTabBlocks, newId];
+    
+    // 找到一个合适的空位（GridStack 会自动调整，这里设置初始位置）
+    // 使用 x: -1 让 GridStack 自动找位置（autoPosition）
+    const newItem: GridItem = { 
+      id: newId, 
+      x: 0, 
+      y: 0, 
+      w: 2, 
+      h: 3, 
+      minW: 1, 
+      minH: 2 
+    };
+    gridLayout = [...gridLayout, newItem];
+    
+    // 触发 GridStack 重新布局
+    setTimeout(() => {
+      dashboardGrid?.compact();
+    }, 100);
+    
+    saveState();
+  }
+
+  // 删除 Tab 区块
+  function removeTabBlock(tabId: string) {
+    dynamicTabBlocks = dynamicTabBlocks.filter(id => id !== tabId);
+    gridLayout = gridLayout.filter(item => item.id !== tabId);
+    delete tabStates[tabId];
     saveState();
   }
 
@@ -84,13 +122,18 @@
   function saveState() {
     setNodeState<EngineVState>(id, {
       phase, logs, workshopPath, wallpapers, filteredWallpapers, stats, filters, renameConfig,
-      gridLayout, selectedIds, viewMode, tabStates
+      gridLayout, selectedIds, viewMode, tabStates, dynamicTabBlocks, tabBlockCounter
     });
   }
   
-  $: if (phase || wallpapers || filteredWallpapers || stats || gridLayout) saveState();
-  $: isRunning = phase === 'scanning' || phase === 'renaming';
-  $: borderClass = getPhaseBorderClass(phase);
+  // 响应式派生值
+  let isRunning = $derived(phase === 'scanning' || phase === 'renaming');
+  let borderClass = $derived(getPhaseBorderClass(phase));
+  
+  // 状态变化时自动保存
+  $effect(() => {
+    if (phase || wallpapers || filteredWallpapers || stats || gridLayout) saveState();
+  });
 
   function log(msg: string) { logs = [...logs.slice(-30), msg]; }
 
@@ -557,9 +600,11 @@
   <NodeWrapper 
     nodeId={id} title="enginev" icon={Image} status={phase} {borderClass} {isFullscreenRender}
     onCompact={() => dashboardGrid?.compact()}
-    onResetLayout={() => { gridLayout = [...ENGINEV_DEFAULT_GRID_LAYOUT]; dashboardGrid?.applyLayout(gridLayout); saveState(); }}
+    onResetLayout={() => { gridLayout = [...ENGINEV_DEFAULT_GRID_LAYOUT]; dynamicTabBlocks = []; dashboardGrid?.applyLayout(gridLayout); saveState(); }}
     nodeType="enginev" currentLayout={gridLayout}
     onApplyLayout={(layout) => { gridLayout = layout; dashboardGrid?.applyLayout(layout); saveState(); }}
+    canAddTabBlock={true}
+    onAddTabBlock={addTabBlock}
   >
     {#snippet children()}
       {#if isFullscreenRender}
@@ -615,19 +660,22 @@
               </BlockCard>
             </DashboardItem>
             
-            <!-- Tab 区块：动态添加子区块 -->
-            {@const tabItem = getLayoutItem('tab-stats-op')}
-            <DashboardItem id="tab-stats-op" x={tabItem.x} y={tabItem.y} w={tabItem.w} h={tabItem.h} minW={1} minH={2}>
-              <TabBlockCard 
-                id="tab-stats-op" 
-                children={[]} 
-                nodeType="enginev"
-                isFullscreen={true}
-                initialState={tabStates['tab-stats-op']}
-                onStateChange={(state) => handleTabStateChange('tab-stats-op', state)}
-                renderContent={renderBlockById}
-              />
-            </DashboardItem>
+            <!-- 动态 Tab 区块 -->
+            {#each dynamicTabBlocks as tabId (tabId)}
+              {@const tabItem = getLayoutItem(tabId)}
+              <DashboardItem id={tabId} x={tabItem.x} y={tabItem.y} w={tabItem.w} h={tabItem.h} minW={1} minH={2}>
+                <TabBlockCard 
+                  id={tabId} 
+                  children={[]} 
+                  nodeType="enginev"
+                  isFullscreen={true}
+                  initialState={tabStates[tabId]}
+                  onStateChange={(state) => handleTabStateChange(tabId, state)}
+                  renderContent={renderBlockById}
+                  onRemove={() => removeTabBlock(tabId)}
+                />
+              </DashboardItem>
+            {/each}
           </DashboardGrid>
         </div>
 

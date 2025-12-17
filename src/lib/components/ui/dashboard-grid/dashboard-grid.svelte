@@ -152,7 +152,9 @@
       disableDrag: disableDrag,
       disableResize: disableResize,
       animate: true,
-      resizable: { handles: 'se,sw,ne,nw,e,w,n,s' }
+      resizable: { handles: 'se,sw,ne,nw,e,w,n,s' },
+      // 使用 .drag-handle 作为拖动手柄（如果存在），否则整个 item 可拖动
+      handle: '.drag-handle'
     }, gridElement);
 
     // 监听布局变化事件

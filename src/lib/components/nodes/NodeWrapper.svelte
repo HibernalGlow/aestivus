@@ -16,6 +16,8 @@
     LayoutGrid,
     RotateCcw,
     Layout,
+    Plus,
+    Layers,
   } from "@lucide/svelte";
   import { Badge } from "$lib/components/ui/badge";
   import { LayoutPresetSelector } from "$lib/components/ui/dashboard-grid";
@@ -75,6 +77,10 @@
     currentLayout?: GridItem[];
     /** 应用布局回调（全屏模式） */
     onApplyLayout?: (layout: GridItem[]) => void;
+    /** 添加 Tab 区块回调（全屏模式） */
+    onAddTabBlock?: () => void;
+    /** 是否支持添加 Tab 区块 */
+    canAddTabBlock?: boolean;
   }
 
   // 默认状态标签映射
@@ -129,6 +135,8 @@
     nodeType,
     currentLayout,
     onApplyLayout,
+    onAddTabBlock,
+    canAddTabBlock = false,
   }: Props = $props();
 
   // 状态
@@ -258,6 +266,17 @@
           title="重置布局"
         >
           <RotateCcw class="w-3.5 h-3.5" />
+        </button>
+      {/if}
+
+      <!-- 添加 Tab 区块按钮（全屏模式） -->
+      {#if isFullscreenRender && canAddTabBlock && onAddTabBlock}
+        <button
+          class="p-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-primary"
+          onclick={onAddTabBlock}
+          title="添加 Tab 区块"
+        >
+          <Plus class="w-3.5 h-3.5" />
         </button>
       {/if}
 

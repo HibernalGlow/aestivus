@@ -84,6 +84,10 @@ export interface EngineVState {
   viewMode: 'grid' | 'list';
   /** Tab 区块状态 */
   tabStates?: Record<string, TabBlockState>;
+  /** 动态 Tab 区块 ID 列表 */
+  dynamicTabBlocks?: string[];
+  /** Tab 区块计数器 */
+  tabBlockCounter?: number;
 }
 
 // ============ 默认值 ============

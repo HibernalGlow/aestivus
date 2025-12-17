@@ -26,8 +26,10 @@
     id: string;
     /** 子区块 ID 列表（仅用于初始渲染，实际状态从 store 获取） */
     children?: string[];
-    /** 节点类型（用于从注册表获取区块定义和 store 操作） */
+    /** 节点类型（用于从注册表获取区块定义） */
     nodeType: string;
+    /** 节点 ID（用于 store 操作，每个节点实例独立） */
+    nodeId: string;
     /** 是否全屏模式 */
     isFullscreen?: boolean;
     /** 初始活动标签索引（仅用于初始渲染） */
@@ -50,6 +52,7 @@
     id,
     children: initialChildren = [],
     nodeType,
+    nodeId,
     isFullscreen = false,
     defaultActiveTab = 0,
     onTabChange,
@@ -60,9 +63,9 @@
     onRemove
   }: Props = $props();
 
-  // 从 store 获取状态，如果没有则使用传入的初始值
+  // 从 store 获取状态，如果没有则使用传入的初始值（使用 nodeId）
   function getInitialState() {
-    const storeState = getTabState(nodeType, id);
+    const storeState = getTabState(nodeId, id);
     if (storeState) {
       return { children: storeState.children, activeTab: storeState.activeTab };
     }
@@ -78,10 +81,10 @@
   // 活动标签索引
   let activeTab = $state(getInitialState().activeTab);
   
-  // 订阅 store 变化
+  // 订阅 store 变化（使用 nodeId）
   onMount(() => {
-    const unsubscribe = subscribeTabConfig(nodeType, () => {
-      const state = getTabState(nodeType, id);
+    const unsubscribe = subscribeTabConfig(nodeId, () => {
+      const state = getTabState(nodeId, id);
       if (state) {
         childIds = state.children;
         activeTab = state.activeTab;
@@ -116,27 +119,27 @@
   // 用于 dnd 的数据格式
   let dndItems = $derived(childBlocks.map((b, i) => ({ id: b.id, block: b, index: i })));
 
-  // 切换标签（使用 store）
+  // 切换标签（使用 nodeId）
   function switchTab(index: number) {
     if (index >= 0 && index < childBlocks.length) {
-      setActiveTab(nodeType, id, index);
+      setActiveTab(nodeId, id, index);
       onTabChange?.(index);
       notifyStateChange();
     }
   }
 
-  // 添加子区块（使用 store）
+  // 添加子区块（使用 nodeId）
   function addChild(blockId: string) {
     if (!childIds.includes(blockId)) {
-      addTabChild(nodeType, id, blockId);
+      addTabChild(nodeId, id, blockId);
       showAddMenu = false;
       notifyStateChange();
     }
   }
 
-  // 移除子区块（使用 store）
+  // 移除子区块（使用 nodeId）
   function removeChild(blockId: string) {
-    removeTabChild(nodeType, id, blockId);
+    removeTabChild(nodeId, id, blockId);
     notifyStateChange();
   }
 
@@ -147,9 +150,9 @@
   }
 
   function handleDndFinalize(e: CustomEvent<{ items: typeof dndItems }>) {
-    // 提交到 store
+    // 提交到 store（使用 nodeId）
     const newOrder = e.detail.items.map(item => item.id);
-    reorderChildren(nodeType, id, newOrder);
+    reorderChildren(nodeId, id, newOrder);
     notifyStateChange();
   }
 
@@ -174,7 +177,7 @@
   // 确保 activeTab 在有效范围内
   $effect(() => {
     if (activeTab >= childBlocks.length && childBlocks.length > 0) {
-      setActiveTab(nodeType, id, 0);
+      setActiveTab(nodeId, id, 0);
       notifyStateChange();
     }
   });

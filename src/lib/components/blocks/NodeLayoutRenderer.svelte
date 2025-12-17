@@ -84,10 +84,10 @@
     return modeState.gridLayout.length > 0;
   }
 
-  // 初始化节点配置（布局使用 nodeType，Tab 使用 nodeId）
+  // 初始化节点配置（使用 nodeType 作为 key）
   function initNodeConfig(): NodeConfig {
     const config = getOrCreateNodeConfig(nodeId, nodeType, defaultFullscreenLayout, defaultNormalLayout);
-    const initialTabConfig = getTabConfig(nodeId); // Tab 使用 nodeId 作为 key
+    const initialTabConfig = getTabConfig(nodeType);
     
     console.log('[NodeLayoutRenderer] 初始化配置:', {
       nodeType,
@@ -134,8 +134,8 @@
   // 节点配置（布局）
   let nodeConfig = $state<NodeConfig>(initNodeConfig());
   
-  // Tab 配置（使用 nodeId 作为 key，每个节点实例独立）
-  let tabConfig = $state<UnifiedTabConfig>(getTabConfig(nodeId));
+  // Tab 配置（统一存储，两种模式共享）
+  let tabConfig = $state<UnifiedTabConfig>(getTabConfig(nodeType));
   
   // 当 isFullscreen 变化时重新初始化（因为 mode 变了）
   $effect(() => {
@@ -166,8 +166,8 @@
       }
     });
     
-    // 订阅 Tab 配置变化（使用 nodeId）
-    const unsubscribeTab = subscribeTabConfig(nodeId, (config) => {
+    // 订阅 Tab 配置变化（统一存储）
+    const unsubscribeTab = subscribeTabConfig(nodeType, (config) => {
       tabConfig = config;
     });
     
@@ -183,9 +183,9 @@
   // DashboardGrid 引用
   let dashboardGrid = $state<{ compact: () => void; applyLayout: (layout: GridItem[]) => void } | undefined>(undefined);
   
-  // 获取已使用的 Tab 区块 ID（使用 nodeId）
+  // 获取已使用的 Tab 区块 ID（从统一 Tab 存储获取）
   let usedTabIds = $derived(() => {
-    return getUnifiedUsedBlockIds(nodeId);
+    return getUnifiedUsedBlockIds(nodeType);
   });
 
   // 获取可见区块（过滤掉被合并到 Tab 的）
@@ -207,58 +207,51 @@
     updateGridLayout(nodeType, mode, newLayout);
   }
 
-  // 处理 Tab 状态变化（使用 nodeId）
+  // 处理 Tab 状态变化（使用统一 Tab 存储）
   function handleTabStateChange(tabId: string, state: { activeTab: number; children: string[] }) {
     // 更新活动标签
-    setActiveTab(nodeId, tabId, state.activeTab);
+    setActiveTab(nodeType, tabId, state.activeTab);
     // 如果子区块顺序变化，更新顺序
-    const currentState = getUnifiedTabState(nodeId, tabId);
+    const currentState = getUnifiedTabState(nodeType, tabId);
     if (currentState && JSON.stringify(currentState.children) !== JSON.stringify(state.children)) {
-      reorderChildren(nodeId, tabId, state.children);
+      reorderChildren(nodeType, tabId, state.children);
     }
   }
 
-  // 创建 Tab 区块（使用 nodeId）
+  // 创建 Tab 区块（使用统一 Tab 存储）
   export function createTab(blockIds: string[]): string | null {
-    const tabId = createUnifiedTab(nodeId, blockIds);
+    const tabId = createUnifiedTab(nodeType, blockIds);
     if (tabId) {
-      // 从两个模式的布局中都移除被合并的区块（保留第一个作为 Tab 容器）
+      // 从布局中移除被合并的区块（保留第一个作为 Tab 容器）
       const otherBlockIds = blockIds.slice(1);
-      removeBlocksFromLayout(nodeType, 'normal', otherBlockIds);
-      removeBlocksFromLayout(nodeType, 'fullscreen', otherBlockIds);
+      removeBlocksFromLayout(nodeType, mode, otherBlockIds);
     }
     return tabId;
   }
 
-  // 删除 Tab 区块（使用 nodeId）
+  // 删除 Tab 区块（使用统一 Tab 存储）
   function handleRemoveTab(tabId: string) {
-    // 获取 Tab 容器在两个模式布局中的位置
-    const normalTabItem = nodeConfig.normal.gridLayout.find(item => item.id === tabId);
-    const fullscreenTabItem = nodeConfig.fullscreen.gridLayout.find(item => item.id === tabId);
+    // 获取 Tab 容器在布局中的位置
+    const tabItem = currentLayout.find(item => item.id === tabId);
+    const basePosition = { x: tabItem?.x ?? 0, y: tabItem?.y ?? 0 };
     
     // 从统一存储中删除 Tab，获取需要恢复的子区块
-    const childIds = removeUnifiedTab(nodeId, tabId);
+    const childIds = removeUnifiedTab(nodeType, tabId);
     
-    // 恢复子区块到两个模式的布局
+    // 恢复子区块到布局
     if (childIds.length > 0) {
-      // 恢复到节点模式
-      const normalBasePos = { x: normalTabItem?.x ?? 0, y: normalTabItem?.y ?? 0 };
-      restoreBlocksToLayout(nodeType, 'normal', childIds, normalBasePos, false);
-      
-      // 恢复到全屏模式
-      const fullscreenBasePos = { x: fullscreenTabItem?.x ?? 0, y: fullscreenTabItem?.y ?? 0 };
-      restoreBlocksToLayout(nodeType, 'fullscreen', childIds, fullscreenBasePos, true);
+      restoreBlocksToLayout(nodeType, mode, childIds, basePosition, isFullscreen);
     }
   }
 
-  // 检查区块是否是 Tab 容器（使用 nodeId）
+  // 检查区块是否是 Tab 容器（使用统一 Tab 存储）
   function checkIsTabContainer(blockId: string): boolean {
-    return checkUnifiedTabContainer(nodeId, blockId);
+    return checkUnifiedTabContainer(nodeType, blockId);
   }
 
-  // 获取 Tab 状态（使用 nodeId）
+  // 获取 Tab 状态（使用统一 Tab 存储）
   function getBlockTabState(blockId: string) {
-    const state = getUnifiedTabState(nodeId, blockId);
+    const state = getUnifiedTabState(nodeType, blockId);
     if (!state) return undefined;
     return { activeTab: state.activeTab, children: state.children };
   }
@@ -340,7 +333,6 @@
               id={gridItem.id}
               children={getBlockTabState(gridItem.id)?.children ?? []}
               {nodeType}
-              {nodeId}
               isFullscreen={true}
               initialState={getBlockTabState(gridItem.id)}
               onStateChange={(state) => handleTabStateChange(gridItem.id, state)}
@@ -385,7 +377,6 @@
               id={item.id}
               children={getBlockTabState(item.id)?.children ?? []}
               {nodeType}
-              {nodeId}
               isFullscreen={false}
               initialState={getBlockTabState(item.id)}
               onStateChange={(state) => handleTabStateChange(item.id, state)}

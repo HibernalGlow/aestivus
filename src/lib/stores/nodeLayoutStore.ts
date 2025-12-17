@@ -80,12 +80,30 @@ function saveToStorage(states: LayoutStatesMap): void {
   }
 }
 
-// 创建 TanStack Store
-export const nodeLayoutStore = new Store<LayoutStatesMap>(loadFromStorage());
+// 创建 TanStack Store（初始为空，客户端挂载时加载）
+export const nodeLayoutStore = new Store<LayoutStatesMap>(new Map());
+
+// 标记是否已从 localStorage 加载
+let isHydrated = false;
+
+/**
+ * 确保从 localStorage 加载状态（客户端）
+ */
+export function hydrateFromStorage(): void {
+  if (isHydrated || typeof window === 'undefined') return;
+  isHydrated = true;
+  
+  const stored = loadFromStorage();
+  if (stored.size > 0) {
+    nodeLayoutStore.setState(() => stored);
+  }
+}
 
 // 订阅变化，自动保存到 localStorage
 nodeLayoutStore.subscribe(() => {
-  saveToStorage(nodeLayoutStore.state);
+  if (isHydrated) {
+    saveToStorage(nodeLayoutStore.state);
+  }
 });
 
 /**
@@ -108,8 +126,12 @@ export function setNodeLayoutState(nodeId: string, state: NodeLayoutState): void
 
 /**
  * 获取或创建节点布局状态
+ * 首次调用时会自动从 localStorage 加载
  */
 export function getOrCreateLayoutState(nodeId: string, defaultGridLayout: GridItem[] = []): NodeLayoutState {
+  // 确保客户端已从 localStorage 加载
+  hydrateFromStorage();
+  
   const existing = getNodeLayoutState(nodeId);
   if (existing) return existing;
   

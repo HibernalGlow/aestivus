@@ -1,31 +1,42 @@
 <script lang="ts">
   /**
-   * TabBlockCard - Tab 容器区块组件（动态版）
+   * TabBlockCard - Tab 容器区块组件
    * 支持运行时动态添加/移除/排序子区块
    * 标签栏替代子区块的标题栏，节省界面空间
+   * 
+   * 状态管理：使用 unifiedTabStore 统一管理，两种模式共享
    */
   import type { Snippet, Component } from 'svelte';
   import { getTabBlockChildren, getNodeBlockLayout, type BlockDefinition, type TabBlockState } from './blockRegistry';
   import { Plus, X, GripVertical, ChevronDown } from '@lucide/svelte';
   import { flip } from 'svelte/animate';
   import { dndzone } from 'svelte-dnd-action';
+  import {
+    getTabState,
+    setActiveTab,
+    addChild as addTabChild,
+    removeChild as removeTabChild,
+    reorderChildren,
+    subscribeTabConfig
+  } from '$lib/stores/unifiedTabStore';
+  import { onMount } from 'svelte';
 
   interface Props {
-    /** 区块 ID */
+    /** 区块 ID（Tab 容器 ID） */
     id: string;
-    /** 子区块 ID 列表（可绑定） */
+    /** 子区块 ID 列表（仅用于初始渲染，实际状态从 store 获取） */
     children?: string[];
-    /** 节点类型（用于从注册表获取区块定义） */
+    /** 节点类型（用于从注册表获取区块定义和 store 操作） */
     nodeType: string;
     /** 是否全屏模式 */
     isFullscreen?: boolean;
-    /** 初始活动标签索引 */
+    /** 初始活动标签索引（仅用于初始渲染） */
     defaultActiveTab?: number;
     /** 标签切换回调 */
     onTabChange?: (index: number) => void;
-    /** 状态变化回调（用于持久化） */
+    /** 状态变化回调（用于通知父组件） */
     onStateChange?: (state: TabBlockState) => void;
-    /** 初始状态（从持久化恢复） */
+    /** 初始状态（仅用于初始渲染，实际状态从 store 获取） */
     initialState?: TabBlockState;
     /** 子区块内容渲染器 */
     renderContent: Snippet<[string]>;
@@ -49,11 +60,35 @@
     onRemove
   }: Props = $props();
 
-  // 动态子区块列表（从初始状态恢复或使用传入的）
-  let childIds = $state<string[]>(initialState?.children ?? initialChildren);
+  // 从 store 获取状态，如果没有则使用传入的初始值
+  function getInitialState() {
+    const storeState = getTabState(nodeType, id);
+    if (storeState) {
+      return { children: storeState.children, activeTab: storeState.activeTab };
+    }
+    return { 
+      children: initialState?.children ?? initialChildren,
+      activeTab: initialState?.activeTab ?? defaultActiveTab
+    };
+  }
+
+  // 动态子区块列表
+  let childIds = $state<string[]>(getInitialState().children);
   
-  // 从初始状态恢复活动标签
-  let activeTab = $state(initialState?.activeTab ?? defaultActiveTab);
+  // 活动标签索引
+  let activeTab = $state(getInitialState().activeTab);
+  
+  // 订阅 store 变化
+  onMount(() => {
+    const unsubscribe = subscribeTabConfig(nodeType, () => {
+      const state = getTabState(nodeType, id);
+      if (state) {
+        childIds = state.children;
+        activeTab = state.activeTab;
+      }
+    });
+    return unsubscribe;
+  });
   
   // 是否显示添加菜单
   let showAddMenu = $state(false);
@@ -81,49 +116,45 @@
   // 用于 dnd 的数据格式
   let dndItems = $derived(childBlocks.map((b, i) => ({ id: b.id, block: b, index: i })));
 
-  // 切换标签
+  // 切换标签（使用 store）
   function switchTab(index: number) {
     if (index >= 0 && index < childBlocks.length) {
-      activeTab = index;
+      setActiveTab(nodeType, id, index);
       onTabChange?.(index);
-      saveState();
+      notifyStateChange();
     }
   }
 
-  // 添加子区块
+  // 添加子区块（使用 store）
   function addChild(blockId: string) {
     if (!childIds.includes(blockId)) {
-      childIds = [...childIds, blockId];
+      addTabChild(nodeType, id, blockId);
       showAddMenu = false;
-      saveState();
+      notifyStateChange();
     }
   }
 
-  // 移除子区块
+  // 移除子区块（使用 store）
   function removeChild(blockId: string) {
-    const index = childIds.indexOf(blockId);
-    if (index !== -1) {
-      childIds = childIds.filter(id => id !== blockId);
-      // 调整活动标签
-      if (activeTab >= childIds.length && childIds.length > 0) {
-        activeTab = childIds.length - 1;
-      }
-      saveState();
-    }
+    removeTabChild(nodeType, id, blockId);
+    notifyStateChange();
   }
 
   // 处理拖拽排序
   function handleDndConsider(e: CustomEvent<{ items: typeof dndItems }>) {
+    // 仅更新本地状态用于视觉反馈
     childIds = e.detail.items.map(item => item.id);
   }
 
   function handleDndFinalize(e: CustomEvent<{ items: typeof dndItems }>) {
-    childIds = e.detail.items.map(item => item.id);
-    saveState();
+    // 提交到 store
+    const newOrder = e.detail.items.map(item => item.id);
+    reorderChildren(nodeType, id, newOrder);
+    notifyStateChange();
   }
 
-  // 保存状态
-  function saveState() {
+  // 通知父组件状态变化
+  function notifyStateChange() {
     onStateChange?.({
       activeTab,
       children: childIds
@@ -143,8 +174,8 @@
   // 确保 activeTab 在有效范围内
   $effect(() => {
     if (activeTab >= childBlocks.length && childBlocks.length > 0) {
-      activeTab = 0;
-      saveState();
+      setActiveTab(nodeType, id, 0);
+      notifyStateChange();
     }
   });
 </script>

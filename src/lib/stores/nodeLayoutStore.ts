@@ -1,11 +1,12 @@
 /**
  * 节点布局状态存储 - 统一管理节点的所有配置
  * 两种模式共用 GridItem[] 结构，节点模式用静态渲染，全屏模式用 GridStack
+ * 
+ * 注意：Tab 状态已迁移到 unifiedTabStore.ts，此处仅保留布局配置
  */
 
 import { Store } from '@tanstack/store';
 import type { GridItem } from '$lib/components/ui/dashboard-grid';
-import type { TabBlockState } from '$lib/components/blocks/blockRegistry';
 
 const STORAGE_KEY = 'aestival-node-layouts';
 
@@ -17,15 +18,19 @@ export interface BlockSizeOverride {
   maxH?: number;
 }
 
-/** 模式布局状态（全屏和节点模式共用） */
+/** 模式布局状态（简化版，Tab 状态已移至 unifiedTabStore） */
 export interface ModeLayoutState {
   /** 布局配置 */
   gridLayout: GridItem[];
-  /** Tab 区块状态 */
-  tabStates: Record<string, TabBlockState>;
-  /** Tab 容器列表 */
-  tabBlocks: string[];
   /** 尺寸覆盖 */
+  sizeOverrides: Record<string, BlockSizeOverride>;
+}
+
+/** 旧版模式布局状态（用于迁移） */
+interface LegacyModeLayoutState {
+  gridLayout: GridItem[];
+  tabStates?: Record<string, { activeTab: number; children: string[] }>;
+  tabBlocks?: string[];
   sizeOverrides: Record<string, BlockSizeOverride>;
 }
 
@@ -44,8 +49,6 @@ type NodeConfigMap = Map<string, NodeConfig>;
 export function createDefaultModeState(defaultGridLayout: GridItem[] = []): ModeLayoutState {
   return {
     gridLayout: defaultGridLayout,
-    tabStates: {},
-    tabBlocks: [],
     sizeOverrides: {}
   };
 }
@@ -128,15 +131,13 @@ export function setNodeConfig(nodeId: string, config: NodeConfig): void {
   });
 }
 
-/** 验证并修复配置结构 */
-function validateAndFixConfig(config: NodeConfig): NodeConfig {
-  // 确保 fullscreen 和 normal 都有完整结构
-  const fixModeState = (state: ModeLayoutState | undefined): ModeLayoutState => {
+/** 验证并修复配置结构（兼容旧格式） */
+function validateAndFixConfig(config: NodeConfig | { fullscreen?: LegacyModeLayoutState; normal?: LegacyModeLayoutState; nodeType?: string; updatedAt?: number }): NodeConfig {
+  // 确保 fullscreen 和 normal 都有完整结构（忽略旧的 tabStates 和 tabBlocks）
+  const fixModeState = (state: ModeLayoutState | LegacyModeLayoutState | undefined): ModeLayoutState => {
     if (!state) return createDefaultModeState();
     return {
       gridLayout: Array.isArray(state.gridLayout) ? state.gridLayout : [],
-      tabStates: state.tabStates && typeof state.tabStates === 'object' ? state.tabStates : {},
-      tabBlocks: Array.isArray(state.tabBlocks) ? state.tabBlocks : [],
       sizeOverrides: state.sizeOverrides && typeof state.sizeOverrides === 'object' ? state.sizeOverrides : {}
     };
   };
@@ -237,81 +238,46 @@ export function updateSizeOverride(
   });
 }
 
-// ============ Tab 操作 ============
+// ============ Tab 操作（已迁移到 unifiedTabStore.ts） ============
+// 注意：Tab 相关操作请使用 unifiedTabStore 中的函数：
+// - createTab, removeTab, setActiveTab
+// - addChild, removeChild, reorderChildren
+// - getUsedBlockIds, isTabContainer, getTabState
 
-export function updateTabState(
+// 以下函数保留用于布局操作中移除/恢复区块
+
+/** 从布局中移除区块（创建 Tab 时调用） */
+export function removeBlocksFromLayout(
   nodeType: string,
   mode: 'fullscreen' | 'normal',
-  tabId: string,
-  state: TabBlockState
+  blockIds: string[]
 ): void {
   nodeLayoutStore.setState((prev) => {
     const next = new Map(prev);
-    const current = next.get(nodeType) || createDefaultNodeConfig(nodeType);
+    const current = next.get(nodeType);
+    if (!current) return prev;
+    
+    const modeState = current[mode];
+    const newGridLayout = modeState.gridLayout.filter(item => !blockIds.includes(item.id));
+    
     next.set(nodeType, {
       ...current,
-      [mode]: {
-        ...current[mode],
-        tabStates: { ...current[mode].tabStates, [tabId]: state }
-      },
+      [mode]: { ...modeState, gridLayout: newGridLayout },
       updatedAt: Date.now()
     });
     return next;
   });
 }
 
-export function createTabBlock(
+/** 恢复区块到布局（删除 Tab 时调用） */
+export function restoreBlocksToLayout(
   nodeType: string,
   mode: 'fullscreen' | 'normal',
   blockIds: string[],
-  removeFromLayout: boolean = true
-): void {
-  if (blockIds.length < 2) return;
-  const tabId = blockIds[0];
-  const otherBlockIds = blockIds.slice(1);
-  
-  console.log('[createTabBlock] 创建 Tab:', { nodeType, mode, tabId, children: blockIds, removeIds: otherBlockIds });
-  
-  nodeLayoutStore.setState((prev) => {
-    const next = new Map(prev);
-    const current = next.get(nodeType) || createDefaultNodeConfig(nodeType);
-    const modeState = current[mode];
-    
-    // 从布局中移除被合并的区块（保留第一个作为 Tab 容器）
-    const newGridLayout = removeFromLayout 
-      ? modeState.gridLayout.filter(item => !otherBlockIds.includes(item.id))
-      : modeState.gridLayout;
-    
-    const newModeState = {
-      ...modeState,
-      gridLayout: newGridLayout,
-      tabBlocks: [...modeState.tabBlocks, tabId],
-      tabStates: { ...modeState.tabStates, [tabId]: { activeTab: 0, children: blockIds } }
-    };
-    
-    console.log('[createTabBlock] 新状态:', {
-      gridLayoutIds: newGridLayout.map(i => i.id),
-      tabBlocks: newModeState.tabBlocks,
-      tabStates: newModeState.tabStates
-    });
-    
-    next.set(nodeType, {
-      ...current,
-      [mode]: newModeState,
-      updatedAt: Date.now()
-    });
-    return next;
-  });
-}
-
-export function removeTabBlock(
-  nodeType: string,
-  mode: 'fullscreen' | 'normal',
-  tabId: string,
-  restoreToLayout: boolean = true,
+  basePosition: { x: number; y: number },
   isFullscreen: boolean = false
-): string[] {
-  let childIds: string[] = [];
+): void {
+  if (blockIds.length === 0) return;
   
   nodeLayoutStore.setState((prev) => {
     const next = new Map(prev);
@@ -319,59 +285,27 @@ export function removeTabBlock(
     if (!current) return prev;
     
     const modeState = current[mode];
-    const tabState = modeState.tabStates[tabId];
-    if (tabState) childIds = tabState.children.slice(1);
     
-    const newTabStates = { ...modeState.tabStates };
-    delete newTabStates[tabId];
-    
-    // 恢复被隐藏的区块到布局中
-    let newGridLayout = modeState.gridLayout;
-    if (restoreToLayout && childIds.length > 0) {
-      const tabItem = modeState.gridLayout.find(item => item.id === tabId);
-      const baseY = tabItem?.y ?? 0;
-      const baseX = (tabItem?.x ?? 0) + (tabItem?.w ?? 2);
-      
-      const restoredItems: GridItem[] = childIds.map((childId, index) => ({
-        id: childId,
-        x: isFullscreen ? baseX : index % 2,
-        y: isFullscreen ? baseY + index * 2 : Math.floor(index / 2) + baseY + 1,
-        w: 1,
-        h: isFullscreen ? 2 : 1,
-        minW: 1,
-        minH: 1
-      }));
-      
-      newGridLayout = [...modeState.gridLayout, ...restoredItems];
-    }
+    const restoredItems: GridItem[] = blockIds.map((blockId, index) => ({
+      id: blockId,
+      x: isFullscreen ? basePosition.x + 2 : index % 2,
+      y: isFullscreen ? basePosition.y + index * 2 : Math.floor(index / 2) + basePosition.y + 1,
+      w: 1,
+      h: isFullscreen ? 2 : 1,
+      minW: 1,
+      minH: 1
+    }));
     
     next.set(nodeType, {
       ...current,
       [mode]: {
         ...modeState,
-        gridLayout: newGridLayout,
-        tabBlocks: modeState.tabBlocks.filter(id => id !== tabId),
-        tabStates: newTabStates
+        gridLayout: [...modeState.gridLayout, ...restoredItems]
       },
       updatedAt: Date.now()
     });
     return next;
   });
-  
-  return childIds;
-}
-
-// ============ 查询 ============
-
-export function getUsedTabBlockIds(nodeType: string, mode: 'fullscreen' | 'normal'): string[] {
-  hydrateFromStorage();
-  const config = nodeLayoutStore.state.get(nodeType);
-  if (!config) return [];
-  const ids: string[] = [];
-  for (const tabState of Object.values(config[mode].tabStates)) {
-    ids.push(...tabState.children.slice(1));
-  }
-  return ids;
 }
 
 // ============ 订阅 ============

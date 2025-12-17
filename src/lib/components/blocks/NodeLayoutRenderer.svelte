@@ -10,8 +10,7 @@
   import { BlockCard, TabBlockCard } from '$lib/components/blocks';
   import { 
     getBlockDefinition, 
-    getNodeBlockLayout,
-    type BlockDefinition 
+    getNodeBlockLayout
   } from './blockRegistry';
   import {
     getOrCreateLayoutState,
@@ -19,12 +18,11 @@
     updateTabState,
     createTabBlock,
     removeTabBlock,
-    isTabContainer,
-    getTabState,
-    getUsedTabBlockIds,
+    subscribeNodeLayoutState,
     type NodeLayoutState
   } from '$lib/stores/nodeLayoutStore';
   import { getSizeMode, type SizeMode } from '$lib/utils/sizeUtils';
+  import { onMount } from 'svelte';
 
   interface Props {
     /** 节点 ID */
@@ -56,11 +54,31 @@
   // 尺寸模式
   let sizeMode = $derived(getSizeMode(isFullscreen));
 
-  // 获取或创建布局状态
+  // 布局状态 - 使用响应式订阅
+  // 注意：初始值使用空状态，onMount 中会正确初始化
   let layoutState = $state<NodeLayoutState>(getOrCreateLayoutState(nodeId, defaultGridLayout));
+  
+  // 订阅 store 变化，保持 layoutState 同步
+  // 使用 $effect 确保响应式追踪 nodeId 和 defaultGridLayout
+  $effect(() => {
+    // 初始化时确保状态存在
+    layoutState = getOrCreateLayoutState(nodeId, defaultGridLayout);
+  });
+  
+  onMount(() => {
+    // 订阅变化 - 使用闭包捕获当前 nodeId
+    const currentNodeId = nodeId;
+    const unsubscribe = subscribeNodeLayoutState(currentNodeId, (state) => {
+      if (state) {
+        layoutState = state;
+        onLayoutChange?.(state);
+      }
+    });
+    
+    return unsubscribe;
+  });
 
-  // 当前模式的状态
-  let currentModeState = $derived(layoutState[mode]);
+
 
   // GridStack 布局（仅全屏模式）
   let gridLayout = $derived(layoutState.fullscreen.gridLayout);
@@ -71,12 +89,21 @@
   // 获取区块布局配置
   let blockLayout = $derived(getNodeBlockLayout(nodeType));
   
+  // 获取已使用的 Tab 区块 ID（从 layoutState 读取）
+  let usedTabIds = $derived(() => {
+    const ids: string[] = [];
+    for (const tabState of Object.values(layoutState[mode].tabStates)) {
+      ids.push(...tabState.children.slice(1));
+    }
+    return ids;
+  });
+
   // 获取可见区块列表（根据模式过滤）
   let visibleBlocks = $derived(() => {
     if (!blockLayout) return [];
+    const usedIds = usedTabIds();
     return blockLayout.blocks.filter(b => {
       // 过滤掉已被合并到 Tab 中的区块（作为子区块）
-      const usedIds = getUsedTabBlockIds(nodeId, mode);
       if (usedIds.includes(b.id)) return false;
       
       // 根据模式过滤
@@ -91,15 +118,13 @@
   // 处理 GridStack 布局变化
   function handleGridLayoutChange(newLayout: GridItem[]) {
     updateFullscreenGridLayout(nodeId, newLayout);
-    layoutState = getOrCreateLayoutState(nodeId, defaultGridLayout);
-    onLayoutChange?.(layoutState);
+    // layoutState 会通过订阅自动更新
   }
 
   // 处理 Tab 状态变化
   function handleTabStateChange(tabId: string, state: { activeTab: number; children: string[] }) {
     updateTabState(nodeId, mode, tabId, state);
-    layoutState = getOrCreateLayoutState(nodeId, defaultGridLayout);
-    onLayoutChange?.(layoutState);
+    // layoutState 会通过订阅自动更新
   }
 
   // 创建 Tab 区块
@@ -112,9 +137,7 @@
       const newLayout = gridLayout.filter(item => !otherBlockIds.includes(item.id));
       updateFullscreenGridLayout(nodeId, newLayout);
     }
-    
-    layoutState = getOrCreateLayoutState(nodeId, defaultGridLayout);
-    onLayoutChange?.(layoutState);
+    // layoutState 会通过订阅自动更新
   }
 
   // 删除 Tab 区块
@@ -139,24 +162,26 @@
       
       updateFullscreenGridLayout(nodeId, [...gridLayout, ...restoredItems]);
     }
-    
-    layoutState = getOrCreateLayoutState(nodeId, defaultGridLayout);
-    onLayoutChange?.(layoutState);
+    // layoutState 会通过订阅自动更新
   }
 
-  // 检查区块是否是 Tab 容器
+  // 检查区块是否是 Tab 容器（从 layoutState 读取，确保响应式）
   function checkIsTabContainer(blockId: string): boolean {
-    return isTabContainer(nodeId, mode, blockId);
+    return layoutState[mode].tabBlocks.includes(blockId);
   }
 
-  // 获取 Tab 状态
+  // 获取 Tab 状态（从 layoutState 读取，确保响应式）
   function getBlockTabState(blockId: string) {
-    return getTabState(nodeId, mode, blockId);
+    return layoutState[mode].tabStates[blockId];
   }
 
-  // 获取已使用的 Tab 区块 ID
+  // 获取已使用的 Tab 区块 ID（从 layoutState 读取，确保响应式）
   export function getUsedBlockIds(): string[] {
-    return getUsedTabBlockIds(nodeId, mode);
+    const ids: string[] = [];
+    for (const tabState of Object.values(layoutState[mode].tabStates)) {
+      ids.push(...tabState.children.slice(1));
+    }
+    return ids;
   }
 
   // 整理布局（全屏模式）
@@ -167,17 +192,15 @@
   // 重置布局（全屏模式）
   export function resetLayout() {
     updateFullscreenGridLayout(nodeId, defaultGridLayout);
-    layoutState = getOrCreateLayoutState(nodeId, defaultGridLayout);
     dashboardGrid?.applyLayout(defaultGridLayout);
-    onLayoutChange?.(layoutState);
+    // layoutState 会通过订阅自动更新
   }
 
   // 应用布局预设
   export function applyLayout(layout: GridItem[]) {
     updateFullscreenGridLayout(nodeId, layout);
-    layoutState = getOrCreateLayoutState(nodeId, defaultGridLayout);
     dashboardGrid?.applyLayout(layout);
-    onLayoutChange?.(layoutState);
+    // layoutState 会通过订阅自动更新
   }
 
   // 获取当前布局

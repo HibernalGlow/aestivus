@@ -323,18 +323,6 @@ export const ENGINEV_BLOCKS: BlockDefinition[] = [
     collapsible: true,
     visibleInNormal: true,
     visibleInFullscreen: true
-  },
-  // Tab 区块示例：将统计和操作合并
-  {
-    id: 'tab-stats-op',
-    title: '统计/操作',
-    icon: Layers,
-    iconClass: 'text-cyan-500',
-    colSpan: 2,
-    visibleInNormal: false,
-    visibleInFullscreen: true,
-    isTabContainer: true,
-    tabChildren: ['stats', 'operation']
   }
 ];
 
@@ -345,9 +333,7 @@ export const ENGINEV_DEFAULT_GRID_LAYOUT: GridItem[] = [
   { id: 'operation', x: 1, y: 2, w: 1, h: 2, minW: 1, minH: 1 },
   { id: 'rename', x: 2, y: 2, w: 2, h: 2, minW: 1, minH: 1 },
   { id: 'gallery', x: 0, y: 4, w: 3, h: 4, minW: 2, minH: 2 },
-  { id: 'log', x: 3, y: 4, w: 1, h: 4, minW: 1, minH: 1 },
-  // Tab 区块示例（默认隐藏，可通过布局编辑器启用）
-  { id: 'tab-stats-op', x: 0, y: 8, w: 2, h: 3, minW: 1, minH: 2 }
+  { id: 'log', x: 3, y: 4, w: 1, h: 4, minW: 1, minH: 1 }
 ];
 
 // ============ 注册表 ============

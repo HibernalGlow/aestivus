@@ -292,8 +292,8 @@
         </button>
       {/if}
 
-      <!-- 创建 Tab 区块按钮（全屏模式） -->
-      {#if isFullscreenRender && canCreateTab && onCreateTab && nodeType}
+      <!-- 创建 Tab 区块按钮（两种模式都支持） -->
+      {#if canCreateTab && onCreateTab && nodeType}
         <button
           class="p-1 rounded hover:bg-muted transition-colors {showTabConfig ? 'text-primary' : 'text-muted-foreground'}"
           onclick={() => { showTabConfig = !showTabConfig; if (showTabConfig) showLayoutBar = false; }}
@@ -367,8 +367,8 @@
     </div>
   {/if}
 
-  <!-- Tab 配置面板（全屏模式，标题栏下方） -->
-  {#if isFullscreenRender && showTabConfig && nodeType && onCreateTab}
+  <!-- Tab 配置面板（两种模式都支持，标题栏下方） -->
+  {#if showTabConfig && nodeType && onCreateTab}
     <div class="px-3 py-2 bg-muted/20 border-b shrink-0">
       <TabConfigPanel 
         {nodeType}

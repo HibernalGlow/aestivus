@@ -79,14 +79,15 @@ export interface EngineVState {
   stats: EngineVStats;
   filters: FilterOptions;
   renameConfig: RenameConfig;
-  gridLayout: GridItem[];
+  /** GridStack 布局（已迁移到 nodeLayoutStore，保留兼容） */
+  gridLayout?: GridItem[];
   selectedIds: Set<string>;
   viewMode: 'grid' | 'list';
-  /** Tab 区块状态 */
+  /** Tab 区块状态（已迁移到 nodeLayoutStore，保留兼容） */
   tabStates?: Record<string, TabBlockState>;
-  /** 动态 Tab 区块 ID 列表 */
+  /** 动态 Tab 区块 ID 列表（已迁移到 nodeLayoutStore，保留兼容） */
   dynamicTabBlocks?: string[];
-  /** Tab 区块计数器 */
+  /** Tab 区块计数器（已迁移到 nodeLayoutStore，保留兼容） */
   tabBlockCounter?: number;
 }
 

@@ -70,7 +70,17 @@ function loadFromStorage(): NodeConfigMap {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (!stored) return new Map();
-    return new Map(Object.entries(JSON.parse(stored)));
+    const parsed = JSON.parse(stored);
+    console.log('[loadFromStorage] 从 localStorage 加载:', parsed);
+    // 打印每个 nodeType 的 Tab 状态
+    for (const [key, config] of Object.entries(parsed)) {
+      const c = config as NodeConfig;
+      console.log(`[loadFromStorage] ${key}:`, {
+        fullscreen: { tabBlocks: c.fullscreen?.tabBlocks, tabStates: c.fullscreen?.tabStates },
+        normal: { tabBlocks: c.normal?.tabBlocks, tabStates: c.normal?.tabStates }
+      });
+    }
+    return new Map(Object.entries(parsed));
   } catch (e) {
     console.error('[nodeLayoutStore] 加载失败:', e);
     return new Map();
@@ -260,6 +270,8 @@ export function createTabBlock(
   const tabId = blockIds[0];
   const otherBlockIds = blockIds.slice(1);
   
+  console.log('[createTabBlock] 创建 Tab:', { nodeType, mode, tabId, children: blockIds, removeIds: otherBlockIds });
+  
   nodeLayoutStore.setState((prev) => {
     const next = new Map(prev);
     const current = next.get(nodeType) || createDefaultNodeConfig(nodeType);
@@ -276,6 +288,12 @@ export function createTabBlock(
       tabBlocks: [...modeState.tabBlocks, tabId],
       tabStates: { ...modeState.tabStates, [tabId]: { activeTab: 0, children: blockIds } }
     };
+    
+    console.log('[createTabBlock] 新状态:', {
+      gridLayoutIds: newGridLayout.map(i => i.id),
+      tabBlocks: newModeState.tabBlocks,
+      tabStates: newModeState.tabStates
+    });
     
     next.set(nodeType, {
       ...current,

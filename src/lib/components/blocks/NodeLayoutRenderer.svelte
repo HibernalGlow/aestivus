@@ -119,6 +119,23 @@
   // 节点配置
   let nodeConfig = $state<NodeConfig>(initNodeConfig());
   
+  // 当 isFullscreen 变化时重新初始化（因为 mode 变了）
+  $effect(() => {
+    // 触发依赖
+    const currentMode = isFullscreen ? 'fullscreen' : 'normal';
+    console.log('[NodeLayoutRenderer] mode 变化:', currentMode);
+    // 重新获取配置，确保当前模式有正确的布局
+    const config = getOrCreateNodeConfig(nodeId, nodeType, defaultFullscreenLayout, defaultNormalLayout);
+    if (!hasSavedState(config[currentMode])) {
+      const defaultLayout = currentMode === 'fullscreen' 
+        ? defaultFullscreenLayout 
+        : (defaultNormalLayout.length > 0 ? defaultNormalLayout : generateNormalLayout());
+      if (defaultLayout.length > 0) {
+        updateGridLayout(nodeType, currentMode, defaultLayout);
+      }
+    }
+  });
+  
   // 订阅配置变化（使用 nodeType 作为 key）
   onMount(() => {
     const unsubscribe = subscribeNodeConfig(nodeType, (config) => {

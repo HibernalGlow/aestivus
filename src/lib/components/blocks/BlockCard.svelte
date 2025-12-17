@@ -11,7 +11,7 @@
   import type { Snippet } from 'svelte';
 
   interface Props {
-    /** 区块 ID */
+    /** 区块 ID（用于布局持久化等场景） */
     id: string;
     /** 标题 */
     title: string;
@@ -23,13 +23,13 @@
     collapsible?: boolean;
     /** 默认展开状态 */
     defaultExpanded?: boolean;
-    /** 是否全屏模式 */
+    /** 是否全屏模式（自动启用 fullHeight） */
     isFullscreen?: boolean;
     /** 隐藏标题栏 */
     hideHeader?: boolean;
     /** 紧凑模式 */
     compact?: boolean;
-    /** 占满高度 */
+    /** 占满高度（isFullscreen 时自动为 true） */
     fullHeight?: boolean;
     /** 自定义类名 */
     class?: string;
@@ -40,7 +40,7 @@
   }
 
   let {
-    id,
+    id: _id,
     title,
     icon: Icon,
     iconClass = 'text-muted-foreground',
@@ -49,13 +49,21 @@
     isFullscreen = false,
     hideHeader = false,
     compact = false,
-    fullHeight = false,
+    fullHeight: fullHeightProp = false,
     class: className = '',
     children,
     headerExtra
   }: Props = $props();
 
-  let isExpanded = $state(defaultExpanded);
+  // isFullscreen 自动启用 fullHeight
+  let fullHeight = $derived(fullHeightProp || isFullscreen);
+  
+  let isExpanded = $state(true);
+  
+  // 响应 defaultExpanded 变化
+  $effect(() => {
+    isExpanded = defaultExpanded;
+  });
 
   // 获取面板设置（透明度和模糊）
   let panelSettings = $state(settingsManager.getSettings().panels);
@@ -79,7 +87,7 @@
 </script>
 
 <div 
-  class="block-card {isFullscreen ? 'h-full flex flex-col border border-primary/40 rounded-md' : 'rounded-lg border shadow-sm'} {fullHeight ? 'flex-1 min-h-0' : ''} {className}"
+  class="block-card rounded-{isFullscreen ? 'md' : 'lg'} border {isFullscreen ? 'h-full flex flex-col border-primary/40' : 'shadow-sm'} {fullHeight ? 'flex-1 min-h-0' : ''} {className}"
   style={cardStyle}
 >
   <!-- 标题栏 -->

@@ -117,12 +117,12 @@
     // 查找所有 grid-stack-item 元素
     const allItems = gridElement.querySelectorAll('.grid-stack-item') as NodeListOf<HTMLElement>;
     
-    grid.batchUpdate();
+    // 收集需要添加的新元素
+    const newElements: { el: HTMLElement; x: number; y: number; w: number; h: number; minW?: number; minH?: number }[] = [];
     
     for (const el of allItems) {
       const id = el.getAttribute('gs-id');
       if (id && !managedIds.has(id)) {
-        // 新元素，需要注册到 GridStack
         const x = parseInt(el.getAttribute('gs-x') || '0');
         const y = parseInt(el.getAttribute('gs-y') || '0');
         const w = parseInt(el.getAttribute('gs-w') || '1');
@@ -130,11 +130,28 @@
         const minW = el.getAttribute('gs-min-w') ? parseInt(el.getAttribute('gs-min-w')!) : undefined;
         const minH = el.getAttribute('gs-min-h') ? parseInt(el.getAttribute('gs-min-h')!) : undefined;
         
-        grid.makeWidget(el, { id, x, y, w, h, minW, minH });
+        newElements.push({ el, x, y, w, h, minW, minH });
+        console.log('[DashboardGrid] refresh - 发现新元素:', { id, x, y, w, h });
       }
     }
     
+    if (newElements.length === 0) {
+      console.log('[DashboardGrid] refresh - 没有新元素需要注册');
+      return;
+    }
+    
+    grid.batchUpdate();
+    
+    for (const { el, x, y, w, h, minW, minH } of newElements) {
+      // 先注册元素
+      grid.makeWidget(el);
+      // 再强制更新位置（makeWidget 可能会忽略位置参数）
+      grid.update(el, { x, y, w, h, minW, minH });
+    }
+    
     grid.batchUpdate(false);
+    
+    console.log('[DashboardGrid] refresh - 完成，注册了', newElements.length, '个新元素');
     handleLayoutChange();
   }
 

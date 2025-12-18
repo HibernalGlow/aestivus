@@ -11,10 +11,10 @@
   import {
     getOrCreateNodeConfig, updateGridLayout, subscribeNodeConfig,
     createTab as createLayoutTab, removeTab as removeLayoutTab,
-    setActiveTab as setLayoutActiveTab, reorderTabChildren,
+    clearTabStates,
     getUsedBlockIds as getLayoutUsedBlockIds,
     isTabContainer as checkLayoutTabContainer,
-    getTabState as getLayoutTabState, type NodeConfig
+    type NodeConfig
   } from '$lib/stores/nodeLayoutStore';
   import { getSizeMode, type SizeMode } from '$lib/utils/sizeUtils';
   import { onMount } from 'svelte';
@@ -91,6 +91,9 @@
   export function isTabContainer(blockId: string): boolean { return checkIsTabContainer(blockId); }
   export function compact() { dashboardGrid?.compact(); }
   export function resetLayout() {
+    // 先清除 Tab 状态
+    clearTabStates(nodeType, tabMode);
+    // 再重置布局
     const defaultLayout = isFullscreen ? defaultFullscreenLayout : defaultNormalLayout;
     updateGridLayout(nodeType, mode, defaultLayout);
     if (isFullscreen) dashboardGrid?.applyLayout(defaultLayout);

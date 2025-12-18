@@ -847,6 +847,67 @@ export function getTabContainerIds(
   return Object.keys(config[mode].tabStates);
 }
 
+/** 清除所有 Tab 状态并恢复子区块（重置布局时调用） */
+export function clearTabStates(
+  nodeType: string,
+  mode: 'fullscreen' | 'normal'
+): void {
+  hydrateFromStorage();
+  const config = nodeLayoutStore.state.get(nodeType);
+  if (!config) return;
+  
+  const modeState = config[mode];
+  const tabIds = Object.keys(modeState.tabStates);
+  
+  // 如果没有 Tab，直接返回
+  if (tabIds.length === 0) {
+    console.log('[nodeLayoutStore] 没有 Tab 需要清除:', { nodeType, mode });
+    return;
+  }
+  
+  // 收集所有需要恢复的区块
+  const restoredItems: GridItem[] = [];
+  const tabContainerIds = new Set<string>();
+  
+  for (const tabState of Object.values(modeState.tabStates)) {
+    tabContainerIds.add(tabState.id);
+    
+    // 恢复所有子区块到原始位置
+    tabState.children.forEach((childId, index) => {
+      const pos = tabState.originalPositions[childId] || getDefaultPosition(index, mode === 'fullscreen');
+      restoredItems.push({
+        id: childId,
+        x: pos.x,
+        y: pos.y,
+        w: pos.w,
+        h: pos.h,
+        minW: 1,
+        minH: 1
+      });
+    });
+  }
+  
+  // 从 gridLayout 移除 Tab 容器，添加恢复的区块
+  const newGridLayout = modeState.gridLayout.filter(item => !tabContainerIds.has(item.id));
+  newGridLayout.push(...restoredItems);
+  
+  nodeLayoutStore.setState((prev) => {
+    const next = new Map(prev);
+    next.set(nodeType, {
+      ...config,
+      [mode]: {
+        ...modeState,
+        gridLayout: newGridLayout,
+        tabStates: {}
+      },
+      updatedAt: Date.now()
+    });
+    return next;
+  });
+  
+  console.log('[nodeLayoutStore] 清除 Tab 状态并恢复区块:', { nodeType, mode, restored: restoredItems.length });
+}
+
 // ============ 订阅 ============
 
 export function subscribeNodeConfig(

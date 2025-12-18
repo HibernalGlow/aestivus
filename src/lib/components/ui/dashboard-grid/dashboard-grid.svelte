@@ -112,91 +112,136 @@
     handleLayoutChange();
   }
 
-  /** 刷新网格 - 重新扫描并注册所有元素（用于动态添加/删除元素后） */
+  /** 刷新网格 - 重新扫描并同步所有元素位置（用于动态添加/删除元素后） */
   export async function refresh() {
     if (!grid || !gridElement) return;
 
     // 等待 DOM 更新
     await tick();
 
-    // 1. 清理失效节点
     const currentGridItems = grid.getGridItems();
-    let needsPrune = false;
-
-    for (const el of currentGridItems) {
-      const node = (el as any).gridstackNode;
-      const domId = el.getAttribute("gs-id");
-      const nodeId = node?.id;
-
-      // 如果元素不再是子元素，或者 ID 发生了变化（Svelte 优化复用了节点但 ID 不同）
-      if (!gridElement.contains(el) || (domId && nodeId && domId !== nodeId)) {
-        console.log("[DashboardGrid] refresh - 移除失效或变更节点:", {
-          nodeId,
-          domId,
-        });
-        grid.removeWidget(el, false); // false 表示不从 DOM 移除
-        needsPrune = true;
-      }
-    }
-
-    // 2. 注册新节点
     const allDomItems = Array.from(
       gridElement.querySelectorAll(".grid-stack-item")
     ) as HTMLElement[];
-    const managedItems = new Set(grid.getGridItems());
-    const newElements = allDomItems.filter((el) => !managedItems.has(el));
 
-    if (newElements.length === 0 && !needsPrune) {
+    // 构建 ID -> 元素 映射
+    const managedMap = new Map<string, HTMLElement>();
+    for (const el of currentGridItems) {
+      const node = (el as any).gridstackNode;
+      const id = node?.id || el.getAttribute("gs-id");
+      if (id) managedMap.set(id, el);
+    }
+
+    const domMap = new Map<string, HTMLElement>();
+    for (const el of allDomItems) {
+      const id = el.getAttribute("gs-id");
+      if (id) domMap.set(id, el);
+    }
+
+    // 1. 清理失效节点（在 GridStack 中但不在 DOM 中）
+    const toRemove: HTMLElement[] = [];
+    for (const [id, el] of managedMap) {
+      if (!domMap.has(id)) {
+        toRemove.push(el);
+      }
+    }
+
+    // 2. 找出需要注册的新元素（在 DOM 中但不在 GridStack 中）
+    const toAdd: HTMLElement[] = [];
+    for (const [id, el] of domMap) {
+      if (!managedMap.has(id)) {
+        toAdd.push(el);
+      }
+    }
+
+    // 3. 找出位置不同步的元素（在两边都存在，但位置不一致）
+    const toSync: { el: HTMLElement; x: number; y: number; w: number; h: number }[] = [];
+    for (const [id, domEl] of domMap) {
+      const managedEl = managedMap.get(id);
+      if (managedEl) {
+        const node = (managedEl as any).gridstackNode;
+        const domX = parseInt(domEl.getAttribute("gs-x") || "0");
+        const domY = parseInt(domEl.getAttribute("gs-y") || "0");
+        const domW = parseInt(domEl.getAttribute("gs-w") || "1");
+        const domH = parseInt(domEl.getAttribute("gs-h") || "1");
+        const nodeX = node?.x ?? 0;
+        const nodeY = node?.y ?? 0;
+        const nodeW = node?.w ?? 1;
+        const nodeH = node?.h ?? 1;
+
+        if (domX !== nodeX || domY !== nodeY || domW !== nodeW || domH !== nodeH) {
+          toSync.push({ el: managedEl, x: domX, y: domY, w: domW, h: domH });
+        }
+      }
+    }
+
+    console.log("[DashboardGrid] refresh - 状态:", {
+      toRemove: toRemove.map(el => el.getAttribute("gs-id")),
+      toAdd: toAdd.map(el => el.getAttribute("gs-id")),
+      toSync: toSync.map(item => ({ id: item.el.getAttribute("gs-id"), x: item.x, y: item.y })),
+    });
+
+    if (toRemove.length === 0 && toAdd.length === 0 && toSync.length === 0) {
+      console.log("[DashboardGrid] refresh - 无需更新");
       return;
     }
 
     try {
       grid.batchUpdate();
 
-      for (const el of newElements) {
-        const id = el.getAttribute("gs-id");
-        if (!id) continue;
+      // 移除失效节点
+      for (const el of toRemove) {
+        grid.removeWidget(el, false);
+      }
 
-        // 读取属性并显式应用
+      // 注册新节点
+      for (const el of toAdd) {
         const x = parseInt(el.getAttribute("gs-x") || "0");
         const y = parseInt(el.getAttribute("gs-y") || "0");
         const w = parseInt(el.getAttribute("gs-w") || "1");
         const h = parseInt(el.getAttribute("gs-h") || "1");
-        const minW = el.getAttribute("gs-min-w")
-          ? parseInt(el.getAttribute("gs-min-w")!)
-          : undefined;
-        const minH = el.getAttribute("gs-min-h")
-          ? parseInt(el.getAttribute("gs-min-h")!)
-          : undefined;
-
-        console.log("[DashboardGrid] refresh - 注册并定位新元素:", {
-          id,
-          x,
-          y,
-          w,
-          h,
-        });
+        const minW = el.getAttribute("gs-min-w") ? parseInt(el.getAttribute("gs-min-w")!) : undefined;
+        const minH = el.getAttribute("gs-min-h") ? parseInt(el.getAttribute("gs-min-h")!) : undefined;
 
         grid.makeWidget(el);
         grid.update(el, { x, y, w, h, minW, minH });
-
-        // 关键：显式启用交互状态，防止被错误锁定
         grid.movable(el, true);
         grid.resizable(el, true);
+      }
+
+      // 同步位置不一致的元素 - 需要先移除再重新添加才能正确更新位置
+      for (const { el, x, y, w, h } of toSync) {
+        const id = el.getAttribute("gs-id");
+        console.log("[DashboardGrid] refresh - 同步位置 (移除后重新添加):", { id, x, y, w, h });
+        
+        // 先从 GridStack 移除（但保留 DOM 元素）
+        grid.removeWidget(el, false);
       }
     } finally {
       grid.batchUpdate(false);
     }
 
-    // 确保网格整体启用
-    grid.enable();
+    // 在 batchUpdate 之外重新添加需要同步的元素
+    if (toSync.length > 0) {
+      await tick(); // 等待 DOM 更新
+      
+      for (const { el, x, y, w, h } of toSync) {
+        const id = el.getAttribute("gs-id");
+        const minW = el.getAttribute("gs-min-w") ? parseInt(el.getAttribute("gs-min-w")!) : undefined;
+        const minH = el.getAttribute("gs-min-h") ? parseInt(el.getAttribute("gs-min-h")!) : undefined;
+        
+        console.log("[DashboardGrid] refresh - 重新添加元素:", { id, x, y, w, h });
+        
+        // 重新添加到 GridStack
+        grid.makeWidget(el);
+        grid.update(el, { x, y, w, h, minW, minH });
+        grid.movable(el, true);
+        grid.resizable(el, true);
+      }
+    }
 
-    console.log(
-      "[DashboardGrid] refresh - 完成，清理并注册了",
-      newElements.length,
-      "个新节点"
-    );
-    handleLayoutChange();
+    grid.enable();
+    console.log("[DashboardGrid] refresh - 完成");
   }
 
   // 从 DOM 元素获取当前布局（优先从 GridStack node 获取，同步更准确）

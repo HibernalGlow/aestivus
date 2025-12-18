@@ -160,6 +160,16 @@
   let visibleBlocks = $derived(
     currentLayout.filter((item) => !usedTabIds.includes(item.id))
   );
+  
+  // 调试：监控 visibleBlocks 变化
+  $effect(() => {
+    const tabContainers = visibleBlocks.filter(item => item.id.startsWith('tab-'));
+    if (tabContainers.length > 0) {
+      console.log('[NodeLayoutRenderer] visibleBlocks 中的 Tab 容器:', 
+        tabContainers.map(t => ({ id: t.id, x: t.x, y: t.y, w: t.w, h: t.h }))
+      );
+    }
+  });
 
   function handleLayoutChange(newLayout: GridItem[]) {
     updateGridLayout(nodeType, mode, newLayout);

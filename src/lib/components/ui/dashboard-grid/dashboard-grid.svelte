@@ -119,102 +119,98 @@
     // 等待 DOM 更新
     await tick();
 
-    // 1. 清理：移除那些已经在 DOM 中不存在但在 GridStack 中还存在的元素
+    // 1. 清理失效节点
     const currentGridItems = grid.getGridItems();
     let needsPrune = false;
 
-    for (const item of currentGridItems) {
-      // 如果元素不再是 gridElement 的子元素，说明被 Svelte 移除了
-      if (!gridElement.contains(item)) {
-        console.log(
-          "[DashboardGrid] refresh - 移除失效元素:",
-          item.getAttribute("gs-id")
-        );
-        grid.removeWidget(item, false); // false 表示不从 DOM 移除（已经被 Svelte 移除了）
+    for (const el of currentGridItems) {
+      const node = (el as any).gridstackNode;
+      const domId = el.getAttribute("gs-id");
+      const nodeId = node?.id;
+
+      // 如果元素不再是子元素，或者 ID 发生了变化（Svelte 优化复用了节点但 ID 不同）
+      if (!gridElement.contains(el) || (domId && nodeId && domId !== nodeId)) {
+        console.log("[DashboardGrid] refresh - 移除失效或变更节点:", {
+          nodeId,
+          domId,
+        });
+        grid.removeWidget(el, false); // false 表示不从 DOM 移除
         needsPrune = true;
       }
     }
 
-    // 如果有清理，强制重新获取管理 ID 列表
-    const managedIds = new Set(
-      grid.getGridItems().map((el) => el.getAttribute("gs-id"))
-    );
-
-    // 2. 添加：注册新出现的元素
-    const allItems = gridElement.querySelectorAll(
-      ".grid-stack-item"
-    ) as NodeListOf<HTMLElement>;
-    const newElements: {
-      el: HTMLElement;
-      x: number;
-      y: number;
-      w: number;
-      h: number;
-      minW?: number;
-      minH?: number;
-    }[] = [];
-
-    for (const el of allItems) {
-      const id = el.getAttribute("gs-id");
-      // 如果是非法元素或已在管理中，跳过
-      if (!id || managedIds.has(id)) continue;
-
-      // 优先从属性读取， fallback 到默认值
-      const x = parseInt(el.getAttribute("gs-x") || "0");
-      const y = parseInt(el.getAttribute("gs-y") || "0");
-      const w = parseInt(el.getAttribute("gs-w") || "1");
-      const h = parseInt(el.getAttribute("gs-h") || "1");
-      const minW = el.getAttribute("gs-min-w")
-        ? parseInt(el.getAttribute("gs-min-w")!)
-        : undefined;
-      const minH = el.getAttribute("gs-min-h")
-        ? parseInt(el.getAttribute("gs-min-h")!)
-        : undefined;
-
-      newElements.push({ el, x, y, w, h, minW, minH });
-      console.log("[DashboardGrid] refresh - 发现新元素需注册:", {
-        id,
-        x,
-        y,
-        w,
-        h,
-      });
-    }
+    // 2. 注册新节点
+    const allDomItems = Array.from(
+      gridElement.querySelectorAll(".grid-stack-item")
+    ) as HTMLElement[];
+    const managedItems = new Set(grid.getGridItems());
+    const newElements = allDomItems.filter((el) => !managedItems.has(el));
 
     if (newElements.length === 0 && !needsPrune) {
       return;
     }
 
-    grid.batchUpdate();
+    try {
+      grid.batchUpdate();
 
-    for (const { el, x, y, w, h, minW, minH } of newElements) {
-      // 先让 GridStack 识别
-      grid.makeWidget(el);
-      // 显式强制更新位置和大小，确保 makeWidget 没弄丢它们
-      grid.update(el, { x, y, w, h, minW, minH });
+      for (const el of newElements) {
+        const id = el.getAttribute("gs-id");
+        if (!id) continue;
+
+        // 读取属性并显式应用
+        const x = parseInt(el.getAttribute("gs-x") || "0");
+        const y = parseInt(el.getAttribute("gs-y") || "0");
+        const w = parseInt(el.getAttribute("gs-w") || "1");
+        const h = parseInt(el.getAttribute("gs-h") || "1");
+        const minW = el.getAttribute("gs-min-w")
+          ? parseInt(el.getAttribute("gs-min-w")!)
+          : undefined;
+        const minH = el.getAttribute("gs-min-h")
+          ? parseInt(el.getAttribute("gs-min-h")!)
+          : undefined;
+
+        console.log("[DashboardGrid] refresh - 注册并定位新元素:", {
+          id,
+          x,
+          y,
+          w,
+          h,
+        });
+
+        grid.makeWidget(el);
+        grid.update(el, { x, y, w, h, minW, minH });
+
+        // 关键：显式启用交互状态，防止被错误锁定
+        grid.movable(el, true);
+        grid.resizable(el, true);
+      }
+    } finally {
+      grid.batchUpdate(false);
     }
 
-    grid.batchUpdate(false);
+    // 确保网格整体启用
+    grid.enable();
 
     console.log(
       "[DashboardGrid] refresh - 完成，清理并注册了",
       newElements.length,
-      "个新元素"
+      "个新节点"
     );
     handleLayoutChange();
   }
 
-  // 从 DOM 元素获取当前布局（优先从 DOM 属性读取，确保 resize 后数据正确）
+  // 从 DOM 元素获取当前布局（优先从 GridStack node 获取，同步更准确）
   function getCurrentLayout(): GridItem[] {
     if (!grid) return [];
     return grid.getGridItems().map((el) => {
-      const node = el.gridstackNode;
-      // 优先从 DOM 属性获取，因为 resize 后 node 对象可能未及时更新
+      const node = (el as any).gridstackNode;
+      // 优先从 node 对象获取，因为它是 Ground Truth
       const id = el.getAttribute("gs-id") || node?.id || "";
-      const x = parseInt(el.getAttribute("gs-x") || "") || (node?.x ?? 0);
-      const y = parseInt(el.getAttribute("gs-y") || "") || (node?.y ?? 0);
-      const w = parseInt(el.getAttribute("gs-w") || "") || (node?.w ?? 1);
-      const h = parseInt(el.getAttribute("gs-h") || "") || (node?.h ?? 1);
+      const x = node?.x ?? parseInt(el.getAttribute("gs-x") || "0");
+      const y = node?.y ?? parseInt(el.getAttribute("gs-y") || "0");
+      const w = node?.w ?? parseInt(el.getAttribute("gs-w") || "1");
+      const h = node?.h ?? parseInt(el.getAttribute("gs-h") || "1");
+
       return {
         id,
         x,

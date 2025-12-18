@@ -155,10 +155,10 @@
       }
     | undefined
   >(undefined);
-  let usedTabIds = $derived(() => getLayoutUsedBlockIds(nodeType, tabMode));
+  let usedTabIds = $derived(getLayoutUsedBlockIds(nodeType, tabMode));
   // visibleBlocks: gridLayout 中不在 Tab 内的区块（Tab 容器本身会在 gridLayout 中，子区块不会）
-  let visibleBlocks = $derived(() =>
-    currentLayout.filter((item) => !usedTabIds().includes(item.id))
+  let visibleBlocks = $derived(
+    currentLayout.filter((item) => !usedTabIds.includes(item.id))
   );
 
   function handleLayoutChange(newLayout: GridItem[]) {
@@ -207,7 +207,7 @@
   }
 
   export function getUsedBlockIds(): string[] {
-    return usedTabIds();
+    return usedTabIds;
   }
   export function isTabContainer(blockId: string): boolean {
     return checkIsTabContainer(blockId);
@@ -273,7 +273,7 @@
       showToolbar={false}
       onLayoutChange={handleLayoutChange}
     >
-      {#each visibleBlocks() as item (item.id)}
+      {#each visibleBlocks as item (item.id)}
         {@const gridItem = applyGridItemOverride(item)}
         <DashboardItem
           id={gridItem.id}
@@ -326,7 +326,7 @@
       class="grid grid-cols-2 gap-2"
       style="grid-auto-rows: minmax(auto, max-content);"
     >
-      {#each visibleBlocks() as item (item.id)}
+      {#each visibleBlocks as item (item.id)}
         {@const blockDef = getBlockDefinition(nodeType, item.id)}
         {@const colSpan = item.w >= 2 ? 2 : 1}
         {#if checkIsTabContainer(item.id)}

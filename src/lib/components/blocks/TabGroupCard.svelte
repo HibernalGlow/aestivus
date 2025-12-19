@@ -1,10 +1,9 @@
 <script lang="ts">
   /**
-   * TabGroupCard - Tab 分组卡片组件（Bento Grid 风格）
+   * TabGroupCard - Tab 分组卡片组件
    * 
    * 虚拟分组模式：区块始终在 gridLayout 中，这里只负责渲染和切换
-   * 使用 CSS transform 实现平滑的 Tab 切换动画
-   * 特性：精致阴影、暗色模式优化、滑动指示器
+   * 使用 svelte-motion 实现平滑的 Tab 切换动画
    */
   import type { Snippet, Component } from 'svelte';
   import type { TabGroup } from '$lib/stores/nodeLayoutStore';
@@ -13,7 +12,8 @@
   import { flip } from 'svelte/animate';
   import { dndzone } from 'svelte-dnd-action';
   import { settingsManager } from '$lib/settings/settingsManager';
-  import { onMount, tick } from 'svelte';
+  import { onMount } from 'svelte';
+  import { Motion, AnimateSharedLayout } from 'svelte-motion';
 
   interface Props {
     /** Tab 分组配置 */
@@ -48,8 +48,6 @@
   }: Props = $props();
 
   let editMode = $state(false);
-  let tabsContainer: HTMLDivElement | null = $state(null);
-  let indicatorStyle = $state('');
 
   // 获取面板设置（透明度和模糊）
   let panelSettings = $state(settingsManager.getSettings().panels);
@@ -59,31 +57,11 @@
     `background: color-mix(in srgb, var(--card) ${panelSettings.topToolbarOpacity * 0.4}%, transparent); backdrop-filter: blur(${panelSettings.topToolbarBlur}px);`
   );
 
-  // 更新指示器位置
-  async function updateIndicator() {
-    await tick();
-    if (!tabsContainer) return;
-    const buttons = tabsContainer.querySelectorAll('.tab-btn');
-    const activeBtn = buttons[group.activeIndex] as HTMLElement;
-    if (activeBtn) {
-      const containerRect = tabsContainer.getBoundingClientRect();
-      const btnRect = activeBtn.getBoundingClientRect();
-      const left = btnRect.left - containerRect.left;
-      indicatorStyle = `width: ${btnRect.width}px; transform: translateX(${left}px);`;
-    }
-  }
-
   onMount(() => {
+    // 监听设置变化
     settingsManager.addListener((s) => {
       panelSettings = s.panels;
     });
-    updateIndicator();
-  });
-
-  // 监听 activeIndex 变化更新指示器
-  $effect(() => {
-    group.activeIndex;
-    updateIndicator();
   });
 
   // 获取区块定义
@@ -111,14 +89,11 @@
 </script>
 
 <div 
-  class="tab-group-card group relative flex-1 flex flex-col overflow-hidden rounded-xl {className}"
+  class="tab-group-card flex-1 flex flex-col {isFullscreen ? 'border-2 border-primary/60 rounded-md shadow-md' : 'rounded-lg border shadow-sm'} {className}"
   style={cardStyle}
 >
-  <!-- 悬停遮罩层 -->
-  <div class="pointer-events-none absolute inset-0 z-[1] transition-all duration-300 group-hover:bg-black/[.03] dark:group-hover:bg-neutral-800/10"></div>
-  
   <!-- 标签栏 - 居中布局，左右对称 -->
-  <div class="tab-bar drag-handle relative z-10 flex items-center justify-center {isFullscreen ? 'p-1.5 border-b border-border/50' : 'p-1'} shrink-0 cursor-move">
+  <div class="tab-bar drag-handle flex items-center justify-center {isFullscreen ? 'p-1.5 border-b bg-muted/30' : 'p-1'} shrink-0 cursor-move">
     <!-- 中心容器：切换按钮 | 凹槽分隔 | 操作按钮 -->
     <div class="flex items-center gap-1 bg-muted/40 rounded-lg px-1 py-0.5">
       <!-- 左侧：切换按钮 -->
@@ -152,24 +127,34 @@
           {/each}
         </div>
       {:else}
-        <!-- 普通模式：带滑动指示器的切换按钮 -->
-        <div class="relative flex items-center gap-0.5 overflow-x-auto" bind:this={tabsContainer}>
-          <!-- 滑动指示器背景 -->
-          <div 
-            class="tab-indicator absolute left-0 top-0 h-full rounded-md bg-primary/20 ring-1 ring-primary/40 shadow-sm pointer-events-none"
-            style={indicatorStyle}
-          ></div>
-          {#each blockDefs as item, index (item.id)}
-            {@const Icon = item.def?.icon as Component | undefined}
-            <button 
-              type="button" 
-              class="tab-btn relative z-[1] flex items-center justify-center p-1.5 rounded-md" 
-              onclick={() => onSwitch(index)} 
-              title={item.def?.title}
-            >
-              {#if Icon}<Icon class="w-4 h-4 {item.def?.iconClass}" />{/if}
-            </button>
-          {/each}
+        <!-- 普通模式：带动画的切换按钮 -->
+        <div class="relative flex items-center gap-0.5 overflow-x-auto">
+          <AnimateSharedLayout>
+            {#each blockDefs as item, index (item.id)}
+              {@const isActive = index === group.activeIndex}
+              {@const Icon = item.def?.icon as Component | undefined}
+              <button 
+                type="button" 
+                class="tab-item relative z-[1] flex items-center justify-center p-1.5 rounded-md" 
+                onclick={() => onSwitch(index)} 
+                title={item.def?.title}
+              >
+                {#if isActive}
+                  <Motion
+                    layoutId="active-tab-bg"
+                    transition={{ duration: 0.2, type: 'spring', stiffness: 300, damping: 30 }}
+                    let:motion
+                  >
+                    <div
+                      use:motion
+                      class="absolute inset-0 rounded-md bg-primary/20 ring-1 ring-primary/40 shadow-sm"
+                    ></div>
+                  </Motion>
+                {/if}
+                {#if Icon}<Icon class="relative w-4 h-4 {item.def?.iconClass}" />{/if}
+              </button>
+            {/each}
+          </AnimateSharedLayout>
         </div>
       {/if}
 
@@ -201,7 +186,7 @@
   </div>
 
   <!-- 内容区域 -->
-  <div class="tab-content relative z-10 flex-1 min-h-0 overflow-auto {isFullscreen ? 'p-2' : 'p-2'}">
+  <div class="tab-content flex-1 min-h-0 overflow-auto {isFullscreen ? 'p-2' : 'p-2'}">
     <div class="h-full">
       {#if activeBlockId}
         {@render renderContent(activeBlockId)}
@@ -215,28 +200,8 @@
 </div>
 
 <style>
-  .tab-bar::-webkit-scrollbar { display: none; }
-  .tab-bar { scrollbar-width: none; -ms-overflow-style: none; }
+  .tab-bar::-webkit-scrollbar { height: 4px; }
+  .tab-bar::-webkit-scrollbar-track { background: transparent; }
+  .tab-bar::-webkit-scrollbar-thumb { background: hsl(var(--muted-foreground) / 0.3); border-radius: 2px; }
   .tab-item-edit { user-select: none; }
-  
-  /* 滑动指示器动画 */
-  .tab-indicator {
-    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-  
-  /* Bento 卡片样式 - 精致阴影和边框 */
-  .tab-group-card {
-    /* 亮色模式 */
-    box-shadow: 
-      0 0 0 1px rgba(0, 0, 0, 0.03),
-      0 2px 4px rgba(0, 0, 0, 0.05),
-      0 12px 24px rgba(0, 0, 0, 0.05);
-    border: 1px solid transparent;
-  }
-  
-  /* 暗色模式 */
-  :global(.dark) .tab-group-card {
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 -20px 80px -20px rgba(255, 255, 255, 0.12) inset;
-  }
 </style>

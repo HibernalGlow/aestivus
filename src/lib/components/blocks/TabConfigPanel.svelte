@@ -6,7 +6,7 @@
   import type { Component } from 'svelte';
   import { onMount } from 'svelte';
   import { getNodeBlockLayout, type BlockDefinition } from './blockRegistry';
-  import { subscribeNodeConfig, type NodeConfig } from '$lib/stores/nodeLayoutStore';
+  import { subscribeNodeConfig, type NodeConfig, type LayoutMode } from '$lib/stores/nodeLayoutStore';
   import { Plus, X, GripVertical, Check } from '@lucide/svelte';
   import { flip } from 'svelte/animate';
   import { dndzone } from 'svelte-dnd-action';
@@ -14,18 +14,20 @@
   interface Props {
     /** 节点类型 */
     nodeType: string;
+    /** 当前布局模式 */
+    mode?: LayoutMode;
     /** 创建回调 */
     onCreate: (blockIds: string[]) => void;
     /** 取消回调 */
     onCancel: () => void;
   }
 
-  let { nodeType, onCreate, onCancel }: Props = $props();
+  let { nodeType, mode = 'fullscreen', onCreate, onCancel }: Props = $props();
   
   // 订阅 store 变化，响应式获取已使用的区块 ID
   let nodeConfig = $state<NodeConfig | undefined>(undefined);
   let usedBlockIds = $derived(
-    nodeConfig?.fullscreen.tabGroups.flatMap(g => g.blockIds) ?? []
+    nodeConfig?.[mode].tabGroups.flatMap(g => g.blockIds) ?? []
   );
   
   onMount(() => {

@@ -359,28 +359,29 @@ export function updateSizeOverride(
 
 // ============ Tab 分组操作（新 API） ============
 
-/** 获取有效的 Tab 分组（两种模式都返回 fullscreen 的配置） */
-export function getEffectiveTabGroups(nodeType: string): TabGroup[] {
+type LayoutMode = 'fullscreen' | 'normal';
+
+/** 获取指定模式的 Tab 分组 */
+export function getEffectiveTabGroups(nodeType: string, mode: LayoutMode = 'fullscreen'): TabGroup[] {
   hydrateFromStorage();
   const config = nodeLayoutStore.state.get(nodeType);
   if (!config) return [];
-  // 始终返回 fullscreen 的 tabGroups
-  return config.fullscreen.tabGroups;
+  return config[mode].tabGroups;
 }
 
-/** 获取所有 Tab 分组 */
-export function getTabGroups(nodeType: string): TabGroup[] {
-  return getEffectiveTabGroups(nodeType);
+/** 获取所有 Tab 分组（默认 fullscreen） */
+export function getTabGroups(nodeType: string, mode: LayoutMode = 'fullscreen'): TabGroup[] {
+  return getEffectiveTabGroups(nodeType, mode);
 }
 
 /** 获取区块所属的 Tab 分组 */
-export function getBlockTabGroup(nodeType: string, blockId: string): TabGroup | undefined {
-  const groups = getEffectiveTabGroups(nodeType);
+export function getBlockTabGroup(nodeType: string, blockId: string, mode: LayoutMode = 'fullscreen'): TabGroup | undefined {
+  const groups = getEffectiveTabGroups(nodeType, mode);
   return groups.find(g => g.blockIds.includes(blockId));
 }
 
 /** 创建 Tab 分组 */
-export function createTabGroup(nodeType: string, blockIds: string[]): string | null {
+export function createTabGroup(nodeType: string, blockIds: string[], mode: LayoutMode = 'fullscreen'): string | null {
   if (blockIds.length < 2) {
     console.warn('[nodeLayoutStore] 创建 Tab 分组需要至少 2 个区块');
     return null;
@@ -388,10 +389,10 @@ export function createTabGroup(nodeType: string, blockIds: string[]): string | n
   
   hydrateFromStorage();
   const config = nodeLayoutStore.state.get(nodeType) || createDefaultNodeConfig(nodeType);
-  const fullscreenState = config.fullscreen;
+  const modeState = config[mode];
   
   // 校验所有区块都存在于 gridLayout 中
-  const gridLayoutIds = new Set(fullscreenState.gridLayout.map(item => item.id));
+  const gridLayoutIds = new Set(modeState.gridLayout.map(item => item.id));
   const missingBlocks = blockIds.filter(id => !gridLayoutIds.has(id));
   if (missingBlocks.length > 0) {
     console.warn('[nodeLayoutStore] 区块不存在于 gridLayout 中:', missingBlocks);
@@ -399,7 +400,7 @@ export function createTabGroup(nodeType: string, blockIds: string[]): string | n
   }
   
   // 检查是否有区块已在其他分组中
-  const usedIds = new Set(fullscreenState.tabGroups.flatMap(g => g.blockIds));
+  const usedIds = new Set(modeState.tabGroups.flatMap(g => g.blockIds));
   const conflicts = blockIds.filter(id => usedIds.has(id));
   if (conflicts.length > 0) {
     console.warn('[nodeLayoutStore] 区块已在其他 Tab 分组中:', conflicts);
@@ -419,26 +420,26 @@ export function createTabGroup(nodeType: string, blockIds: string[]): string | n
     const current = next.get(nodeType) || createDefaultNodeConfig(nodeType);
     next.set(nodeType, {
       ...current,
-      fullscreen: {
-        ...current.fullscreen,
-        tabGroups: [...current.fullscreen.tabGroups, newGroup]
+      [mode]: {
+        ...current[mode],
+        tabGroups: [...current[mode].tabGroups, newGroup]
       },
       updatedAt: Date.now()
     });
     return next;
   });
   
-  console.log('[nodeLayoutStore] 创建 Tab 分组:', { nodeType, groupId, blockIds });
+  console.log('[nodeLayoutStore] 创建 Tab 分组:', { nodeType, mode, groupId, blockIds });
   return groupId;
 }
 
 /** 解散 Tab 分组 */
-export function dissolveTabGroup(nodeType: string, groupId: string): void {
+export function dissolveTabGroup(nodeType: string, groupId: string, mode: LayoutMode = 'fullscreen'): void {
   hydrateFromStorage();
   const config = nodeLayoutStore.state.get(nodeType);
   if (!config) return;
   
-  const groupIndex = config.fullscreen.tabGroups.findIndex(g => g.id === groupId);
+  const groupIndex = config[mode].tabGroups.findIndex(g => g.id === groupId);
   if (groupIndex === -1) {
     console.warn('[nodeLayoutStore] Tab 分组不存在:', groupId);
     return;
@@ -450,11 +451,11 @@ export function dissolveTabGroup(nodeType: string, groupId: string): void {
     const current = next.get(nodeType);
     if (!current) return next;
     
-    const newTabGroups = current.fullscreen.tabGroups.filter(g => g.id !== groupId);
+    const newTabGroups = current[mode].tabGroups.filter(g => g.id !== groupId);
     next.set(nodeType, {
       ...current,
-      fullscreen: {
-        ...current.fullscreen,
+      [mode]: {
+        ...current[mode],
         tabGroups: newTabGroups
       },
       updatedAt: Date.now()
@@ -462,16 +463,16 @@ export function dissolveTabGroup(nodeType: string, groupId: string): void {
     return next;
   });
   
-  console.log('[nodeLayoutStore] 解散 Tab 分组:', { nodeType, groupId });
+  console.log('[nodeLayoutStore] 解散 Tab 分组:', { nodeType, mode, groupId });
 }
 
 /** 切换活动区块 */
-export function switchTabGroupActive(nodeType: string, groupId: string, index: number): void {
+export function switchTabGroupActive(nodeType: string, groupId: string, index: number, mode: LayoutMode = 'fullscreen'): void {
   hydrateFromStorage();
   const config = nodeLayoutStore.state.get(nodeType);
   if (!config) return;
   
-  const group = config.fullscreen.tabGroups.find(g => g.id === groupId);
+  const group = config[mode].tabGroups.find(g => g.id === groupId);
   if (!group) return;
   
   const safeIndex = index >= group.blockIds.length ? 0 : Math.max(0, index);
@@ -481,13 +482,13 @@ export function switchTabGroupActive(nodeType: string, groupId: string, index: n
     const current = next.get(nodeType);
     if (!current) return next;
     
-    const newTabGroups = current.fullscreen.tabGroups.map(g => 
+    const newTabGroups = current[mode].tabGroups.map(g => 
       g.id === groupId ? { ...g, activeIndex: safeIndex } : g
     );
     next.set(nodeType, {
       ...current,
-      fullscreen: {
-        ...current.fullscreen,
+      [mode]: {
+        ...current[mode],
         tabGroups: newTabGroups
       },
       updatedAt: Date.now()
@@ -497,23 +498,23 @@ export function switchTabGroupActive(nodeType: string, groupId: string, index: n
 }
 
 /** 向分组添加区块 */
-export function addBlockToTabGroup(nodeType: string, groupId: string, blockId: string): void {
+export function addBlockToTabGroup(nodeType: string, groupId: string, blockId: string, mode: LayoutMode = 'fullscreen'): void {
   hydrateFromStorage();
   const config = nodeLayoutStore.state.get(nodeType);
   if (!config) return;
   
-  const group = config.fullscreen.tabGroups.find(g => g.id === groupId);
+  const group = config[mode].tabGroups.find(g => g.id === groupId);
   if (!group) return;
   if (group.blockIds.includes(blockId)) return;
   
   // 检查区块是否存在于 gridLayout
-  if (!config.fullscreen.gridLayout.some(item => item.id === blockId)) {
+  if (!config[mode].gridLayout.some(item => item.id === blockId)) {
     console.warn('[nodeLayoutStore] 区块不存在于 gridLayout:', blockId);
     return;
   }
   
   // 检查区块是否已在其他分组
-  const otherGroup = config.fullscreen.tabGroups.find(g => g.id !== groupId && g.blockIds.includes(blockId));
+  const otherGroup = config[mode].tabGroups.find(g => g.id !== groupId && g.blockIds.includes(blockId));
   if (otherGroup) {
     console.warn('[nodeLayoutStore] 区块已在其他分组中:', blockId);
     return;
@@ -524,13 +525,13 @@ export function addBlockToTabGroup(nodeType: string, groupId: string, blockId: s
     const current = next.get(nodeType);
     if (!current) return next;
     
-    const newTabGroups = current.fullscreen.tabGroups.map(g => 
+    const newTabGroups = current[mode].tabGroups.map(g => 
       g.id === groupId ? { ...g, blockIds: [...g.blockIds, blockId] } : g
     );
     next.set(nodeType, {
       ...current,
-      fullscreen: {
-        ...current.fullscreen,
+      [mode]: {
+        ...current[mode],
         tabGroups: newTabGroups
       },
       updatedAt: Date.now()
@@ -540,19 +541,19 @@ export function addBlockToTabGroup(nodeType: string, groupId: string, blockId: s
 }
 
 /** 从分组移除区块 */
-export function removeBlockFromTabGroup(nodeType: string, groupId: string, blockId: string): void {
+export function removeBlockFromTabGroup(nodeType: string, groupId: string, blockId: string, mode: LayoutMode = 'fullscreen'): void {
   hydrateFromStorage();
   const config = nodeLayoutStore.state.get(nodeType);
   if (!config) return;
   
-  const group = config.fullscreen.tabGroups.find(g => g.id === groupId);
+  const group = config[mode].tabGroups.find(g => g.id === groupId);
   if (!group) return;
   
   const newBlockIds = group.blockIds.filter(id => id !== blockId);
   
   // 如果剩余区块少于 2 个，自动解散分组
   if (newBlockIds.length < 2) {
-    dissolveTabGroup(nodeType, groupId);
+    dissolveTabGroup(nodeType, groupId, mode);
     return;
   }
   
@@ -565,13 +566,13 @@ export function removeBlockFromTabGroup(nodeType: string, groupId: string, block
     const current = next.get(nodeType);
     if (!current) return next;
     
-    const newTabGroups = current.fullscreen.tabGroups.map(g => 
+    const newTabGroups = current[mode].tabGroups.map(g => 
       g.id === groupId ? { id: newGroupId, blockIds: newBlockIds, activeIndex: newActiveIndex } : g
     );
     next.set(nodeType, {
       ...current,
-      fullscreen: {
-        ...current.fullscreen,
+      [mode]: {
+        ...current[mode],
         tabGroups: newTabGroups
       },
       updatedAt: Date.now()
@@ -581,12 +582,12 @@ export function removeBlockFromTabGroup(nodeType: string, groupId: string, block
 }
 
 /** 重排序分组内区块 */
-export function reorderTabGroupBlocks(nodeType: string, groupId: string, newOrder: string[]): void {
+export function reorderTabGroupBlocks(nodeType: string, groupId: string, newOrder: string[], mode: LayoutMode = 'fullscreen'): void {
   hydrateFromStorage();
   const config = nodeLayoutStore.state.get(nodeType);
   if (!config) return;
   
-  const group = config.fullscreen.tabGroups.find(g => g.id === groupId);
+  const group = config[mode].tabGroups.find(g => g.id === groupId);
   if (!group) return;
   
   // 找到当前活动区块的新索引
@@ -599,7 +600,7 @@ export function reorderTabGroupBlocks(nodeType: string, groupId: string, newOrde
     const current = next.get(nodeType);
     if (!current) return next;
     
-    const newTabGroups = current.fullscreen.tabGroups.map(g => 
+    const newTabGroups = current[mode].tabGroups.map(g => 
       g.id === groupId ? { 
         id: newGroupId, 
         blockIds: newOrder, 
@@ -608,8 +609,8 @@ export function reorderTabGroupBlocks(nodeType: string, groupId: string, newOrde
     );
     next.set(nodeType, {
       ...current,
-      fullscreen: {
-        ...current.fullscreen,
+      [mode]: {
+        ...current[mode],
         tabGroups: newTabGroups
       },
       updatedAt: Date.now()
@@ -619,7 +620,7 @@ export function reorderTabGroupBlocks(nodeType: string, groupId: string, newOrde
 }
 
 /** 清除所有 Tab 分组 */
-export function clearTabGroups(nodeType: string): void {
+export function clearTabGroups(nodeType: string, mode: LayoutMode = 'fullscreen'): void {
   hydrateFromStorage();
   const config = nodeLayoutStore.state.get(nodeType);
   if (!config) return;
@@ -631,8 +632,8 @@ export function clearTabGroups(nodeType: string): void {
     
     next.set(nodeType, {
       ...current,
-      fullscreen: {
-        ...current.fullscreen,
+      [mode]: {
+        ...current[mode],
         tabGroups: []
       },
       updatedAt: Date.now()
@@ -640,7 +641,7 @@ export function clearTabGroups(nodeType: string): void {
     return next;
   });
   
-  console.log('[nodeLayoutStore] 清除所有 Tab 分组:', nodeType);
+  console.log('[nodeLayoutStore] 清除所有 Tab 分组:', { nodeType, mode });
 }
 
 // ============ 渲染辅助 ============
@@ -685,16 +686,19 @@ export function computeEffectiveItems(
 }
 
 /** 获取所有被 Tab 分组使用的区块 ID */
-export function getUsedBlockIds(nodeType: string): string[] {
-  const groups = getEffectiveTabGroups(nodeType);
+export function getUsedBlockIds(nodeType: string, mode: LayoutMode = 'fullscreen'): string[] {
+  const groups = getEffectiveTabGroups(nodeType, mode);
   return groups.flatMap(g => g.blockIds);
 }
 
 /** 检查区块是否是 Tab 分组的主区块 */
-export function isTabGroupPrimary(nodeType: string, blockId: string): boolean {
-  const groups = getEffectiveTabGroups(nodeType);
+export function isTabGroupPrimary(nodeType: string, blockId: string, mode: LayoutMode = 'fullscreen'): boolean {
+  const groups = getEffectiveTabGroups(nodeType, mode);
   return groups.some(g => g.blockIds[0] === blockId);
 }
+
+/** 导出 LayoutMode 类型供外部使用 */
+export type { LayoutMode };
 
 // ============ 订阅 ============
 

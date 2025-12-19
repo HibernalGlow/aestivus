@@ -99,8 +99,8 @@
     onCreateTab?: (blockIds: string[]) => void;
     /** 是否支持创建 Tab 区块 */
     canCreateTab?: boolean;
-    /** 已在 Tab 中使用的区块 ID（不可再选） */
-    usedTabBlockIds?: string[];
+    /** 当前布局模式（用于 Tab 配置） */
+    layoutMode?: 'fullscreen' | 'normal';
   }
 
   // 默认状态标签映射
@@ -157,7 +157,7 @@
     onApplyLayout,
     onCreateTab,
     canCreateTab = false,
-    usedTabBlockIds = [],
+    layoutMode = 'fullscreen',
   }: Props = $props();
 
   // 状态
@@ -343,6 +343,7 @@
           {nodeType}
           {currentLayout}
           onApply={onApplyLayout}
+          currentMode={layoutMode}
         />
         <!-- 重置布局按钮 -->
         {#if onResetLayout}
@@ -375,6 +376,7 @@
     <div class="px-3 py-2 bg-muted/20 border-b shrink-0">
       <TabConfigPanel 
         {nodeType}
+        mode={layoutMode}
         onCreate={(blockIds) => { onCreateTab(blockIds); }}
         onCancel={() => showTabConfig = false}
       />

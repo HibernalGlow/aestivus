@@ -497,7 +497,7 @@
     onApplyLayout={(layout) => layoutRenderer?.applyLayout(layout)}
     canCreateTab={true}
     onCreateTab={(blockIds) => layoutRenderer?.createTab(blockIds)}
-    usedTabBlockIds={layoutRenderer?.getUsedBlockIdsForTab() ?? []}
+    layoutMode={isFullscreenRender ? 'fullscreen' : 'normal'}
   >
     {#snippet children()}
       <NodeLayoutRenderer

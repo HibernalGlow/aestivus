@@ -6,7 +6,16 @@ import type { GridItem } from '$lib/components/ui/dashboard-grid';
 
 // localStorage key
 const PRESETS_KEY = 'aestival-layout-presets';
-const DEFAULT_PRESET_KEY = 'aestival-default-preset';  // 存储每个 nodeType 的默认预设 ID
+const DEFAULT_PRESET_KEY = 'aestival-default-preset';  // 存储每个 nodeType 的默认预设 ID（按模式分开）
+
+/** 布局模式类型 */
+export type PresetMode = 'fullscreen' | 'normal';
+
+/** 默认预设配置结构 */
+interface DefaultPresetConfig {
+  fullscreen?: string;  // 全屏模式默认预设 ID
+  normal?: string;      // 节点模式默认预设 ID
+}
 
 /** 布局预设 */
 export interface LayoutPreset {
@@ -220,19 +229,33 @@ export function importPreset(json: string): LayoutPreset | null {
   }
 }
 
-/** 加载默认预设配置 */
-function loadDefaultPresets(): Record<string, string> {
+/** 加载默认预设配置（新格式：按模式分开） */
+function loadDefaultPresets(): Record<string, DefaultPresetConfig> {
   if (typeof window === 'undefined') return {};
   try {
     const stored = localStorage.getItem(DEFAULT_PRESET_KEY);
-    return stored ? JSON.parse(stored) : {};
+    if (!stored) return {};
+    const parsed = JSON.parse(stored);
+    
+    // 兼容旧格式：如果值是字符串，转换为新格式
+    const result: Record<string, DefaultPresetConfig> = {};
+    for (const [nodeType, value] of Object.entries(parsed)) {
+      if (typeof value === 'string') {
+        // 旧格式：单个预设 ID，同时设为两种模式的默认
+        result[nodeType] = { fullscreen: value, normal: value };
+      } else if (typeof value === 'object' && value !== null) {
+        // 新格式
+        result[nodeType] = value as DefaultPresetConfig;
+      }
+    }
+    return result;
   } catch {
     return {};
   }
 }
 
 /** 保存默认预设配置 */
-function saveDefaultPresets(defaults: Record<string, string>): void {
+function saveDefaultPresets(defaults: Record<string, DefaultPresetConfig>): void {
   if (typeof window === 'undefined') return;
   try {
     localStorage.setItem(DEFAULT_PRESET_KEY, JSON.stringify(defaults));
@@ -241,22 +264,59 @@ function saveDefaultPresets(defaults: Record<string, string>): void {
   }
 }
 
-/** 设置默认预设 */
-export function setDefaultPreset(nodeType: string, presetId: string): void {
+/** 设置默认预设（指定模式） */
+export function setDefaultPreset(nodeType: string, presetId: string, mode: PresetMode): void {
   const defaults = loadDefaultPresets();
-  defaults[nodeType] = presetId;
+  if (!defaults[nodeType]) {
+    defaults[nodeType] = {};
+  }
+  defaults[nodeType][mode] = presetId;
   saveDefaultPresets(defaults);
 }
 
-/** 获取默认预设 ID */
-export function getDefaultPresetId(nodeType: string): string | null {
+/** 取消默认预设（指定模式） */
+export function unsetDefaultPreset(nodeType: string, mode: PresetMode): void {
   const defaults = loadDefaultPresets();
-  return defaults[nodeType] || null;
+  if (defaults[nodeType]) {
+    delete defaults[nodeType][mode];
+    // 如果两种模式都没有默认了，删除整个 nodeType 条目
+    if (!defaults[nodeType].fullscreen && !defaults[nodeType].normal) {
+      delete defaults[nodeType];
+    }
+    saveDefaultPresets(defaults);
+  }
+}
+
+/** 获取默认预设 ID（指定模式） */
+export function getDefaultPresetId(nodeType: string, mode?: PresetMode): string | null {
+  const defaults = loadDefaultPresets();
+  const config = defaults[nodeType];
+  if (!config) return null;
+  
+  // 如果指定了模式，返回该模式的默认
+  if (mode) {
+    return config[mode] || null;
+  }
+  
+  // 未指定模式时，优先返回 fullscreen，兼容旧代码
+  return config.fullscreen || config.normal || null;
+}
+
+/** 获取预设的默认模式列表（用于显示圆点指示器） */
+export function getPresetDefaultModes(nodeType: string, presetId: string): PresetMode[] {
+  const defaults = loadDefaultPresets();
+  const config = defaults[nodeType];
+  if (!config) return [];
+  
+  const modes: PresetMode[] = [];
+  if (config.fullscreen === presetId) modes.push('fullscreen');
+  if (config.normal === presetId) modes.push('normal');
+  return modes;
 }
 
 /** 获取默认预设（如果没有设置，返回第一个内置预设） */
-export function getDefaultPreset(nodeType: string): LayoutPreset | null {
-  const defaultId = getDefaultPresetId(nodeType);
+export function getDefaultPreset(nodeType: string, mode?: PresetMode): LayoutPreset | null {
+  const defaultId = getDefaultPresetId(nodeType, mode);
   if (defaultId) {
     const preset = getPreset(defaultId);
     if (preset) return preset;

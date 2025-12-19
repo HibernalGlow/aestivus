@@ -2,55 +2,74 @@
   /**
    * 布局预设选择器 - Badge 样式横向布局
    * 点击 Badge 选中并应用，选中后显示操作按钮
+   * 支持分别为全屏/节点模式设置默认预设，用圆点指示器显示
    */
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
   import { Badge } from '$lib/components/ui/badge';
   import { 
     getAllPresets, savePreset, deletePreset, exportPreset, importPreset,
-    renamePreset, updatePreset, setDefaultPreset, getDefaultPresetId, type LayoutPreset 
+    renamePreset, updatePreset, setDefaultPreset, unsetDefaultPreset,
+    getDefaultPresetId, getPresetDefaultModes, type LayoutPreset, type PresetMode
   } from '$lib/stores/layoutPresets';
   import type { GridItem } from './dashboard-grid.svelte';
   import { 
-    Save, Trash2, Download, Upload, Check, X, Pencil, Pin, RefreshCw
+    Save, Trash2, Download, Upload, Check, X, Pencil, RefreshCw, Maximize2, Minimize2
   } from '@lucide/svelte';
 
   interface Props {
     nodeType: string;
     currentLayout: GridItem[];
     onApply: (layout: GridItem[]) => void;
+    /** 当前布局模式（用于高亮当前模式的默认指示器） */
+    currentMode?: PresetMode;
   }
 
-  let { nodeType, currentLayout, onApply }: Props = $props();
+  let { nodeType, currentLayout, onApply, currentMode = 'fullscreen' }: Props = $props();
 
   let presets = $state<LayoutPreset[]>([]);
   let selectedId = $state<string | null>(null);
-  let defaultId = $state<string | null>(null);
   let showSaveInput = $state(false);
   let showRenameInput = $state(false);
   let inputValue = $state('');
   let saveSuccess = $state(false);
+  
+  // 存储每个预设的默认模式列表（用于显示圆点）
+  let presetModes = $state<Record<string, PresetMode[]>>({});
 
-  // 加载预设列表
+  // 加载预设列表和默认模式
   function refreshPresets() {
     presets = getAllPresets(nodeType);
-    defaultId = getDefaultPresetId(nodeType);
+    // 加载每个预设的默认模式
+    const modes: Record<string, PresetMode[]> = {};
+    for (const preset of presets) {
+      modes[preset.id] = getPresetDefaultModes(nodeType, preset.id);
+    }
+    presetModes = modes;
   }
 
-  // 初始化：加载预设并默认选中当前使用的预设（不触发应用）
+  // 初始化
   $effect(() => {
     refreshPresets();
-    // 默认选中当前默认预设，这样更新按钮可以直接使用
+    // 默认选中当前模式的默认预设
+    const defaultId = getDefaultPresetId(nodeType, currentMode);
     if (defaultId && !selectedId) {
       selectedId = defaultId;
     }
   });
 
-  // 设为默认
-  function handleSetDefault() {
+  // 切换默认状态（点击已设为默认则取消，否则设为默认）
+  function toggleDefault(mode: PresetMode) {
     if (!selectedId) return;
-    setDefaultPreset(nodeType, selectedId);
-    defaultId = selectedId;
+    const currentModes = presetModes[selectedId] || [];
+    if (currentModes.includes(mode)) {
+      // 已是默认，取消
+      unsetDefaultPreset(nodeType, mode);
+    } else {
+      // 设为默认
+      setDefaultPreset(nodeType, selectedId, mode);
+    }
+    refreshPresets();
   }
 
   // 选中并应用预设（点击已选中的不重复应用）
@@ -135,15 +154,32 @@
   <!-- 预设 Badge 列表 -->
   <span class="text-xs text-muted-foreground shrink-0">预设:</span>
   {#each presets as preset}
-    {@const isDefault = defaultId === preset.id}
+    {@const modes = presetModes[preset.id] || []}
+    {@const isFullscreenDefault = modes.includes('fullscreen')}
+    {@const isNormalDefault = modes.includes('normal')}
     {@const isSelected = selectedId === preset.id}
-    <button onclick={() => selectPreset(preset)}>
+    <button onclick={() => selectPreset(preset)} class="relative">
       <Badge 
         variant={isSelected ? 'default' : 'outline'}
-        class="cursor-pointer hover:bg-primary/80 transition-colors {isDefault ? 'ring-2 ring-primary ring-offset-1' : ''}"
+        class="cursor-pointer hover:bg-primary/80 transition-colors pr-5"
       >
         {preset.name}
       </Badge>
+      <!-- 模式默认指示器（圆点） -->
+      <div class="absolute -right-0.5 top-1/2 -translate-y-1/2 flex flex-col gap-0.5 pr-1">
+        {#if isFullscreenDefault}
+          <div 
+            class="w-1.5 h-1.5 rounded-full {currentMode === 'fullscreen' ? 'bg-blue-500' : 'bg-blue-400/60'}" 
+            title="全屏模式默认"
+          ></div>
+        {/if}
+        {#if isNormalDefault}
+          <div 
+            class="w-1.5 h-1.5 rounded-full {currentMode === 'normal' ? 'bg-green-500' : 'bg-green-400/60'}" 
+            title="节点模式默认"
+          ></div>
+        {/if}
+      </div>
     </button>
   {/each}
 
@@ -181,18 +217,27 @@
 
     <!-- 选中预设后的操作按钮 -->
     {#if selectedId}
-      <!-- 设为默认 -->
-      {#if defaultId !== selectedId}
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          class="h-6 w-6 p-0 hover:text-primary"
-          onclick={handleSetDefault}
-          title="设为默认"
-        >
-          <Pin class="h-3 w-3" />
-        </Button>
-      {/if}
+      {@const selectedModes = presetModes[selectedId] || []}
+      <!-- 设为全屏模式默认 -->
+      <Button 
+        variant="ghost" 
+        size="sm" 
+        class="h-6 w-6 p-0 {selectedModes.includes('fullscreen') ? 'text-blue-500' : 'hover:text-blue-500'}"
+        onclick={() => toggleDefault('fullscreen')}
+        title={selectedModes.includes('fullscreen') ? '取消全屏模式默认' : '设为全屏模式默认'}
+      >
+        <Maximize2 class="h-3 w-3" />
+      </Button>
+      <!-- 设为节点模式默认 -->
+      <Button 
+        variant="ghost" 
+        size="sm" 
+        class="h-6 w-6 p-0 {selectedModes.includes('normal') ? 'text-green-500' : 'hover:text-green-500'}"
+        onclick={() => toggleDefault('normal')}
+        title={selectedModes.includes('normal') ? '取消节点模式默认' : '设为节点模式默认'}
+      >
+        <Minimize2 class="h-3 w-3" />
+      </Button>
       {#if canModify}
         <Button 
           variant="ghost" 

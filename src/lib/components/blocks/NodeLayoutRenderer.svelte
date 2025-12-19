@@ -27,6 +27,7 @@
     clearTabGroups,
     getUsedBlockIds,
     type NodeConfig,
+    type LayoutMode,
   } from "$lib/stores/nodeLayoutStore";
   import { getSizeMode, type SizeMode } from "$lib/utils/sizeUtils";
   import { onMount, tick } from "svelte";
@@ -143,8 +144,8 @@
 
   let currentLayout = $derived(nodeConfig[mode].gridLayout);
   
-  // tabGroups 始终从 fullscreen 模式读取（单一状态源）
-  let tabGroups = $derived(nodeConfig.fullscreen.tabGroups);
+  // 每种模式使用自己的 tabGroups
+  let tabGroups = $derived(nodeConfig[mode].tabGroups);
   
   // 计算被 Tab 分组隐藏的区块 ID（用于全屏模式的 CSS 隐藏）
   let hiddenBlockIds = $derived(new Set(tabGroups.flatMap(g => g.blockIds.slice(1))));
@@ -161,23 +162,23 @@
 
   /** 解散 Tab 分组 - 使用 CSS 显示，无需刷新 GridStack */
   function handleDissolveTabGroup(groupId: string) {
-    console.log("[NodeLayoutRenderer] handleDissolveTabGroup:", { groupId });
-    dissolveTabGroup(nodeType, groupId);
+    console.log("[NodeLayoutRenderer] handleDissolveTabGroup:", { groupId, mode });
+    dissolveTabGroup(nodeType, groupId, mode);
   }
 
   /** 切换 Tab 分组活动区块 */
   function handleSwitchTab(groupId: string, index: number) {
-    switchTabGroupActive(nodeType, groupId, index);
+    switchTabGroupActive(nodeType, groupId, index, mode);
   }
 
   /** 从 Tab 分组移除区块 */
   function handleRemoveBlockFromGroup(groupId: string, blockId: string) {
-    removeBlockFromTabGroup(nodeType, groupId, blockId);
+    removeBlockFromTabGroup(nodeType, groupId, blockId, mode);
   }
 
   /** 重排序 Tab 分组区块 */
   function handleReorderTabGroup(groupId: string, newOrder: string[]) {
-    reorderTabGroupBlocks(nodeType, groupId, newOrder);
+    reorderTabGroupBlocks(nodeType, groupId, newOrder, mode);
   }
 
   function applyGridItemOverride(item: GridItem): GridItem {
@@ -193,13 +194,18 @@
 
   /** 创建 Tab 分组 - 使用 CSS 隐藏，无需刷新 GridStack */
   export async function createTab(blockIds: string[]): Promise<string | null> {
-    console.log("[NodeLayoutRenderer] createTab:", { blockIds });
-    const groupId = createTabGroup(nodeType, blockIds);
+    console.log("[NodeLayoutRenderer] createTab:", { blockIds, mode });
+    const groupId = createTabGroup(nodeType, blockIds, mode);
     return groupId;
   }
 
   export function getUsedBlockIdsForTab(): string[] {
-    return getUsedBlockIds(nodeType);
+    return getUsedBlockIds(nodeType, mode);
+  }
+  
+  /** 获取当前模式 */
+  export function getCurrentMode(): LayoutMode {
+    return mode;
   }
 
   export function compact() {
@@ -210,8 +216,8 @@
   export async function resetLayout() {
     console.log("[NodeLayoutRenderer] resetLayout:", { mode, isFullscreen });
 
-    // 清除所有 Tab 分组
-    clearTabGroups(nodeType);
+    // 清除当前模式的所有 Tab 分组
+    clearTabGroups(nodeType, mode);
 
     // 重置当前模式的布局
     const defaultLayout = isFullscreen

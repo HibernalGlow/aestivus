@@ -9,6 +9,7 @@
   import { Checkbox } from '$lib/components/ui/checkbox';
   import { Input } from '$lib/components/ui/input';
 
+  import { InteractiveHover } from '$lib/components/ui/interactive-hover';
   import { NodeLayoutRenderer } from '$lib/components/blocks';
   import { ENGINEV_DEFAULT_GRID_LAYOUT } from '$lib/components/blocks/blockRegistry';
   import { api } from '$lib/services/api';
@@ -296,19 +297,46 @@
   {@const c = getSizeClasses(size)}
   <div class="flex flex-col {c.gap} {size === 'normal' ? 'flex-1 justify-center' : ''}">
     {#if size === 'normal'}
-      <Button variant={phase === 'ready' ? 'default' : 'outline'} class="h-12" onclick={handleRename} disabled={isRunning || stats.filtered === 0}>
-        {#if phase === 'renaming'}<LoaderCircle class="h-4 w-4 mr-2 animate-spin" />{:else}<Pencil class="h-4 w-4 mr-2" />{/if}执行重命名
-      </Button>
+      <!-- 全屏模式：使用 InteractiveHover 按钮 -->
+      <InteractiveHover 
+        text="执行重命名" 
+        class="w-full h-12 text-sm"
+        onclick={handleRename} 
+        disabled={isRunning || stats.filtered === 0}
+      >
+        {#snippet icon()}
+          {#if phase === 'renaming'}
+            <LoaderCircle class="h-4 w-4 animate-spin" />
+          {:else}
+            <Pencil class="h-4 w-4" />
+          {/if}
+        {/snippet}
+      </InteractiveHover>
       <div class="flex gap-2">
-        <Button variant="outline" class="flex-1 h-10" onclick={() => exportData('json')} disabled={stats.filtered === 0}>
-          <Download class="h-4 w-4 mr-1" />JSON
-        </Button>
-        <Button variant="outline" class="flex-1 h-10" onclick={() => exportData('paths')} disabled={stats.filtered === 0}>
-          <Download class="h-4 w-4 mr-1" />路径
-        </Button>
+        <InteractiveHover 
+          text="JSON" 
+          class="flex-1 h-10 text-xs"
+          onclick={() => exportData('json')} 
+          disabled={stats.filtered === 0}
+        >
+          {#snippet icon()}
+            <Download class="h-4 w-4" />
+          {/snippet}
+        </InteractiveHover>
+        <InteractiveHover 
+          text="路径" 
+          class="flex-1 h-10 text-xs"
+          onclick={() => exportData('paths')} 
+          disabled={stats.filtered === 0}
+        >
+          {#snippet icon()}
+            <Download class="h-4 w-4" />
+          {/snippet}
+        </InteractiveHover>
       </div>
       <Button variant="ghost" class="h-10" onclick={clear}><Trash2 class="h-4 w-4 mr-2" />清空</Button>
     {:else}
+      <!-- 紧凑模式：保持原有按钮 -->
       <Button class="flex-1 {c.button}" onclick={handleRename} disabled={isRunning || stats.filtered === 0}>
         {#if phase === 'renaming'}<LoaderCircle class="{c.icon} mr-1 animate-spin" />{:else}<Pencil class="{c.icon} mr-1" />{/if}重命名
       </Button>

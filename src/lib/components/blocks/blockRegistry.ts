@@ -283,6 +283,8 @@ export const ENGINEV_BLOCKS: BlockDefinition[] = [
     icon: BarChart3,
     iconClass: 'text-yellow-500',
     colSpan: 1,
+    collapsible: true,
+    defaultExpanded: true,
     visibleInNormal: true,
     visibleInFullscreen: true
   },

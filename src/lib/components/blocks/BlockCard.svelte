@@ -37,6 +37,8 @@
     children: Snippet;
     /** 标题栏额外内容 */
     headerExtra?: Snippet;
+    /** 折叠时显示的迷你内容（摘要信息） */
+    miniContent?: Snippet;
   }
 
   let {
@@ -52,7 +54,8 @@
     fullHeight: fullHeightProp = false,
     class: className = '',
     children,
-    headerExtra
+    headerExtra,
+    miniContent
   }: Props = $props();
 
   // isFullscreen 自动启用 fullHeight
@@ -131,6 +134,11 @@
       transition:slide={{ duration: 150 }}
     >
       {@render children()}
+    </div>
+  {:else if miniContent}
+    <!-- 折叠时的迷你内容 -->
+    <div class="px-3 pb-2 text-sm text-muted-foreground">
+      {@render miniContent()}
     </div>
   {/if}
 </div>

@@ -20,6 +20,7 @@
     Filter, BarChart3, Pencil, Grid3X3, List, Copy, Check,
     Image, RefreshCw, Trash2
   } from '@lucide/svelte';
+  import CircularProgress from '$lib/components/ui/CircularProgress.svelte';
   import {
     type WallpaperItem, type FilterOptions, type EngineVStats, type RenameConfig, type Phase, type EngineVState,
     getPhaseBorderClass, getRatingInfo, formatSize, calculateStats, filterWallpapers, getPreviewUrl,
@@ -249,6 +250,8 @@
 <!-- 统计区块 -->
 {#snippet statsBlock(size: SizeMode)}
   {@const c = getSizeClasses(size)}
+  {@const filterPercent = stats.total > 0 ? (stats.filtered / stats.total) * 100 : 0}
+  {@const selectPercent = stats.filtered > 0 ? (selectedIds.size / stats.filtered) * 100 : 0}
   {#if size === 'normal'}
     <div class="space-y-2 flex-1">
       <div class="flex items-center justify-between p-2 bg-muted/50 rounded-lg">
@@ -262,10 +265,35 @@
       </div>
     </div>
   {:else}
-    <div class="grid grid-cols-3 {c.gapSm} {c.text}">
-      <div class="text-center {c.paddingSm} bg-muted/50 {c.rounded}"><div class="font-bold">{stats.total}</div><div class="text-muted-foreground {c.textSm}">总计</div></div>
-      <div class="text-center {c.paddingSm} bg-blue-500/10 {c.rounded}"><div class="font-bold text-blue-600">{stats.filtered}</div><div class="text-muted-foreground {c.textSm}">过滤</div></div>
-      <div class="text-center {c.paddingSm} bg-purple-500/10 {c.rounded}"><div class="font-bold text-purple-600">{selectedIds.size}</div><div class="text-muted-foreground {c.textSm}">选择</div></div>
+    <!-- 紧凑模式：圆形进度条 -->
+    <div class="flex items-center justify-around gap-2">
+      <CircularProgress 
+        value={stats.total} 
+        max={Math.max(stats.total, 1)} 
+        label={String(stats.total)}
+        primaryColor="hsl(var(--muted-foreground))"
+        secondaryColor="hsl(var(--muted))"
+        size="size-12"
+        textSize="text-xs"
+      />
+      <CircularProgress 
+        value={filterPercent} 
+        max={100} 
+        label={String(stats.filtered)}
+        primaryColor="rgb(59 130 246)"
+        secondaryColor="rgb(59 130 246 / 0.2)"
+        size="size-12"
+        textSize="text-xs"
+      />
+      <CircularProgress 
+        value={selectPercent} 
+        max={100} 
+        label={String(selectedIds.size)}
+        primaryColor="rgb(168 85 247)"
+        secondaryColor="rgb(168 85 247 / 0.2)"
+        size="size-12"
+        textSize="text-xs"
+      />
     </div>
   {/if}
 {/snippet}

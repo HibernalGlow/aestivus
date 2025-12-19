@@ -153,7 +153,7 @@
         <div class="relative flex items-center gap-0.5 overflow-x-auto" bind:this={tabsContainer}>
           <!-- 滑动指示器背景 -->
           <div 
-            class="tab-indicator absolute top-0 h-full rounded-md bg-primary/20 ring-1 ring-primary/40 shadow-sm pointer-events-none"
+            class="tab-indicator absolute left-0 top-0 h-full rounded-md bg-primary/20 ring-1 ring-primary/40 shadow-sm pointer-events-none"
             style={indicatorStyle}
           ></div>
           {#each blockDefs as item, index (item.id)}

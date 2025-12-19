@@ -1,9 +1,10 @@
 <script lang="ts">
   /**
-   * TabGroupCard - Tab 分组卡片组件
+   * TabGroupCard - Tab 分组卡片组件（Bento Grid 风格）
    * 
    * 虚拟分组模式：区块始终在 gridLayout 中，这里只负责渲染和切换
    * 使用 CSS transform 实现平滑的 Tab 切换动画
+   * 特性：精致阴影、暗色模式优化、滑动指示器
    */
   import type { Snippet, Component } from 'svelte';
   import type { TabGroup } from '$lib/stores/nodeLayoutStore';
@@ -73,7 +74,6 @@
   }
 
   onMount(() => {
-    // 监听设置变化
     settingsManager.addListener((s) => {
       panelSettings = s.panels;
     });
@@ -111,11 +111,14 @@
 </script>
 
 <div 
-  class="tab-group-card flex-1 flex flex-col {isFullscreen ? 'border-2 border-primary/60 rounded-md shadow-md' : 'rounded-lg border shadow-sm'} {className}"
+  class="tab-group-card group relative flex-1 flex flex-col overflow-hidden rounded-xl {className}"
   style={cardStyle}
 >
+  <!-- 悬停遮罩层 -->
+  <div class="pointer-events-none absolute inset-0 z-[1] transition-all duration-300 group-hover:bg-black/[.03] dark:group-hover:bg-neutral-800/10"></div>
+  
   <!-- 标签栏 - 居中布局，左右对称 -->
-  <div class="tab-bar drag-handle flex items-center justify-center {isFullscreen ? 'p-1.5 border-b bg-muted/30' : 'p-1'} shrink-0 cursor-move">
+  <div class="tab-bar drag-handle relative z-10 flex items-center justify-center {isFullscreen ? 'p-1.5 border-b border-border/50' : 'p-1'} shrink-0 cursor-move">
     <!-- 中心容器：切换按钮 | 凹槽分隔 | 操作按钮 -->
     <div class="flex items-center gap-1 bg-muted/40 rounded-lg px-1 py-0.5">
       <!-- 左侧：切换按钮 -->
@@ -198,7 +201,7 @@
   </div>
 
   <!-- 内容区域 -->
-  <div class="tab-content flex-1 min-h-0 overflow-auto {isFullscreen ? 'p-2' : 'p-2'}">
+  <div class="tab-content relative z-10 flex-1 min-h-0 overflow-auto {isFullscreen ? 'p-2' : 'p-2'}">
     <div class="h-full">
       {#if activeBlockId}
         {@render renderContent(activeBlockId)}
@@ -215,8 +218,25 @@
   .tab-bar::-webkit-scrollbar { display: none; }
   .tab-bar { scrollbar-width: none; -ms-overflow-style: none; }
   .tab-item-edit { user-select: none; }
+  
   /* 滑动指示器动画 */
   .tab-indicator {
     transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  /* Bento 卡片样式 - 精致阴影和边框 */
+  .tab-group-card {
+    /* 亮色模式 */
+    box-shadow: 
+      0 0 0 1px rgba(0, 0, 0, 0.03),
+      0 2px 4px rgba(0, 0, 0, 0.05),
+      0 12px 24px rgba(0, 0, 0, 0.05);
+    border: 1px solid transparent;
+  }
+  
+  /* 暗色模式 */
+  :global(.dark) .tab-group-card {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 -20px 80px -20px rgba(255, 255, 255, 0.12) inset;
   }
 </style>

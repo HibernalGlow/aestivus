@@ -358,12 +358,13 @@
     </DashboardGrid>
   </div>
 {:else}
-  <div class="flex-1 overflow-y-auto overflow-x-hidden p-2 min-w-0">
+  <div class="flex-1 flex flex-col overflow-hidden p-2 min-w-0">
+    <!-- 上部区块：使用 grid 布局，不拉伸 -->
     <div
-      class="grid grid-cols-2 gap-2 min-w-0"
+      class="grid grid-cols-2 gap-2 min-w-0 shrink-0"
       style="grid-auto-rows: minmax(auto, max-content);"
     >
-      {#each currentLayout as gridItem (gridItem.id)}
+      {#each currentLayout.slice(0, -1) as gridItem (gridItem.id)}
         {@const colSpan = gridItem.w >= 2 ? 2 : 1}
         {@const tabGroup = tabGroups.find(g => g.blockIds[0] === gridItem.id)}
         {@const isHiddenByTab = hiddenBlockIds.has(gridItem.id)}
@@ -403,5 +404,47 @@
         {/if}
       {/each}
     </div>
+    <!-- 最后一个区块：可拉伸填充剩余空间 -->
+    {#if currentLayout.length > 0}
+      {@const lastItem = currentLayout[currentLayout.length - 1]}
+      {@const tabGroup = tabGroups.find(g => g.blockIds[0] === lastItem.id)}
+      {@const isHiddenByTab = hiddenBlockIds.has(lastItem.id)}
+      {#if tabGroup}
+        <div class="flex-1 min-h-0 mt-2">
+          <TabGroupCard
+            group={tabGroup}
+            {nodeType}
+            isFullscreen={false}
+            onSwitch={(index) => handleSwitchTab(tabGroup.id, index)}
+            onDissolve={() => handleDissolveTabGroup(tabGroup.id)}
+            onRemoveBlock={(blockId) => handleRemoveBlockFromGroup(tabGroup.id, blockId)}
+            onReorder={(newOrder) => handleReorderTabGroup(tabGroup.id, newOrder)}
+          >
+            {#snippet renderContent(blockId: string)}
+              {@render renderBlock(blockId, sizeMode)}
+            {/snippet}
+          </TabGroupCard>
+        </div>
+      {:else if !isHiddenByTab}
+        {@const blockDef = getBlockDefinition(nodeType, lastItem.id)}
+        {#if blockDef}
+          <div class="flex-1 min-h-0 mt-2">
+            <BlockCard
+              id={lastItem.id}
+              title={blockDef.title}
+              icon={blockDef.icon as any}
+              iconClass={blockDef.iconClass}
+              collapsible={blockDef.collapsible}
+              defaultExpanded={blockDef.defaultExpanded ?? true}
+              fullHeight={true}
+            >
+              {#snippet children()}
+                {@render renderBlock(lastItem.id, sizeMode)}
+              {/snippet}
+            </BlockCard>
+          </div>
+        {/if}
+      {/if}
+    {/if}
   </div>
 {/if}

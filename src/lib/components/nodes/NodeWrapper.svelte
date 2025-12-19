@@ -228,7 +228,7 @@
     ? 'opacity-30 pointer-events-none'
     : ''} {isFullscreenRender
     ? 'h-full flex flex-col'
-    : 'min-w-[160px]'} border rounded-lg shadow-lg overflow-hidden {borderClass}"
+    : 'h-full flex flex-col min-w-[160px]'} border rounded-lg shadow-lg overflow-hidden {borderClass}"
   style={nodeStyle}
 >
   <!-- 标题栏 -->

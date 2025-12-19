@@ -470,9 +470,9 @@
 
 
 <!-- ========== 主渲染 ========== -->
-<div class="h-full w-full flex flex-col overflow-hidden">
+<div class="h-full w-full flex flex-col overflow-hidden" style="max-width: 400px;">
   {#if !isFullscreenRender}
-    <NodeResizer minWidth={280} minHeight={200} />
+    <NodeResizer minWidth={280} minHeight={200} maxWidth={400} />
     <Handle type="target" position={Position.Left} class="bg-primary!" />
   {/if}
   

@@ -3,6 +3,7 @@
    * TabGroupCard - Tab 分组卡片组件
    * 
    * 虚拟分组模式：区块始终在 gridLayout 中，这里只负责渲染和切换
+   * 使用 CSS transform 实现平滑的 Tab 切换动画
    */
   import type { Snippet, Component } from 'svelte';
   import type { TabGroup } from '$lib/stores/nodeLayoutStore';
@@ -11,7 +12,7 @@
   import { flip } from 'svelte/animate';
   import { dndzone } from 'svelte-dnd-action';
   import { settingsManager } from '$lib/settings/settingsManager';
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
 
   interface Props {
     /** Tab 分组配置 */
@@ -46,6 +47,8 @@
   }: Props = $props();
 
   let editMode = $state(false);
+  let tabsContainer: HTMLDivElement | null = $state(null);
+  let indicatorStyle = $state('');
 
   // 获取面板设置（透明度和模糊）
   let panelSettings = $state(settingsManager.getSettings().panels);
@@ -55,11 +58,32 @@
     `background: color-mix(in srgb, var(--card) ${panelSettings.topToolbarOpacity * 0.4}%, transparent); backdrop-filter: blur(${panelSettings.topToolbarBlur}px);`
   );
 
+  // 更新指示器位置
+  async function updateIndicator() {
+    await tick();
+    if (!tabsContainer) return;
+    const buttons = tabsContainer.querySelectorAll('.tab-btn');
+    const activeBtn = buttons[group.activeIndex] as HTMLElement;
+    if (activeBtn) {
+      const containerRect = tabsContainer.getBoundingClientRect();
+      const btnRect = activeBtn.getBoundingClientRect();
+      const left = btnRect.left - containerRect.left;
+      indicatorStyle = `width: ${btnRect.width}px; transform: translateX(${left}px);`;
+    }
+  }
+
   onMount(() => {
     // 监听设置变化
     settingsManager.addListener((s) => {
       panelSettings = s.panels;
     });
+    updateIndicator();
+  });
+
+  // 监听 activeIndex 变化更新指示器
+  $effect(() => {
+    group.activeIndex;
+    updateIndicator();
   });
 
   // 获取区块定义
@@ -125,14 +149,18 @@
           {/each}
         </div>
       {:else}
-        <!-- 普通模式：点击切换 -->
-        <div class="flex items-center gap-0.5 overflow-x-auto">
-          {#each blockDefs as item, index}
-            {@const isActive = index === group.activeIndex}
+        <!-- 普通模式：带滑动指示器的切换按钮 -->
+        <div class="relative flex items-center gap-0.5 overflow-x-auto" bind:this={tabsContainer}>
+          <!-- 滑动指示器背景 -->
+          <div 
+            class="tab-indicator absolute top-0 h-full rounded-md bg-primary/20 ring-1 ring-primary/40 shadow-sm pointer-events-none"
+            style={indicatorStyle}
+          ></div>
+          {#each blockDefs as item, index (item.id)}
             {@const Icon = item.def?.icon as Component | undefined}
             <button 
               type="button" 
-              class="tab-item flex items-center justify-center p-1.5 rounded-md transition-all {isActive ? 'bg-primary/20 shadow-sm ring-1 ring-primary/40' : 'hover:bg-muted/50'}" 
+              class="tab-btn relative z-[1] flex items-center justify-center p-1.5 rounded-md" 
               onclick={() => onSwitch(index)} 
               title={item.def?.title}
             >
@@ -184,8 +212,11 @@
 </div>
 
 <style>
-  .tab-bar::-webkit-scrollbar { height: 4px; }
-  .tab-bar::-webkit-scrollbar-track { background: transparent; }
-  .tab-bar::-webkit-scrollbar-thumb { background: hsl(var(--muted-foreground) / 0.3); border-radius: 2px; }
+  .tab-bar::-webkit-scrollbar { display: none; }
+  .tab-bar { scrollbar-width: none; -ms-overflow-style: none; }
   .tab-item-edit { user-select: none; }
+  /* 滑动指示器动画 */
+  .tab-indicator {
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
 </style>

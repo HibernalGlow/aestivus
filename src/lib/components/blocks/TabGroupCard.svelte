@@ -10,6 +10,8 @@
   import { X, GripVertical, Ungroup } from '@lucide/svelte';
   import { flip } from 'svelte/animate';
   import { dndzone } from 'svelte-dnd-action';
+  import { settingsManager } from '$lib/settings/settingsManager';
+  import { onMount } from 'svelte';
 
   interface Props {
     /** Tab 分组配置 */
@@ -45,6 +47,21 @@
 
   let editMode = $state(false);
 
+  // 获取面板设置（透明度和模糊）
+  let panelSettings = $state(settingsManager.getSettings().panels);
+  
+  // 计算卡片样式 - 与 BlockCard 一致
+  let cardStyle = $derived(
+    `background: color-mix(in srgb, var(--card) ${panelSettings.topToolbarOpacity * 0.4}%, transparent); backdrop-filter: blur(${panelSettings.topToolbarBlur}px);`
+  );
+
+  onMount(() => {
+    // 监听设置变化
+    settingsManager.addListener((s) => {
+      panelSettings = s.panels;
+    });
+  });
+
   // 获取区块定义
   let blockDefs = $derived(
     group.blockIds.map(id => ({
@@ -69,7 +86,10 @@
   }
 </script>
 
-<div class="tab-group-card h-full flex flex-col {isFullscreen ? 'border-2 border-primary/60 rounded-md bg-card shadow-md' : 'bg-card rounded-lg border shadow-sm'} {className}">
+<div 
+  class="tab-group-card h-full flex flex-col {isFullscreen ? 'border-2 border-primary/60 rounded-md shadow-md' : 'rounded-lg border shadow-sm'} {className}"
+  style={cardStyle}
+>
   <!-- 标签栏 - 居中布局，左右对称 -->
   <div class="tab-bar drag-handle flex items-center justify-center {isFullscreen ? 'p-1.5 border-b bg-muted/30' : 'p-1'} shrink-0 cursor-move">
     <!-- 中心容器：切换按钮 | 凹槽分隔 | 操作按钮 -->

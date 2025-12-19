@@ -20,7 +20,6 @@
     Filter, BarChart3, Pencil, Grid3X3, List, Copy, Check,
     Image, RefreshCw, Trash2
   } from '@lucide/svelte';
-  import CircularProgress from '$lib/components/ui/CircularProgress.svelte';
   import {
     type WallpaperItem, type FilterOptions, type EngineVStats, type RenameConfig, type Phase, type EngineVState,
     getPhaseBorderClass, getRatingInfo, formatSize, calculateStats, filterWallpapers, getPreviewUrl,
@@ -249,51 +248,45 @@
 
 <!-- 统计区块 -->
 {#snippet statsBlock(size: SizeMode)}
-  {@const c = getSizeClasses(size)}
-  {@const filterPercent = stats.total > 0 ? (stats.filtered / stats.total) * 100 : 0}
-  {@const selectPercent = stats.filtered > 0 ? (selectedIds.size / stats.filtered) * 100 : 0}
+  {@const filterPercent = stats.total > 0 ? ((stats.filtered / stats.total) * 100).toFixed(0) : '0'}
+  {@const selectPercent = stats.filtered > 0 ? ((selectedIds.size / stats.filtered) * 100).toFixed(0) : '0'}
   {#if size === 'normal'}
+    <!-- 全屏模式：渐变卡片 -->
     <div class="space-y-2 flex-1">
-      <div class="flex items-center justify-between p-2 bg-muted/50 rounded-lg">
-        <span class="text-sm">总计</span><span class="text-xl font-bold">{stats.total}</span>
+      <div class="flex items-center justify-between p-3 bg-gradient-to-r from-muted/60 to-muted/30 rounded-xl border border-border/50">
+        <span class="text-sm text-muted-foreground">总计</span>
+        <span class="text-2xl font-bold tabular-nums">{stats.total}</span>
       </div>
-      <div class="flex items-center justify-between p-2 bg-blue-500/10 rounded-lg">
-        <span class="text-sm">已过滤</span><span class="text-xl font-bold text-blue-600">{stats.filtered}</span>
+      <div class="flex items-center justify-between p-3 bg-gradient-to-r from-blue-500/15 to-blue-500/5 rounded-xl border border-blue-500/20">
+        <div class="flex flex-col">
+          <span class="text-sm text-muted-foreground">已过滤</span>
+          <span class="text-xs text-blue-500/70">{filterPercent}%</span>
+        </div>
+        <span class="text-2xl font-bold text-blue-500 tabular-nums">{stats.filtered}</span>
       </div>
-      <div class="flex items-center justify-between p-2 bg-purple-500/10 rounded-lg">
-        <span class="text-sm">已选择</span><span class="text-xl font-bold text-purple-600">{selectedIds.size}</span>
+      <div class="flex items-center justify-between p-3 bg-gradient-to-r from-purple-500/15 to-purple-500/5 rounded-xl border border-purple-500/20">
+        <div class="flex flex-col">
+          <span class="text-sm text-muted-foreground">已选择</span>
+          <span class="text-xs text-purple-500/70">{selectPercent}%</span>
+        </div>
+        <span class="text-2xl font-bold text-purple-500 tabular-nums">{selectedIds.size}</span>
       </div>
     </div>
   {:else}
-    <!-- 紧凑模式：圆形进度条 -->
-    <div class="flex items-center justify-around gap-2">
-      <CircularProgress 
-        value={stats.total} 
-        max={Math.max(stats.total, 1)} 
-        label={String(stats.total)}
-        primaryColor="hsl(var(--muted-foreground))"
-        secondaryColor="hsl(var(--muted))"
-        size="size-12"
-        textSize="text-xs"
-      />
-      <CircularProgress 
-        value={filterPercent} 
-        max={100} 
-        label={String(stats.filtered)}
-        primaryColor="rgb(59 130 246)"
-        secondaryColor="rgb(59 130 246 / 0.2)"
-        size="size-12"
-        textSize="text-xs"
-      />
-      <CircularProgress 
-        value={selectPercent} 
-        max={100} 
-        label={String(selectedIds.size)}
-        primaryColor="rgb(168 85 247)"
-        secondaryColor="rgb(168 85 247 / 0.2)"
-        size="size-12"
-        textSize="text-xs"
-      />
+    <!-- 紧凑模式：简洁文字统计 -->
+    <div class="grid grid-cols-3 gap-1.5">
+      <div class="text-center p-1.5 bg-muted/40 rounded-lg">
+        <div class="text-sm font-bold tabular-nums">{stats.total}</div>
+        <div class="text-[10px] text-muted-foreground">总计</div>
+      </div>
+      <div class="text-center p-1.5 bg-blue-500/10 rounded-lg">
+        <div class="text-sm font-bold text-blue-500 tabular-nums">{stats.filtered}</div>
+        <div class="text-[10px] text-muted-foreground">{filterPercent}%</div>
+      </div>
+      <div class="text-center p-1.5 bg-purple-500/10 rounded-lg">
+        <div class="text-sm font-bold text-purple-500 tabular-nums">{selectedIds.size}</div>
+        <div class="text-[10px] text-muted-foreground">{selectPercent}%</div>
+      </div>
     </div>
   {/if}
 {/snippet}
@@ -477,7 +470,7 @@
 
 
 <!-- ========== 主渲染 ========== -->
-<div class="h-full flex flex-col overflow-hidden {isFullscreenRender ? 'w-full' : 'w-[400px]'}">
+<div class="h-full w-full flex flex-col overflow-hidden">
   {#if !isFullscreenRender}
     <NodeResizer minWidth={280} minHeight={200} />
     <Handle type="target" position={Position.Left} class="bg-primary!" />

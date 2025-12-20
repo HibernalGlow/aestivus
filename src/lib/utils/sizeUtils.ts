@@ -1,78 +1,61 @@
 /**
  * 尺寸工具模块 - Container Query 版本
  * 
- * 迁移说明：
- * - 旧版使用 JS 传递 SizeMode 参数控制样式
- * - 新版使用 CSS Container Queries 自动响应
- * - 此文件保留类型定义和兼容函数，便于渐进式迁移
+ * 迁移状态：
+ * - FindzNode: ✅ 已迁移到 Container Query
+ * - 其他节点: ⏳ 待迁移，仍使用旧版 getSizeClasses
  * 
- * 使用方式：
- * 1. 容器添加 class="node-container" 声明 container context
+ * 新版使用方式：
+ * 1. 容器添加 class="@container" 声明 container context
  * 2. 子元素使用 cq-* 类名，如 cq-input, cq-button, cq-text
  * 3. 条件显示使用 cq-compact-only / cq-wide-only
+ * 4. 样式定义在 container-responsive.css
  */
 
-/** 尺寸模式类型（保留用于渐进式迁移） */
+/** 尺寸模式类型 */
 export type SizeMode = 'compact' | 'normal';
 
 /**
- * Container Query 类名映射
- * 替代原来的 SIZE_CLASSES 对象
+ * Container Query 类名映射（新版推荐）
  */
 export const CQ_CLASSES = {
-  // 输入框
   input: 'cq-input',
-  // 按钮
   button: 'cq-button',
   buttonIcon: 'cq-button-icon',
   buttonSm: 'cq-button-sm',
-  // 图标
   icon: 'cq-icon',
   iconSm: 'cq-icon-sm',
   iconLg: 'cq-icon-lg',
-  // 间距
   gap: 'cq-gap',
   gapSm: 'cq-gap-sm',
   gapLg: 'cq-gap-lg',
-  space: 'cq-space-y',
   mb: 'cq-mb',
-  // 文字
   text: 'cq-text',
   textSm: 'cq-text-sm',
   textLg: 'cq-text-lg',
-  // 内边距
   padding: 'cq-padding',
   paddingSm: 'cq-padding-sm',
   px: 'cq-px',
   py: 'cq-py',
-  // 圆角
   rounded: 'cq-rounded',
   roundedLg: 'cq-rounded-lg',
-  // 高度限制
   maxHeight: 'cq-max-h',
   maxHeightSm: 'cq-max-h-sm',
-  // 统计卡片
   statCard: 'cq-stat-card',
   statValue: 'cq-stat-value',
   statLabel: 'cq-stat-label',
-  // Grid
-  gridStats: 'cq-grid-stats',
 } as const;
 
-/** CQ 类名类型 */
 export type CQClasses = typeof CQ_CLASSES;
 
-/**
- * 获取 CQ 类名对象
- * 替代原来的 getSizeClasses(size)
- */
+/** 获取 CQ 类名对象 */
 export function getCQClasses(): CQClasses {
   return CQ_CLASSES;
 }
 
-// ========== 兼容层（渐进式迁移用） ==========
+// ========== 兼容层（其他节点迁移前保留） ==========
 
-/** 旧版样式类映射（保留用于兼容） */
+/** 旧版样式类映射（其他节点迁移前保留） */
 export const SIZE_CLASSES = {
   compact: {
     input: 'h-7 text-xs',
@@ -141,24 +124,24 @@ export const SIZE_CLASSES = {
 export type SizeClasses = typeof SIZE_CLASSES[SizeMode];
 
 /** 
- * 获取指定模式的样式类（兼容旧代码）
- * @deprecated 请使用 getCQClasses() 配合 node-container 类
+ * 获取指定模式的样式类
+ * @deprecated 迁移到 Container Query 后可删除
  */
 export function getSizeClasses(size: SizeMode): SizeClasses {
   return SIZE_CLASSES[size];
 }
 
 /** 
- * 根据 isFullscreen 获取对应的 SizeMode（兼容旧代码）
- * @deprecated Container Query 自动响应，无需手动判断
+ * 根据 isFullscreen 获取对应的 SizeMode
+ * @deprecated 迁移到 Container Query 后可删除
  */
 export function getSizeMode(isFullscreen: boolean): SizeMode {
   return isFullscreen ? 'normal' : 'compact';
 }
 
 /** 
- * 快捷辅助：根据 isFullscreen 直接获取样式类（兼容旧代码）
- * @deprecated 请使用 getCQClasses() 配合 node-container 类
+ * 快捷辅助：根据 isFullscreen 直接获取样式类
+ * @deprecated 迁移到 Container Query 后可删除
  */
 export function getClasses(isFullscreen: boolean): SizeClasses {
   return SIZE_CLASSES[getSizeMode(isFullscreen)];

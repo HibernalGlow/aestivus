@@ -375,7 +375,7 @@
 {/snippet}
 
 <!-- 区块渲染器 -->
-{#snippet renderBlockContent(blockId: string, _size: import('$lib/utils/sizeUtils').SizeMode)}
+{#snippet renderBlockContent(blockId: string)}
   {#if blockId === 'path'}{@render pathBlock()}
   {:else if blockId === 'filter'}{@render filterBlock()}
   {:else if blockId === 'operation'}{@render operationBlock()}
@@ -419,8 +419,8 @@
         isFullscreen={isFullscreenRender}
         defaultFullscreenLayout={FINDZ_DEFAULT_GRID_LAYOUT}
       >
-        {#snippet renderBlock(blockId: string, size: import('$lib/utils/sizeUtils').SizeMode)}
-          {@render renderBlockContent(blockId, size)}
+        {#snippet renderBlock(blockId: string, _size: import('$lib/utils/sizeUtils').SizeMode)}
+          {@render renderBlockContent(blockId)}
         {/snippet}
       </NodeLayoutRenderer>
     {/snippet}

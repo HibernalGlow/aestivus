@@ -24,6 +24,17 @@
   const nodeTypes: NodeTypes = getNodeTypes();
 
   function handleKeyDown(e: KeyboardEvent) {
+    // 如果焦点在输入框、文本域等可编辑元素内，不处理删除键
+    const target = e.target as HTMLElement;
+    const isEditable = target.tagName === 'INPUT' || 
+                       target.tagName === 'TEXTAREA' || 
+                       target.isContentEditable ||
+                       target.closest('input, textarea, [contenteditable="true"]');
+    
+    if (isEditable) {
+      return; // 让输入框正常处理 Backspace/Delete
+    }
+    
     if ((e.key === 'Delete' || e.key === 'Backspace') && $flowStore.selectedNodeId) {
       e.preventDefault();
       flowStore.removeNode($flowStore.selectedNodeId);

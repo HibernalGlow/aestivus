@@ -1,6 +1,7 @@
 <script lang="ts">
   /**
    * 自定义标题栏 - 集成窗口控制和工具栏功能
+   * 支持自动隐藏、悬停唤出、pin 固定
    */
   import { flowStore, taskStore, isRunning, openSettingsOverlay } from '$lib/stores';
   import { api } from '$lib/services/api';
@@ -8,14 +9,24 @@
     Save, Play, Square, RotateCcw, FileDown, FileUp, 
     Sun, Moon, Monitor, Image, X,
     Minus, Square as MaxIcon, X as CloseIcon,
-    FolderOpen, Settings
+    FolderOpen, Settings, Pin, PinOff
   } from '@lucide/svelte';
   import { Button } from '$lib/components/ui/button';
   import { themeStore, toggleThemeMode } from '$lib/stores/theme.svelte';
   import { settingsManager } from '$lib/settings/settingsManager';
 
-  // 获取面板设置
+  interface Props {
+    /** 切换 pin 状态的回调 */
+    onTogglePin?: () => void;
+  }
+
+  let { onTogglePin }: Props = $props();
+
+  // 获取面板设置（包含 pin 状态）
   let panelSettings = $state(settingsManager.getSettings().panels);
+  
+  // 从设置中读取 pin 状态
+  let isPinned = $derived(panelSettings.titleBarPinned ?? true);
   
   // 计算标题栏样式 - 使用 color-mix 实现带颜色的透明效果
   let toolbarStyle = $derived(
@@ -226,6 +237,20 @@
 
   <!-- 居中按钮组 -->
   <div class="flex items-center gap-0.5">
+    <!-- Pin 固定按钮 -->
+    <Button 
+      variant={isPinned ? "secondary" : "ghost"} 
+      size="icon" 
+      class="h-7 w-7" 
+      onclick={onTogglePin} 
+      title={isPinned ? "取消固定标题栏" : "固定标题栏"}
+    >
+      {#if isPinned}
+        <Pin class="w-3.5 h-3.5" />
+      {:else}
+        <PinOff class="w-3.5 h-3.5" />
+      {/if}
+    </Button>
     <!-- 主题模式切换 -->
     <Button variant="ghost" size="icon" class="h-7 w-7" onclick={toggleThemeMode} title="主题">
       {#if $themeStore.mode === 'dark'}<Moon class="w-3.5 h-3.5" />

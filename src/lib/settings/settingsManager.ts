@@ -158,6 +158,8 @@ export interface NeoViewSettings {
     rightSidebarVisible: boolean;
     bottomPanelVisible: boolean;
     autoHideToolbar: boolean;
+    /** 标题栏是否固定（不自动隐藏） */
+    titleBarPinned: boolean;
     /** 侧边栏/面板透明度 0-100 */
     sidebarOpacity: number;
     /** 顶部工具栏透明度 0-100 */
@@ -357,6 +359,7 @@ const defaultSettings: NeoViewSettings = {
     rightSidebarVisible: false,
     bottomPanelVisible: false,
     autoHideToolbar: true,
+    titleBarPinned: true,
     sidebarOpacity: 85,
     topToolbarOpacity: 85,
     bottomBarOpacity: 85,

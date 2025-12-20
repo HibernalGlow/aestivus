@@ -5,6 +5,7 @@
   import { api } from '$lib/services/api';
   import FlowCanvas from '$lib/components/flow/FlowCanvas.svelte';
   import TitleBar from '$lib/components/flow/TitleBar.svelte';
+  import AutoHideTitleBar from '$lib/components/layout/AutoHideTitleBar.svelte';
   import FloatingPalette from '$lib/components/flow/FloatingPalette.svelte';
   import LogViewer from '$lib/components/execution/LogViewer.svelte';
   import { themeStore } from '$lib/stores/theme.svelte';
@@ -12,6 +13,9 @@
   import { getNodeTypes } from '$lib/stores/nodeRegistry';
 
   const flowId = $derived(page.params.id);
+  
+  // 自动隐藏标题栏引用
+  let autoHideTitleBar: AutoHideTitleBar;
   
   // 获取全屏节点的信息
   let fullscreenNode = $derived(
@@ -75,10 +79,10 @@
     <div class="absolute inset-0 bg-background pointer-events-none z-0"></div>
   {/if}
 
-  <!-- 顶部标题栏 - 在背景图上方，半透明模糊 -->
-  <div class="relative z-10">
-    <TitleBar />
-  </div>
+  <!-- 顶部标题栏 - 自动隐藏，悬停唤出，支持 pin -->
+  <AutoHideTitleBar bind:this={autoHideTitleBar}>
+    <TitleBar onTogglePin={() => autoHideTitleBar?.togglePin()} />
+  </AutoHideTitleBar>
 
   <!-- 画布区域 -->
   <div class="flex-1 relative z-[1]">

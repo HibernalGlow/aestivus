@@ -578,6 +578,64 @@ export const MIGRATEF_DEFAULT_GRID_LAYOUT: GridItem[] = [
   { id: 'log', x: 2, y: 4, w: 2, h: 2, minW: 1, minH: 1 }
 ];
 
+// ============ FormatV 节点区块定义 ============
+export const FORMATV_BLOCKS: BlockDefinition[] = [
+  {
+    id: 'path',
+    title: '目标路径',
+    icon: FolderOpen,
+    iconClass: 'text-primary',
+    colSpan: 2,
+    visibleInNormal: true,
+    visibleInFullscreen: true
+  },
+  {
+    id: 'operation',
+    title: '操作',
+    icon: Play,
+    iconClass: 'text-green-500',
+    colSpan: 1,
+    visibleInNormal: true,
+    visibleInFullscreen: true
+  },
+  {
+    id: 'stats',
+    title: '统计',
+    icon: BarChart3,
+    iconClass: 'text-yellow-500',
+    colSpan: 1,
+    visibleInNormal: true,
+    visibleInFullscreen: true
+  },
+  {
+    id: 'progress',
+    title: '状态',
+    icon: Video,
+    iconClass: 'text-muted-foreground',
+    colSpan: 1,
+    visibleInNormal: true,
+    visibleInFullscreen: true
+  },
+  {
+    id: 'log',
+    title: '日志',
+    icon: Copy,
+    iconClass: 'text-muted-foreground',
+    colSpan: 2,
+    collapsible: true,
+    visibleInNormal: true,
+    visibleInFullscreen: true
+  }
+];
+
+export const FORMATV_DEFAULT_GRID_LAYOUT: GridItem[] = [
+  { id: 'path', x: 0, y: 0, w: 2, h: 2, minW: 1, minH: 1 },
+  { id: 'operation', x: 2, y: 0, w: 2, h: 3, minW: 1, minH: 2 },
+  { id: 'stats', x: 0, y: 2, w: 2, h: 3, minW: 1, minH: 2 },
+  { id: 'progress', x: 2, y: 3, w: 2, h: 2, minW: 1, minH: 1 },
+  { id: 'log', x: 0, y: 5, w: 4, h: 2, minW: 1, minH: 1 }
+];
+
 // ============ 注册表 ============
 export const nodeBlockRegistry: Record<string, NodeBlockLayout> = {
   repacku: {
@@ -609,6 +667,11 @@ export const nodeBlockRegistry: Record<string, NodeBlockLayout> = {
     nodeType: 'migratef',
     blocks: MIGRATEF_BLOCKS,
     defaultGridLayout: MIGRATEF_DEFAULT_GRID_LAYOUT
+  },
+  formatv: {
+    nodeType: 'formatv',
+    blocks: FORMATV_BLOCKS,
+    defaultGridLayout: FORMATV_DEFAULT_GRID_LAYOUT
   }
 };
 

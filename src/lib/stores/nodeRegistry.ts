@@ -19,6 +19,7 @@ import { CrashuNode } from '$lib/components/nodes/crashu';
 import { TrenameNode } from '$lib/components/nodes/trename';
 import { EngineVNode } from '$lib/components/nodes/enginev';
 import { MigrateFNode } from '$lib/components/nodes/migratefnode';
+import { FormatVNode } from '$lib/components/nodes/formatv';
 
 /** 节点注册项 - 包含定义和组件 */
 export interface NodeRegistryEntry extends NodeDefinition {
@@ -157,6 +158,21 @@ export const NODE_REGISTRY: NodeRegistryEntry[] = [
       target_path: { type: 'path', label: '目标路径', required: true },
       mode: { type: 'select', label: '迁移模式', default: 'preserve' },
       action: { type: 'select', label: '操作类型', default: 'move' }
+    }
+  },
+  {
+    type: 'formatv',
+    category: 'tool',
+    label: 'formatv',
+    description: '视频格式过滤：添加/移除 .nov 后缀，检查重复项',
+    icon: 'Video',
+    inputs: ['path'],
+    outputs: ['path'],
+    component: FormatVNode,
+    configSchema: {
+      path: { type: 'path', label: '目标路径', required: true },
+      action: { type: 'select', label: '操作类型', default: 'scan' },
+      prefix_name: { type: 'string', label: '前缀名称', default: 'hb' }
     }
   },
 

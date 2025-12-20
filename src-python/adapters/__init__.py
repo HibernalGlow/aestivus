@@ -17,6 +17,7 @@ _ADAPTER_REGISTRY: Dict[str, str] = {
     "trename": "adapters.trename_adapter.TrenameAdapter",
     "enginev": "adapters.enginev_adapter.EngineVAdapter",
     "migratef": "adapters.migratef_adapter.MigrateFAdapter",
+    "formatv": "adapters.formatv_adapter.FormatVAdapter",
 }
 
 # 适配器实例缓存

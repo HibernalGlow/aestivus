@@ -1,7 +1,8 @@
 <script lang="ts">
   /**
    * TrenameNode - 批量重命名节点
-   * 使用 NodeLayoutRenderer 统一布局，支持节点模式和全屏模式
+   * 
+   * 使用 Container Query 自动响应尺寸
    */
   import { Handle, Position, NodeResizer } from '@xyflow/svelte';
   import { Button } from '$lib/components/ui/button';
@@ -13,8 +14,7 @@
   import { NodeLayoutRenderer } from '$lib/components/blocks';
   import { TRENAME_DEFAULT_GRID_LAYOUT } from '$lib/components/blocks/blockRegistry';
   import { api } from '$lib/services/api';
-  import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
-  import NodeWrapper from '../NodeWrapper.svelte';
+  import { getNodeState, setN/NodeWrapper.svelte';
   import { getSizeClasses, type SizeMode } from '$lib/utils/sizeUtils';
   import { 
     LoaderCircle, FolderOpen, Clipboard, FilePenLine, Search, Undo2,

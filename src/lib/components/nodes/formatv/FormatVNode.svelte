@@ -22,7 +22,7 @@
   import { 
     LoaderCircle, FolderOpen, Clipboard, Video,
     CircleCheck, CircleX, Plus, Minus, Search,
-    Copy, Check, RotateCcw, RefreshCw, Folder, Package
+    Copy, Check, RotateCcw, RefreshCw, Folder
   } from '@lucide/svelte';
 
   /** NodeLayoutRenderer 组件实例类型 */
@@ -355,38 +355,6 @@
   </div>
 {/snippet}
 
-<!-- 统计区块 -->
-{#snippet statsBlock()}
-  {#if scanResult}
-    <div class="grid grid-cols-2 cq-gap">
-      <div class="cq-stat-card bg-green-500/10 col-span-2">
-        <div class="flex items-center justify-between">
-          <span class="cq-stat-label text-muted-foreground">普通视频</span>
-          <span class="cq-stat-value text-green-600 tabular-nums">{scanResult.normal_count}</span>
-        </div>
-      </div>
-      <div class="cq-stat-card bg-yellow-500/10">
-        <div class="flex items-center justify-between">
-          <span class="cq-stat-label text-muted-foreground">.nov</span>
-          <span class="cq-stat-value text-yellow-600 tabular-nums">{scanResult.nov_count}</span>
-        </div>
-      </div>
-      {#each Object.entries(scanResult.prefixed_counts) as [name, count]}
-        {#if count > 0}
-          <div class="cq-stat-card bg-blue-500/10">
-            <div class="flex items-center justify-between">
-              <span class="cq-stat-label text-muted-foreground">[{name}]</span>
-              <span class="cq-stat-value text-blue-600 tabular-nums">{count}</span>
-            </div>
-          </div>
-        {/if}
-      {/each}
-    </div>
-  {:else}
-    <div class="cq-text text-muted-foreground text-center py-2">扫描后显示统计</div>
-  {/if}
-{/snippet}
-
 <!-- 递归渲染文件树节点 -->
 {#snippet renderTreeNode(node: FileTreeNode)}
   {#if node.isDir}
@@ -428,7 +396,7 @@
   {/if}
 {/snippet}
 
-<!-- 文件树区块 -->
+<!-- 文件树区块（含统计信息） -->
 {#snippet treeBlock()}
   {@const fileTree = fileListData ? buildFullFileTree(fileListData) : []}
   <div class="h-full flex flex-col overflow-hidden">
@@ -436,16 +404,28 @@
       <span class="cq-text font-semibold flex items-center gap-1">
         <Folder class="cq-icon text-yellow-500" />文件树
       </span>
-      <div class="flex items-center gap-2 cq-text-sm">
-        <span class="flex items-center gap-1 text-green-600">
-          <span class="w-2 h-2 rounded-full bg-green-500"></span>
-          {fileListData?.normal_files?.length ?? 0}
-        </span>
-        <span class="flex items-center gap-1 text-yellow-600">
-          <span class="w-2 h-2 rounded-full bg-yellow-500"></span>
-          {fileListData?.nov_files?.length ?? 0}
-        </span>
-      </div>
+      {#if scanResult}
+        <div class="flex items-center gap-2 cq-text-sm">
+          <span class="flex items-center gap-1 text-green-600" title="普通视频">
+            <span class="w-2 h-2 rounded-full bg-green-500"></span>
+            {scanResult.normal_count}
+          </span>
+          <span class="flex items-center gap-1 text-yellow-600" title=".nov 文件">
+            <span class="w-2 h-2 rounded-full bg-yellow-500"></span>
+            {scanResult.nov_count}
+          </span>
+          {#each Object.entries(scanResult.prefixed_counts) as [name, count]}
+            {#if count > 0}
+              <span class="flex items-center gap-1 text-blue-600" title="[{name}] 前缀">
+                <span class="w-2 h-2 rounded-full bg-blue-500"></span>
+                {count}
+              </span>
+            {/if}
+          {/each}
+        </div>
+      {:else}
+        <span class="cq-text-sm text-muted-foreground">扫描后显示</span>
+      {/if}
     </div>
     <div class="flex-1 overflow-y-auto cq-padding">
       {#if fileTree.length > 0}
@@ -488,7 +468,6 @@
 {#snippet renderBlockContent(blockId: string)}
   {#if blockId === 'path'}{@render pathBlock()}
   {:else if blockId === 'operation'}{@render operationBlock()}
-  {:else if blockId === 'stats'}{@render statsBlock()}
   {:else if blockId === 'tree'}{@render treeBlock()}
   {:else if blockId === 'log'}{@render logBlock()}
   {/if}

@@ -252,19 +252,81 @@ class AutoBackupStore {
 	}
 
 	/**
-	 * 收集所有 localStorage 数据（应用排除规则）
+	 * 检查子键是否应被排除
+	 */
+	private shouldExcludeSubKey(parentKey: string, subKey: string, subValue: unknown): boolean {
+		const exclusion = this.settings.exclusion || DEFAULT_EXCLUSION;
+		const fullKey = `${parentKey}.${subKey}`;
+
+		// 检查是否在手动排除列表中
+		if (exclusion.excludedKeys.includes(fullKey)) {
+			return true;
+		}
+
+		// 检查是否超过行数限制
+		if (exclusion.autoExcludeLargeData && exclusion.maxLineCount > 0) {
+			const subValueStr = JSON.stringify(subValue, null, 2);
+			const lineCount = subValueStr.split('\n').length;
+			if (lineCount > exclusion.maxLineCount) {
+				console.log(`[AutoBackup] 自动排除大数据子键: ${fullKey} (行数: ${lineCount})`);
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * 收集所有 localStorage 数据（应用排除规则，支持子键排除）
 	 */
 	private collectAllLocalStorage(): Record<string, string> {
 		const data: Record<string, string> = {};
 		if (typeof window === 'undefined' || !window.localStorage) return data;
 
+		// 需要支持子键排除的 localStorage 键名
+		const expandableKeys = ['aestival-node-states', 'custom-themes'];
+
 		for (let i = 0; i < localStorage.length; i++) {
 			const key = localStorage.key(i);
 			if (key) {
 				const value = localStorage.getItem(key);
-				if (value !== null && !this.shouldExcludeKey(key, value)) {
-					data[key] = value;
+				if (value === null) continue;
+
+				// 如果整个键被排除，跳过
+				if (this.shouldExcludeKey(key, value)) {
+					continue;
 				}
+
+				// 如果是可展开的键，检查子键排除
+				if (expandableKeys.includes(key)) {
+					try {
+						const parsed = JSON.parse(value);
+						if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+							const filtered: Record<string, unknown> = {};
+							let hasExcluded = false;
+
+							for (const [subKey, subValue] of Object.entries(parsed)) {
+								if (!this.shouldExcludeSubKey(key, subKey, subValue)) {
+									filtered[subKey] = subValue;
+								} else {
+									hasExcluded = true;
+								}
+							}
+
+							// 如果有子键被排除，存储过滤后的数据
+							if (hasExcluded) {
+								data[key] = JSON.stringify(filtered);
+							} else {
+								data[key] = value;
+							}
+							continue;
+						}
+					} catch {
+						// 解析失败，按原样处理
+					}
+				}
+
+				data[key] = value;
 			}
 		}
 		return data;
@@ -272,6 +334,7 @@ class AutoBackupStore {
 
 	/**
 	 * 分析 localStorage 数据（用于显示给用户）
+	 * 支持展开 JSON 对象的子键，子键嵌套在主键内部
 	 */
 	analyzeLocalStorage(): Array<{
 		key: string;
@@ -279,6 +342,14 @@ class AutoBackupStore {
 		size: number;
 		excluded: boolean;
 		reason?: string;
+		children?: Array<{
+			subKey: string;
+			fullKey: string; // 完整键名，如 aestival-node-states.node-123
+			lines: number;
+			size: number;
+			excluded: boolean;
+			reason?: string;
+		}>;
 	}> {
 		const result: Array<{
 			key: string;
@@ -286,10 +357,20 @@ class AutoBackupStore {
 			size: number;
 			excluded: boolean;
 			reason?: string;
+			children?: Array<{
+				subKey: string;
+				fullKey: string;
+				lines: number;
+				size: number;
+				excluded: boolean;
+				reason?: string;
+			}>;
 		}> = [];
 		if (typeof window === 'undefined' || !window.localStorage) return result;
 
 		const exclusion = this.settings.exclusion || DEFAULT_EXCLUSION;
+		// 需要展开子键的 localStorage 键名
+		const expandableKeys = ['aestival-node-states', 'custom-themes'];
 
 		for (let i = 0; i < localStorage.length; i++) {
 			const key = localStorage.key(i);
@@ -309,7 +390,53 @@ class AutoBackupStore {
 					reason = `超过${exclusion.maxLineCount}行`;
 				}
 
-				result.push({ key, lines, size, excluded, reason });
+				const item: (typeof result)[0] = { key, lines, size, excluded, reason };
+
+				// 如果是可展开的键，尝试解析并添加子键
+				if (expandableKeys.includes(key)) {
+					try {
+						const parsed = JSON.parse(value);
+						if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+							const children: NonNullable<(typeof result)[0]['children']> = [];
+
+							for (const [subKey, subValue] of Object.entries(parsed)) {
+								const subValueStr = JSON.stringify(subValue, null, 2);
+								const subLines = subValueStr.split('\n').length;
+								const subSize = new Blob([subValueStr]).size;
+								const fullKey = `${key}.${subKey}`;
+
+								// 检查子键是否被排除
+								let subExcluded = false;
+								let subReason: string | undefined;
+
+								if (exclusion.excludedKeys.includes(fullKey)) {
+									subExcluded = true;
+									subReason = '手动排除';
+								} else if (exclusion.autoExcludeLargeData && subLines > exclusion.maxLineCount) {
+									subExcluded = true;
+									subReason = `超过${exclusion.maxLineCount}行`;
+								}
+
+								children.push({
+									subKey,
+									fullKey,
+									lines: subLines,
+									size: subSize,
+									excluded: subExcluded,
+									reason: subReason
+								});
+							}
+
+							// 按大小排序子键
+							children.sort((a, b) => b.size - a.size);
+							item.children = children;
+						}
+					} catch {
+						// 解析失败，忽略
+					}
+				}
+
+				result.push(item);
 			}
 		}
 

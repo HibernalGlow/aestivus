@@ -24,7 +24,9 @@
 		Filter,
 		Plus,
 		X,
-		Search
+		Search,
+		ChevronRight,
+		ChevronDown
 	} from '@lucide/svelte';
 	import { onMount } from 'svelte';
 
@@ -40,7 +42,8 @@
 	// 排除配置
 	let newExcludedKey = $state('');
 	let showAnalysis = $state(false);
-	let analysisData = $state<Array<{ key: string; lines: number; size: number; excluded: boolean; reason?: string }>>([]);
+	let analysisData = $state<ReturnType<typeof autoBackupStore.analyzeLocalStorage>>([]);
+	let expandedKeys = $state<Set<string>>(new Set()); // 展开的主键;
 
 	// 间隔选项
 	const intervalOptions = [
@@ -353,14 +356,83 @@
 					<X class="h-4 w-4" />
 				</Button>
 			</div>
-			<div class="max-h-48 overflow-y-auto space-y-1">
+			<div class="max-h-64 overflow-y-auto space-y-1">
 				{#each analysisData as item}
-				<div class="flex items-center justify-between text-xs p-1.5 rounded {item.excluded ? 'bg-destructive/10 text-destructive' : 'hover:bg-muted'}">
-					<span class="truncate flex-1" title={item.key}>{item.key}</span>
-					<span class="text-muted-foreground mx-2">{item.lines}行</span>
-					<span class="text-muted-foreground">{formatSize(item.size)}</span>
-					{#if item.excluded}
-					<span class="ml-2 text-destructive">({item.reason})</span>
+				{@const hasChildren = item.children && item.children.length > 0}
+				{@const isExpanded = expandedKeys.has(item.key)}
+				<div>
+					<!-- 主键行 -->
+					<div 
+						class="flex items-center justify-between text-xs p-1.5 rounded {item.excluded ? 'bg-destructive/10 text-destructive' : 'hover:bg-muted'}"
+						class:cursor-pointer={hasChildren}
+						onclick={() => {
+							if (hasChildren) {
+								if (isExpanded) {
+									expandedKeys.delete(item.key);
+								} else {
+									expandedKeys.add(item.key);
+								}
+								expandedKeys = new Set(expandedKeys);
+							}
+						}}
+					>
+						<div class="flex items-center gap-1 flex-1 min-w-0">
+							{#if hasChildren}
+								{#if isExpanded}
+									<ChevronDown class="h-3 w-3 shrink-0" />
+								{:else}
+									<ChevronRight class="h-3 w-3 shrink-0" />
+								{/if}
+							{:else}
+								<span class="w-3"></span>
+							{/if}
+							<span class="truncate" title={item.key}>{item.key}</span>
+							{#if hasChildren}
+								<span class="text-muted-foreground">({item.children?.length})</span>
+							{/if}
+						</div>
+						<span class="text-muted-foreground mx-2 shrink-0">{item.lines}行</span>
+						<span class="text-muted-foreground shrink-0">{formatSize(item.size)}</span>
+						{#if item.excluded}
+							<span class="ml-2 text-destructive shrink-0">({item.reason})</span>
+						{/if}
+					</div>
+					<!-- 子键列表 -->
+					{#if hasChildren && isExpanded}
+						<div class="ml-4 border-l pl-2 space-y-0.5">
+							{#each item.children ?? [] as child}
+							<div class="flex items-center justify-between text-xs p-1 rounded {child.excluded ? 'bg-destructive/10 text-destructive' : 'hover:bg-muted/50'}">
+								<span class="truncate flex-1" title={child.subKey}>{child.subKey}</span>
+								<span class="text-muted-foreground mx-2 shrink-0">{child.lines}行</span>
+								<span class="text-muted-foreground shrink-0">{formatSize(child.size)}</span>
+								{#if child.excluded}
+									<span class="ml-2 text-destructive shrink-0">({child.reason})</span>
+								{:else}
+									<button 
+										type="button" 
+										class="ml-2 text-muted-foreground hover:text-destructive shrink-0"
+										title="排除此项"
+										onclick={(e) => {
+											e.stopPropagation();
+											const exclusion = settings.exclusion || { excludedKeys: [], excludedModules: [], autoExcludeLargeData: true, maxLineCount: 1000 };
+											if (!exclusion.excludedKeys.includes(child.fullKey)) {
+												autoBackupStore.updateSettings({
+													exclusion: {
+														...exclusion,
+														excludedKeys: [...exclusion.excludedKeys, child.fullKey]
+													}
+												});
+												// 刷新分析数据
+												analysisData = autoBackupStore.analyzeLocalStorage();
+											}
+										}}
+									>
+										<X class="h-3 w-3" />
+									</button>
+								{/if}
+							</div>
+							{/each}
+						</div>
 					{/if}
 				</div>
 				{/each}

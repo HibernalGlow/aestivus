@@ -6,6 +6,9 @@
 import type { ComponentType } from 'svelte';
 import type { NodeDefinition } from '$lib/types';
 
+// 导出类型供其他模块使用
+export type { NodeDefinition } from '$lib/types';
+
 // 导入所有节点组件
 import InputNode from '$lib/components/nodes/InputNode.svelte';
 import OutputNode from '$lib/components/nodes/OutputNode.svelte';

@@ -120,11 +120,9 @@
   // 初始化标记
   let initialized = $state(false);
   
+  // 初始化 effect - 只执行一次
   $effect(() => {
     if (initialized) return;
-    
-    logs = [...dataLogs];
-    hasInputConnection = dataHasInputConnection;
     
     if (savedState) {
       phase = savedState.phase ?? 'idle';
@@ -150,8 +148,15 @@
     
     initialized = true;
   });
+  
+  // 持续同步外部数据
+  $effect(() => {
+    logs = [...dataLogs];
+    hasInputConnection = dataHasInputConnection;
+  });
 
   function saveState() {
+    if (!initialized) return;
     setNodeState<DissolvefState>(nodeId, {
       phase, progress, progressText, pathText,
       nestedMode, mediaMode, archiveMode, directMode, previewMode,
@@ -351,40 +356,40 @@
 {#snippet modeBlock()}
   <div class="flex flex-col cq-gap">
     <span class="cq-text-sm text-muted-foreground mb-1">选择解散模式</span>
-    <label class="flex items-center cq-gap cursor-pointer">
-      <Checkbox bind:checked={nestedMode} disabled={isRunning || directMode} />
+    <div class="flex items-center cq-gap cursor-pointer" onclick={() => { if (!isRunning && !directMode) nestedMode = !nestedMode; }}>
+      <Checkbox checked={nestedMode} disabled={isRunning || directMode} />
       <span class="cq-text">嵌套文件夹</span>
-    </label>
-    <label class="flex items-center cq-gap cursor-pointer">
-      <Checkbox bind:checked={mediaMode} disabled={isRunning || directMode} />
+    </div>
+    <div class="flex items-center cq-gap cursor-pointer" onclick={() => { if (!isRunning && !directMode) mediaMode = !mediaMode; }}>
+      <Checkbox checked={mediaMode} disabled={isRunning || directMode} />
       <span class="cq-text">单媒体文件夹</span>
-    </label>
-    <label class="flex items-center cq-gap cursor-pointer">
-      <Checkbox bind:checked={archiveMode} disabled={isRunning || directMode} />
+    </div>
+    <div class="flex items-center cq-gap cursor-pointer" onclick={() => { if (!isRunning && !directMode) archiveMode = !archiveMode; }}>
+      <Checkbox checked={archiveMode} disabled={isRunning || directMode} />
       <span class="cq-text">单压缩包文件夹</span>
-    </label>
-    <label class="flex items-center cq-gap cursor-pointer">
-      <Checkbox bind:checked={directMode} disabled={isRunning} onchange={() => { if (directMode) { nestedMode = false; mediaMode = false; archiveMode = false; } }} />
+    </div>
+    <div class="flex items-center cq-gap cursor-pointer" onclick={() => { if (!isRunning) { directMode = !directMode; if (directMode) { nestedMode = false; mediaMode = false; archiveMode = false; } } }}>
+      <Checkbox checked={directMode} disabled={isRunning} />
       <span class="cq-text text-orange-500">直接解散</span>
-    </label>
+    </div>
   </div>
 {/snippet}
 
 {#snippet optionsBlock()}
   <div class="flex flex-col cq-gap">
-    <label class="flex items-center cq-gap cursor-pointer">
-      <Checkbox bind:checked={previewMode} disabled={isRunning} />
+    <div class="flex items-center cq-gap cursor-pointer" onclick={() => { if (!isRunning) previewMode = !previewMode; }}>
+      <Checkbox checked={previewMode} disabled={isRunning} />
       <span class="cq-text">预览模式</span>
-    </label>
+    </div>
     <Input bind:value={excludeKeywords} placeholder="排除关键词(逗号分隔)" disabled={isRunning} class="cq-text-sm" />
     
     <!-- 相似度设置 -->
     {#if !directMode && (nestedMode || archiveMode)}
       <div class="flex flex-col cq-gap mt-1 pt-1 border-t border-border/50">
-        <label class="flex items-center cq-gap cursor-pointer">
-          <Checkbox bind:checked={enableSimilarity} disabled={isRunning} />
+        <div class="flex items-center cq-gap cursor-pointer" onclick={() => { if (!isRunning) enableSimilarity = !enableSimilarity; }}>
+          <Checkbox checked={enableSimilarity} disabled={isRunning} />
           <span class="cq-text">相似度限制</span>
-        </label>
+        </div>
         {#if enableSimilarity}
           <div class="flex items-center cq-gap">
             <Slider type="multiple" bind:value={similarityThreshold} min={0} max={1} step={0.1} disabled={isRunning} class="flex-1" />

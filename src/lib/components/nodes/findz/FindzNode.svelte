@@ -21,7 +21,8 @@
     Search, LoaderCircle, FolderOpen, Clipboard,
     CircleCheck, CircleX, File, Folder, Archive,
     Copy, Check, RotateCcw, RefreshCw, HelpCircle,
-    Filter, Package, Layers
+    Filter, Package, Layers, BarChart3, ArrowUpDown,
+    ArrowUp, ArrowDown
   } from '@lucide/svelte';
 
   interface Props {
@@ -98,6 +99,7 @@
   let searchResult = $state<SearchResult | null>(savedState?.searchResult ?? null);
   let files = $state<FileData[]>(savedState?.files ?? []);
   let byExtension = $state<Record<string, number>>(savedState?.byExtension ?? {});
+  let copiedPath = $state(false);  // 复制路径状态
   let layoutRenderer = $state<any>(undefined);
   let selectedFile = $state<string | null>(null);
   let advancedMode = $state(false);
@@ -310,6 +312,31 @@
     } catch (e) { console.error('复制失败:', e); }
   }
 
+  /** 复制所有文件路径 */
+  async function copyAllPaths() {
+    try {
+      const paths = files.map(f => f.container ? `${f.container}//${f.path}` : f.path).join('\n');
+      await navigator.clipboard.writeText(paths);
+      copiedPath = true;
+      setTimeout(() => { copiedPath = false; }, 2000);
+    } catch (e) { console.error('复制失败:', e); }
+  }
+
+  /** 复制单个文件路径 */
+  async function copyFilePath(file: FileData) {
+    try {
+      const path = file.container ? `${file.container}//${file.path}` : file.path;
+      await navigator.clipboard.writeText(path);
+      copiedPath = true;
+      setTimeout(() => { copiedPath = false; }, 2000);
+    } catch (e) { console.error('复制失败:', e); }
+  }
+
+  /** 计算压缩包外文件数 */
+  function getOutsideArchiveCount(): number {
+    return files.filter(f => !f.archive && !f.container).length;
+  }
+
   function applyPreset(value: string) {
     whereClause = value;
   }
@@ -384,20 +411,27 @@
           <Layers class="h-4 w-4 mr-1" />嵌套
         </Button>
       </div>
-      <Button variant="ghost" class="h-8" onclick={handleReset} disabled={isRunning}>
-        <RotateCcw class="h-4 w-4 mr-2" />重置
-      </Button>
+      {#if phase === 'completed' || phase === 'error'}
+        <Button variant="ghost" class="h-8" onclick={handleReset}>
+          <RotateCcw class="h-4 w-4 mr-2" />重置结果
+        </Button>
+      {/if}
     {:else}
       <div class="flex flex-wrap {c.gap}">
         <Button size="sm" class={c.button} onclick={() => executeAction('search')} disabled={!canExecute || isRunning}>
           {#if phase === 'searching'}<LoaderCircle class="{c.icon} mr-1 animate-spin" />{:else}<Search class="{c.icon} mr-1" />{/if}搜索
         </Button>
         <Button size="sm" variant="outline" class={c.button} onclick={() => executeAction('archives_only')} disabled={!canExecute || isRunning}>
-          <Archive class={c.icon} />压缩包
+          <Archive class={c.icon} />
         </Button>
         <Button size="sm" variant="outline" class={c.button} onclick={() => executeAction('nested')} disabled={!canExecute || isRunning}>
-          <Layers class={c.icon} />嵌套
+          <Layers class={c.icon} />
         </Button>
+        {#if phase === 'completed' || phase === 'error'}
+          <Button size="sm" variant="ghost" class={c.button} onclick={handleReset}>
+            <RotateCcw class={c.icon} />
+          </Button>
+        {/if}
       </div>
     {/if}
   </div>
@@ -405,6 +439,7 @@
 
 <!-- 统计区块 -->
 {#snippet statsBlock(size: SizeMode)}
+  {@const outsideCount = getOutsideArchiveCount()}
   {#if size === 'normal'}
     <div class="space-y-2 flex-1">
       {#if searchResult}
@@ -413,21 +448,37 @@
           <span class="text-2xl font-bold text-blue-600 tabular-nums">{searchResult.total_count}</span>
         </div>
         <div class="grid grid-cols-2 gap-2">
+          <!-- 压缩包外文件 -->
           <div class="flex items-center justify-between p-2 bg-green-500/10 rounded-lg">
-            <span class="text-xs text-muted-foreground">文件</span>
-            <span class="text-lg font-bold text-green-600 tabular-nums">{searchResult.file_count}</span>
+            <div class="flex items-center gap-1">
+              <File class="w-3 h-3 text-green-600" />
+              <span class="text-xs text-muted-foreground">文件系统</span>
+            </div>
+            <span class="text-lg font-bold text-green-600 tabular-nums">{outsideCount}</span>
           </div>
-          <div class="flex items-center justify-between p-2 bg-yellow-500/10 rounded-lg">
-            <span class="text-xs text-muted-foreground">目录</span>
-            <span class="text-lg font-bold text-yellow-600 tabular-nums">{searchResult.dir_count}</span>
-          </div>
+          <!-- 压缩包内文件 -->
           <div class="flex items-center justify-between p-2 bg-purple-500/10 rounded-lg">
-            <span class="text-xs text-muted-foreground">压缩包内</span>
+            <div class="flex items-center gap-1">
+              <Package class="w-3 h-3 text-purple-600" />
+              <span class="text-xs text-muted-foreground">压缩包内</span>
+            </div>
             <span class="text-lg font-bold text-purple-600 tabular-nums">{searchResult.archive_count}</span>
           </div>
+          {#if searchResult.dir_count > 0}
+            <div class="flex items-center justify-between p-2 bg-yellow-500/10 rounded-lg">
+              <div class="flex items-center gap-1">
+                <Folder class="w-3 h-3 text-yellow-600" />
+                <span class="text-xs text-muted-foreground">目录</span>
+              </div>
+              <span class="text-lg font-bold text-yellow-600 tabular-nums">{searchResult.dir_count}</span>
+            </div>
+          {/if}
           {#if searchResult.nested_count > 0}
             <div class="flex items-center justify-between p-2 bg-red-500/10 rounded-lg">
-              <span class="text-xs text-muted-foreground">嵌套</span>
+              <div class="flex items-center gap-1">
+                <Layers class="w-3 h-3 text-red-600" />
+                <span class="text-xs text-muted-foreground">嵌套</span>
+              </div>
               <span class="text-lg font-bold text-red-600 tabular-nums">{searchResult.nested_count}</span>
             </div>
           {/if}
@@ -592,7 +643,14 @@
         <span class="font-semibold flex items-center gap-2">
           <Folder class="w-5 h-5 text-yellow-500" />文件列表
         </span>
-        <span class="text-xs text-muted-foreground">{files.length} 项</span>
+        <div class="flex items-center gap-1">
+          <span class="text-xs text-muted-foreground">{files.length} 项</span>
+          {#if files.length > 0}
+            <Button variant="ghost" size="icon" class="h-6 w-6" onclick={copyAllPaths} title="复制所有路径">
+              {#if copiedPath}<Check class="w-3 h-3 text-green-500" />{:else}<Copy class="w-3 h-3" />{/if}
+            </Button>
+          {/if}
+        </div>
       </div>
       
       <div class="flex-1 overflow-y-auto p-2">
@@ -606,14 +664,21 @@
           <!-- 平铺列表模式 -->
           <div class="space-y-1">
             {#each files.slice(0, 100) as file}
-              <div class="flex items-center gap-2 py-1 px-1 hover:bg-muted/50 rounded text-xs">
+              <div class="group flex items-center gap-2 py-1 px-1 hover:bg-muted/50 rounded text-xs">
                 {#if file.container}
                   <Package class="w-3 h-3 text-purple-500 shrink-0" />
                 {:else}
                   <File class="w-3 h-3 text-blue-500 shrink-0" />
                 {/if}
-                <span class="truncate flex-1" title={file.path}>{file.name}</span>
+                <span class="truncate flex-1" title={file.container ? `${file.container}//${file.path}` : file.path}>{file.name}</span>
                 <span class="text-muted-foreground shrink-0">{file.size_formatted}</span>
+                <button 
+                  class="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-muted rounded"
+                  onclick={() => copyFilePath(file)}
+                  title="复制路径"
+                >
+                  <Copy class="w-3 h-3" />
+                </button>
               </div>
             {/each}
             {#if files.length > 100}

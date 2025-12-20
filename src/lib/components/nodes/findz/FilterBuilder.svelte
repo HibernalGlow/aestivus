@@ -37,8 +37,10 @@
     inArchive: 'any' | 'yes' | 'no';
     // 类型
     itemType: 'any' | 'file' | 'dir';
-    // 自定义扩展名
+    // 自定义扩展名（包含）
     customExts: string[];
+    // 排除的扩展名
+    excludeExts: string[];
   }
 
   interface Props {
@@ -85,10 +87,12 @@
     inArchive: 'any',
     itemType: 'any',
     customExts: [],
+    excludeExts: [],
   };
 
   let config = $state<FilterConfig>(value ?? { ...defaultConfig });
   let customExtInput = $state('');
+  let excludeExtInput = $state('');  // 排除扩展名输入
   let internalSql = $state(sqlValue);
 
   // 预设系统
@@ -313,6 +317,22 @@
     emitChange();
   }
 
+  // 添加排除扩展名
+  function addExcludeExt() {
+    const ext = excludeExtInput.trim().replace(/^\./, '').toLowerCase();
+    if (ext && !config.excludeExts.includes(ext)) {
+      config.excludeExts = [...config.excludeExts, ext];
+      excludeExtInput = '';
+      emitChange();
+    }
+  }
+
+  // 移除排除扩展名
+  function removeExcludeExt(ext: string) {
+    config.excludeExts = config.excludeExts.filter(e => e !== ext);
+    emitChange();
+  }
+
   // 应用大小预设
   function applySizePreset(preset: typeof SIZE_PRESETS[0]) {
     config.sizeEnabled = true;
@@ -325,7 +345,7 @@
   function generateSql(): string {
     const conditions: string[] = [];
 
-    // 文件类型
+    // 文件类型（包含）
     const allExts: string[] = [];
     for (const typeId of config.fileTypes) {
       const preset = FILE_TYPE_PRESETS.find(p => p.id === typeId);
@@ -336,6 +356,12 @@
     if (allExts.length > 0) {
       const extList = allExts.map(e => `"${e}"`).join(', ');
       conditions.push(`ext IN (${extList})`);
+    }
+
+    // 文件类型（排除）
+    if (config.excludeExts.length > 0) {
+      const excludeList = config.excludeExts.map(e => `"${e}"`).join(', ');
+      conditions.push(`ext NOT IN (${excludeList})`);
     }
 
     // 大小
@@ -414,7 +440,7 @@
   function generateJsonConfig(): object {
     const conditions: object[] = [];
 
-    // 文件类型
+    // 文件类型（包含）
     const allExts: string[] = [];
     for (const typeId of config.fileTypes) {
       const preset = FILE_TYPE_PRESETS.find(p => p.id === typeId);
@@ -424,6 +450,11 @@
     
     if (allExts.length > 0) {
       conditions.push({ field: 'ext', op: 'in', value: allExts });
+    }
+
+    // 文件类型（排除）
+    if (config.excludeExts.length > 0) {
+      conditions.push({ field: 'ext', op: 'not_in', value: config.excludeExts });
     }
 
     // 大小
@@ -715,6 +746,32 @@
             <span class="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-500/20 text-blue-600 rounded text-xs">
               .{ext}
               <button onclick={() => removeCustomExt(ext)} class="hover:text-red-500">
+                <X class="w-3 h-3" />
+              </button>
+            </span>
+          {/each}
+        </div>
+      {/if}
+      
+      <!-- 排除扩展名 -->
+      <div class="flex items-center gap-1 mt-2">
+        <Input 
+          bind:value={excludeExtInput}
+          placeholder="排除扩展名"
+          class="h-7 text-xs flex-1"
+          {disabled}
+          onkeydown={(e) => e.key === 'Enter' && addExcludeExt()}
+        />
+        <Button variant="outline" size="sm" class="h-7" onclick={addExcludeExt} {disabled}>
+          <X class="w-3 h-3" />
+        </Button>
+      </div>
+      {#if config.excludeExts.length > 0}
+        <div class="flex flex-wrap gap-1 mt-1">
+          {#each config.excludeExts as ext}
+            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-500/20 text-red-600 rounded text-xs">
+              .{ext}
+              <button onclick={() => removeExcludeExt(ext)} class="hover:text-red-700">
                 <X class="w-3 h-3" />
               </button>
             </span>

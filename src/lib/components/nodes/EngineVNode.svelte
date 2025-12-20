@@ -19,7 +19,7 @@
   import { 
     LoaderCircle, FolderOpen, Clipboard, Download,
     Filter, BarChart3, Pencil, Grid3X3, List, Copy, Check,
-    Image, RefreshCw, Trash2
+    Image, RefreshCw, Trash2, RotateCcw
   } from '@lucide/svelte';
   import {
     type WallpaperItem, type FilterOptions, type EngineVStats, type RenameConfig, type Phase, type EngineVState,
@@ -334,12 +334,19 @@
           {/snippet}
         </InteractiveHover>
       </div>
-      <Button variant="ghost" class="h-10" onclick={clear}><Trash2 class="h-4 w-4 mr-2" />清空</Button>
+      <!-- 重置按钮常驻 -->
+      <Button variant="ghost" class="h-9" onclick={clear} disabled={isRunning}><RotateCcw class="h-4 w-4 mr-2" />清空</Button>
     {:else}
-      <!-- 紧凑模式：保持原有按钮 -->
-      <Button class="flex-1 {c.button}" onclick={handleRename} disabled={isRunning || stats.filtered === 0}>
-        {#if phase === 'renaming'}<LoaderCircle class="{c.icon} mr-1 animate-spin" />{:else}<Pencil class="{c.icon} mr-1" />{/if}重命名
-      </Button>
+      <!-- 紧凑模式 -->
+      <div class="flex {c.gapSm}">
+        <Button class="flex-1 {c.button}" onclick={handleRename} disabled={isRunning || stats.filtered === 0}>
+          {#if phase === 'renaming'}<LoaderCircle class="{c.icon} mr-1 animate-spin" />{:else}<Pencil class="{c.icon} mr-1" />{/if}重命名
+        </Button>
+        <!-- 重置按钮常驻 -->
+        <Button variant="ghost" size="icon" class="{c.buttonIcon}" onclick={clear} disabled={isRunning} title="清空">
+          <RotateCcw class={c.icon} />
+        </Button>
+      </div>
       <div class="flex {c.gapSm}">
         <Button variant="outline" size="sm" class="flex-1 {c.buttonSm}" onclick={() => exportData('json')} disabled={stats.filtered === 0}>JSON</Button>
         <Button variant="outline" size="sm" class="flex-1 {c.buttonSm}" onclick={() => exportData('paths')} disabled={stats.filtered === 0}>路径</Button>

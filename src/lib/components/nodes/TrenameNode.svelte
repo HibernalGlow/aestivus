@@ -19,7 +19,7 @@
   import { 
     LoaderCircle, FolderOpen, Clipboard, FilePenLine, Search, Undo2,
     Download, Upload, TriangleAlert, Play, RefreshCw,
-    File, Folder, Trash2, Settings2, Check, Copy
+    File, Folder, Trash2, Settings2, Check, Copy, RotateCcw
   } from '@lucide/svelte';
   import {
     type TreeNode, type TrenameState, type Phase, type OperationRecord,
@@ -302,20 +302,27 @@
           {#if phase === 'renaming'}<LoaderCircle class="h-4 w-4 animate-spin" />{:else}<Play class="h-4 w-4" />{/if}
         {/snippet}
       </InteractiveHover>
-      <Button variant="ghost" class="h-10" onclick={clear}><Trash2 class="h-4 w-4 mr-2" />清空</Button>
+      <!-- 重置按钮常驻 -->
+      <Button variant="ghost" class="h-9" onclick={clear} disabled={isRunning}><RotateCcw class="h-4 w-4 mr-2" />清空</Button>
     {:else}
-      {#if phase === 'idle' || phase === 'error'}
-        <Button class="flex-1 {c.button}" onclick={() => handleScan(false)} disabled={!scanPath.trim()}>
-          <Search class="{c.icon} mr-1" />扫描
+      <!-- 紧凑模式 -->
+      <div class="flex {c.gapSm}">
+        {#if phase === 'idle' || phase === 'error'}
+          <Button class="flex-1 {c.button}" onclick={() => handleScan(false)} disabled={!scanPath.trim()}>
+            <Search class="{c.icon} mr-1" />扫描
+          </Button>
+        {:else if phase === 'scanning'}
+          <Button class="flex-1 {c.button}" disabled><LoaderCircle class="{c.icon} mr-1 animate-spin" />扫描中</Button>
+        {:else if phase === 'ready' || phase === 'completed'}
+          <Button class="flex-1 {c.button}" onclick={handleRename} disabled={!canRename}><Play class="{c.icon} mr-1" />执行</Button>
+        {:else if phase === 'renaming'}
+          <Button class="flex-1 {c.button}" disabled><LoaderCircle class="{c.icon} mr-1 animate-spin" />执行中</Button>
+        {/if}
+        <!-- 重置按钮常驻 -->
+        <Button variant="ghost" size="icon" class="{c.buttonIcon}" onclick={clear} disabled={isRunning} title="清空">
+          <RotateCcw class={c.icon} />
         </Button>
-      {:else if phase === 'scanning'}
-        <Button class="flex-1 {c.button}" disabled><LoaderCircle class="{c.icon} mr-1 animate-spin" />扫描中</Button>
-      {:else if phase === 'ready' || phase === 'completed'}
-        <Button class="flex-1 {c.button}" onclick={handleRename} disabled={!canRename}><Play class="{c.icon} mr-1" />执行</Button>
-        <Button variant="outline" class="{c.buttonSm}" onclick={clear}>重置</Button>
-      {:else if phase === 'renaming'}
-        <Button class="flex-1 {c.button}" disabled><LoaderCircle class="{c.icon} mr-1 animate-spin" />执行中</Button>
-      {/if}
+      </div>
     {/if}
   </div>
 {/snippet}

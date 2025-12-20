@@ -23,7 +23,7 @@
     Play, LoaderCircle, FolderOpen, Clipboard, Package,
     CircleCheck, CircleX, FileArchive, Search, FolderTree,
     Trash2, Copy, Check, Folder, Image, FileText, Video, Music, 
-    ChevronRight, ChevronDown, RefreshCw
+    ChevronRight, ChevronDown, RefreshCw, RotateCcw
   } from '@lucide/svelte';
 
   interface Props {
@@ -353,7 +353,7 @@
       {/if}
       <!-- 重置按钮常驻 -->
       <Button variant="ghost" class="h-9" onclick={handleReset} disabled={isRunning}>
-        <Trash2 class="h-4 w-4 mr-2" />重置
+        <RotateCcw class="h-4 w-4 mr-2" />重置
       </Button>
     {:else}
       <!-- 紧凑模式 -->
@@ -381,7 +381,7 @@
         {/if}
         <!-- 重置按钮常驻 -->
         <Button variant="ghost" size="icon" class="{c.buttonIcon}" onclick={handleReset} disabled={isRunning} title="重置">
-          <Trash2 class={c.icon} />
+          <RotateCcw class={c.icon} />
         </Button>
       </div>
     {/if}

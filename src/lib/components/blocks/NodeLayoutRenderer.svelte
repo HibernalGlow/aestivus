@@ -470,7 +470,7 @@
       {@const tabGroup = tabGroups.find(g => g.blockIds[0] === lastItem.id)}
       {@const isHiddenByTab = hiddenBlockIds.has(lastItem.id)}
       {#if tabGroup}
-        <div class="flex-1 min-h-0 mt-2 flex flex-col">
+        <div class="flex-1 min-h-0 mt-2 flex flex-col overflow-hidden">
           <TabGroupCard
             group={tabGroup}
             {nodeType}
@@ -488,7 +488,7 @@
       {:else if !isHiddenByTab}
         {@const blockDef = getBlockDefinition(nodeType, lastItem.id)}
         {#if blockDef}
-          <div class="flex-1 min-h-0 mt-2 flex flex-col">
+          <div class="flex-1 min-h-0 mt-2 flex flex-col overflow-hidden">
             <BlockCard
               id={lastItem.id}
               title={blockDef.title}

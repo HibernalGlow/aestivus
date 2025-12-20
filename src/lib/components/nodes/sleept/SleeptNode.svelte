@@ -19,7 +19,7 @@
   import { 
     Play, LoaderCircle, Clock, Power, Moon, RotateCcw,
     CircleCheck, CircleX, Copy, Check, Activity, Wifi, Cpu,
-    Calendar, Timer, XCircle
+    Calendar, Timer, XCircle, Pause, Square
   } from '@lucide/svelte';
 
   interface Props {
@@ -35,12 +35,11 @@
 
   let { id, data = {}, isFullscreenRender = false }: Props = $props();
 
-  type Phase = 'idle' | 'running' | 'completed' | 'cancelled' | 'error';
+  type Phase = 'idle' | 'running' | 'paused' | 'completed' | 'cancelled' | 'error';
   type TimerMode = 'countdown' | 'specific_time' | 'netspeed' | 'cpu';
   type PowerMode = 'sleep' | 'shutdown' | 'restart';
 
   interface SleeptState {
-    phase: Phase;
     timerMode: TimerMode;
     powerMode: PowerMode;
     hours: number;
@@ -80,10 +79,19 @@
   let copied = $state(false);
   let progress = $state(0);
   let progressText = $state('');
+  let remainingTime = $state('00:00:00');
   let currentUpload = $state(0);
   let currentDownload = $state(0);
   let currentCpu = $state(0);
   let layoutRenderer = $state<any>(undefined);
+  
+  // 网速历史数据（用于折线图）
+  let netHistory = $state<{time: number, up: number, down: number}[]>([]);
+  let cpuHistory = $state<number[]>([]);
+  
+  // WebSocket 和取消控制
+  let ws: WebSocket | null = null;
+  let abortController: AbortController | null = null;
 
   let initialized = $state(false);
   
@@ -91,7 +99,6 @@
     if (initialized) return;
     
     if (savedState) {
-      phase = 'idle'; // 重置状态
       timerMode = savedState.timerMode ?? 'countdown';
       powerMode = savedState.powerMode ?? 'sleep';
       hours = savedState.hours ?? 0;
@@ -121,15 +128,17 @@
   function saveState() {
     if (!initialized) return;
     setNodeState<SleeptState>(nodeId, {
-      phase, timerMode, powerMode, hours, minutes, seconds, targetDatetime,
+      timerMode, powerMode, hours, minutes, seconds, targetDatetime,
       uploadThreshold, downloadThreshold, netDuration, netTriggerMode,
       cpuThreshold, cpuDuration, dryrun
     });
   }
 
   let isRunning = $derived(phase === 'running');
+  let isPaused = $derived(phase === 'paused');
+  let canStart = $derived(phase === 'idle' || phase === 'error' || phase === 'cancelled' || phase === 'completed');
   let borderClass = $derived({
-    idle: 'border-border', running: 'border-primary shadow-sm',
+    idle: 'border-border', running: 'border-primary shadow-sm', paused: 'border-yellow-500 shadow-sm',
     completed: 'border-green-500/50', cancelled: 'border-yellow-500/50', error: 'border-destructive/50'
   }[phase]);
 
@@ -144,10 +153,12 @@
     phase = 'running';
     progress = 0;
     progressText = '启动中...';
+    netHistory = [];
+    cpuHistory = [];
     log(`⏰ 启动 ${timerMode} 模式`);
     
     const taskId = `sleept-${nodeId}-${Date.now()}`;
-    let ws: WebSocket | null = null;
+    abortController = new AbortController();
     
     try {
       // 建立 WebSocket 连接
@@ -160,6 +171,22 @@
           if (msg.type === 'progress') {
             progress = msg.progress;
             progressText = msg.message;
+            // 解析剩余时间
+            const match = msg.message.match(/剩余 (\d{2}:\d{2}:\d{2})/);
+            if (match) remainingTime = match[1];
+            // 解析网速数据
+            const netMatch = msg.message.match(/↑([\d.]+) ↓([\d.]+)/);
+            if (netMatch) {
+              currentUpload = parseFloat(netMatch[1]);
+              currentDownload = parseFloat(netMatch[2]);
+              netHistory = [...netHistory.slice(-29), { time: Date.now(), up: currentUpload, down: currentDownload }];
+            }
+            // 解析CPU数据
+            const cpuMatch = msg.message.match(/CPU ([\d.]+)%/);
+            if (cpuMatch) {
+              currentCpu = parseFloat(cpuMatch[1]);
+              cpuHistory = [...cpuHistory.slice(-29), currentCpu];
+            }
           } else if (msg.type === 'log') {
             log(msg.message);
           }
@@ -175,7 +202,7 @@
         ws!.onerror = () => { clearTimeout(timeout); resolve(); };
       });
       
-      // 构建参数 - action 直接使用 timerMode
+      // 构建参数
       const params: Record<string, any> = {
         action: timerMode,
         power_mode: powerMode,
@@ -198,7 +225,6 @@
         params.cpu_duration = cpuDuration;
       }
       
-      // 发送请求（这个请求会阻塞直到定时器完成）
       const response = await api.executeNode('sleept', params, { taskId, nodeId }) as any;
       
       if (response.success) {
@@ -210,21 +236,47 @@
         phase = 'error';
         log(`❌ ${response.message}`);
       }
-    } catch (error) {
-      phase = 'error';
-      log(`❌ 执行失败: ${error}`);
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        phase = 'cancelled';
+        log('⏹️ 已停止');
+      } else {
+        phase = 'error';
+        log(`❌ 执行失败: ${error}`);
+      }
     } finally {
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.close();
       }
+      ws = null;
+      abortController = null;
     }
+  }
+
+  // 停止定时器
+  function handleStop() {
+    if (abortController) {
+      abortController.abort();
+    }
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.close();
+    }
+    phase = 'cancelled';
+    log('⏹️ 已停止');
   }
 
   // 重置
   function handleReset() {
+    // 如果正在运行，先停止
+    if (isRunning || isPaused) {
+      handleStop();
+    }
     phase = 'idle';
     progress = 0;
     progressText = '';
+    remainingTime = '00:00:00';
+    netHistory = [];
+    cpuHistory = [];
     logs = [];
   }
 
@@ -252,9 +304,17 @@
     }
   }
 
-  // 预设按钮
   function setPreset(h: number, m: number, s: number) {
     hours = h; minutes = m; seconds = s;
+  }
+  
+  // 绘制迷你折线图
+  function drawMiniChart(data: number[], color: string, max?: number): string {
+    if (data.length < 2) return '';
+    const h = 40, w = 100;
+    const maxVal = max ?? Math.max(...data, 1);
+    const points = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - (v / maxVal) * h}`).join(' ');
+    return `<svg viewBox="0 0 ${w} ${h}" class="w-full h-10"><polyline fill="none" stroke="${color}" stroke-width="1.5" points="${points}"/></svg>`;
   }
 </script>
 
@@ -333,7 +393,7 @@
     
     <label class="flex items-center cq-gap cursor-pointer mt-2">
       <Checkbox bind:checked={dryrun} disabled={isRunning} />
-      <span class="cq-text">演练模式（不实际执行）</span>
+      <span class="cq-text">演练模式</span>
     </label>
   </div>
 {/snippet}
@@ -366,17 +426,7 @@
       <Label class="cq-text font-medium">目标时间</Label>
       <Input type="text" bind:value={targetDatetime} placeholder="YYYY-MM-DD HH:MM:SS" disabled={isRunning} class="cq-text font-mono" />
       <span class="cq-text-sm text-muted-foreground">格式: 2024-12-21 23:30:00</span>
-    {:else}
-      <div class="flex items-center justify-center h-full text-muted-foreground cq-text">
-        请在监控设置中配置参数
-      </div>
-    {/if}
-  </div>
-{/snippet}
-
-{#snippet monitorBlock()}
-  <div class="flex flex-col cq-gap h-full">
-    {#if timerMode === 'netspeed'}
+    {:else if timerMode === 'netspeed'}
       <Label class="cq-text font-medium">网速监控设置</Label>
       <div class="flex cq-gap items-center">
         <div class="flex-1">
@@ -390,20 +440,16 @@
       </div>
       <div class="flex cq-gap items-center">
         <div class="flex-1">
-          <Label class="cq-text-sm text-muted-foreground">持续时间(分钟)</Label>
+          <Label class="cq-text-sm text-muted-foreground">持续(分钟)</Label>
           <Input type="number" bind:value={netDuration} min={0.5} step={0.5} disabled={isRunning} class="cq-text" />
         </div>
         <div class="flex-1">
-          <Label class="cq-text-sm text-muted-foreground">触发条件</Label>
+          <Label class="cq-text-sm text-muted-foreground">触发</Label>
           <div class="flex cq-gap">
             <Button variant={netTriggerMode === 'both' ? 'default' : 'outline'} size="sm" class="cq-button-sm flex-1" onclick={() => netTriggerMode = 'both'} disabled={isRunning}>都低于</Button>
             <Button variant={netTriggerMode === 'any' ? 'default' : 'outline'} size="sm" class="cq-button-sm flex-1" onclick={() => netTriggerMode = 'any'} disabled={isRunning}>任一</Button>
           </div>
         </div>
-      </div>
-      <div class="cq-padding bg-muted/30 cq-rounded cq-text-sm">
-        <div class="flex justify-between"><span>当前上传:</span><span>{currentUpload.toFixed(1)} KB/s</span></div>
-        <div class="flex justify-between"><span>当前下载:</span><span>{currentDownload.toFixed(1)} KB/s</span></div>
       </div>
     {:else if timerMode === 'cpu'}
       <Label class="cq-text font-medium">CPU监控设置</Label>
@@ -413,23 +459,112 @@
           <Input type="number" bind:value={cpuThreshold} min={1} max={100} disabled={isRunning} class="cq-text" />
         </div>
         <div class="flex-1">
-          <Label class="cq-text-sm text-muted-foreground">持续时间(分钟)</Label>
+          <Label class="cq-text-sm text-muted-foreground">持续(分钟)</Label>
           <Input type="number" bind:value={cpuDuration} min={0.5} step={0.5} disabled={isRunning} class="cq-text" />
         </div>
       </div>
-      <div class="cq-padding bg-muted/30 cq-rounded">
-        <div class="flex justify-between cq-text-sm"><span>当前CPU:</span><span>{currentCpu.toFixed(1)}%</span></div>
-        <Progress value={currentCpu} max={100} class="h-2 mt-1" />
+      <span class="cq-text-sm text-muted-foreground">CPU低于阈值持续指定时间后触发</span>
+    {/if}
+  </div>
+{/snippet}
+
+{#snippet statusBlock()}
+  <div class="flex flex-col cq-gap h-full">
+    {#if timerMode === 'countdown' || timerMode === 'specific_time'}
+      <!-- 倒计时/指定时间：圆形进度 -->
+      <div class="flex-1 flex flex-col items-center justify-center">
+        <div class="relative w-24 h-24">
+          <!-- 背景圆 -->
+          <svg class="w-full h-full -rotate-90" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="8" class="text-muted/30" />
+            <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="8" 
+              class={phase === 'completed' ? 'text-green-500' : phase === 'error' ? 'text-red-500' : 'text-primary'}
+              stroke-dasharray={`${progress * 2.83} 283`}
+              stroke-linecap="round" />
+          </svg>
+          <!-- 中心文字 -->
+          <div class="absolute inset-0 flex flex-col items-center justify-center">
+            {#if isRunning}
+              <span class="text-lg font-mono font-bold">{remainingTime}</span>
+              <span class="cq-text-sm text-muted-foreground">{progress}%</span>
+            {:else if phase === 'completed'}
+              <CircleCheck class="w-8 h-8 text-green-500" />
+            {:else if phase === 'error'}
+              <CircleX class="w-8 h-8 text-red-500" />
+            {:else}
+              <Clock class="w-8 h-8 text-muted-foreground/50" />
+            {/if}
+          </div>
+        </div>
+        <span class="cq-text text-muted-foreground mt-2">{progressText || '等待启动'}</span>
       </div>
-      <span class="cq-text-sm text-muted-foreground">当CPU使用率低于阈值持续指定时间后触发</span>
-    {:else}
-      <div class="flex flex-col items-center justify-center h-full text-muted-foreground cq-text cq-gap">
-        <Activity class="w-8 h-8 opacity-50" />
-        <span>当前模式无需监控设置</span>
-        <div class="cq-padding bg-muted/30 cq-rounded w-full">
-          <div class="flex justify-between cq-text-sm"><span>CPU:</span><span>{currentCpu.toFixed(1)}%</span></div>
-          <div class="flex justify-between cq-text-sm"><span>上传:</span><span>{currentUpload.toFixed(1)} KB/s</span></div>
-          <div class="flex justify-between cq-text-sm"><span>下载:</span><span>{currentDownload.toFixed(1)} KB/s</span></div>
+    {:else if timerMode === 'netspeed'}
+      <!-- 网速监控：折线图 -->
+      <div class="flex-1 flex flex-col">
+        <div class="flex justify-between cq-text-sm mb-1">
+          <span class="text-cyan-500">↑ {currentUpload.toFixed(1)} KB/s</span>
+          <span class="text-green-500">↓ {currentDownload.toFixed(1)} KB/s</span>
+        </div>
+        <div class="flex-1 bg-muted/20 rounded relative overflow-hidden min-h-[60px]">
+          {#if netHistory.length > 1}
+            <svg viewBox="0 0 100 50" class="w-full h-full" preserveAspectRatio="none">
+              <!-- 上传线 -->
+              <polyline 
+                fill="none" 
+                stroke="#06b6d4" 
+                stroke-width="1.5"
+                points={netHistory.map((d, i) => `${(i / Math.max(netHistory.length - 1, 1)) * 100},${50 - (d.up / Math.max(...netHistory.map(h => Math.max(h.up, h.down)), 1)) * 45}`).join(' ')}
+              />
+              <!-- 下载线 -->
+              <polyline 
+                fill="none" 
+                stroke="#22c55e" 
+                stroke-width="1.5"
+                points={netHistory.map((d, i) => `${(i / Math.max(netHistory.length - 1, 1)) * 100},${50 - (d.down / Math.max(...netHistory.map(h => Math.max(h.up, h.down)), 1)) * 45}`).join(' ')}
+              />
+              <!-- 阈值线 -->
+              <line x1="0" y1="25" x2="100" y2="25" stroke="#f59e0b" stroke-width="0.5" stroke-dasharray="2,2" />
+            </svg>
+          {:else}
+            <div class="flex items-center justify-center h-full text-muted-foreground cq-text-sm">
+              {isRunning ? '采集数据中...' : '启动后显示图表'}
+            </div>
+          {/if}
+        </div>
+        <div class="flex items-center cq-gap mt-1">
+          <Progress value={progress} class="flex-1 h-1.5" />
+          <span class="cq-text-sm text-muted-foreground w-10 text-right">{progress}%</span>
+        </div>
+      </div>
+    {:else if timerMode === 'cpu'}
+      <!-- CPU监控：柱状/折线 -->
+      <div class="flex-1 flex flex-col">
+        <div class="flex justify-between items-center mb-1">
+          <span class="cq-text font-medium">CPU {currentCpu.toFixed(1)}%</span>
+          <span class="cq-text-sm text-muted-foreground">阈值 {cpuThreshold}%</span>
+        </div>
+        <div class="flex-1 bg-muted/20 rounded relative overflow-hidden min-h-[60px]">
+          {#if cpuHistory.length > 1}
+            <svg viewBox="0 0 100 50" class="w-full h-full" preserveAspectRatio="none">
+              <!-- CPU折线 -->
+              <polyline 
+                fill="none" 
+                stroke="#8b5cf6" 
+                stroke-width="2"
+                points={cpuHistory.map((v, i) => `${(i / Math.max(cpuHistory.length - 1, 1)) * 100},${50 - (v / 100) * 45}`).join(' ')}
+              />
+              <!-- 阈值线 -->
+              <line x1="0" y1={50 - (cpuThreshold / 100) * 45} x2="100" y2={50 - (cpuThreshold / 100) * 45} stroke="#f59e0b" stroke-width="0.5" stroke-dasharray="2,2" />
+            </svg>
+          {:else}
+            <div class="flex items-center justify-center h-full text-muted-foreground cq-text-sm">
+              {isRunning ? '采集数据中...' : '启动后显示图表'}
+            </div>
+          {/if}
+        </div>
+        <div class="flex items-center cq-gap mt-1">
+          <Progress value={progress} class="flex-1 h-1.5" />
+          <span class="cq-text-sm text-muted-foreground w-10 text-right">{progress}%</span>
         </div>
       </div>
     {/if}
@@ -438,43 +573,22 @@
 
 {#snippet operationBlock()}
   <div class="flex flex-col cq-gap h-full">
-    <div class="flex items-center cq-gap cq-padding bg-muted/30 cq-rounded">
-      {#if phase === 'completed'}
-        <CircleCheck class="cq-icon text-green-500 shrink-0" />
-        <span class="cq-text text-green-600 font-medium">已完成</span>
-      {:else if phase === 'cancelled'}
-        <XCircle class="cq-icon text-yellow-500 shrink-0" />
-        <span class="cq-text text-yellow-600 font-medium">已取消</span>
-      {:else if phase === 'error'}
-        <CircleX class="cq-icon text-red-500 shrink-0" />
-        <span class="cq-text text-red-600 font-medium">错误</span>
-      {:else if isRunning}
-        <LoaderCircle class="cq-icon text-primary animate-spin shrink-0" />
-        <div class="flex-1 flex flex-col cq-gap">
-          <Progress value={progress} class="h-1.5" />
-          <span class="cq-text-sm text-muted-foreground truncate">{progressText}</span>
-        </div>
-      {:else}
-        <Clock class="cq-icon text-muted-foreground/50 shrink-0" />
-        <span class="cq-text text-muted-foreground">等待启动</span>
-      {/if}
-    </div>
-    
-    {#if phase === 'idle' || phase === 'error' || phase === 'cancelled' || phase === 'completed'}
-      <Button class="w-full cq-button flex-1" onclick={handleStart} disabled={isRunning}>
-        <Play class="cq-icon mr-1" /><span>开始</span>
+    {#if canStart}
+      <Button class="w-full cq-button flex-1" onclick={handleStart}>
+        <Play class="cq-icon mr-1" />开始
       </Button>
     {:else}
-      <Button class="w-full cq-button flex-1" disabled>
-        <LoaderCircle class="cq-icon mr-1 animate-spin" /><span>运行中...</span>
+      <Button class="w-full cq-button flex-1" variant="destructive" onclick={handleStop}>
+        <Square class="cq-icon mr-1" />停止
       </Button>
     {/if}
     
-    <Button variant="ghost" class="w-full cq-button-sm" onclick={handleReset} disabled={isRunning}>
+    <Button variant="outline" class="w-full cq-button-sm" onclick={handleReset}>
       <RotateCcw class="cq-icon mr-1" />重置
     </Button>
+    
     <Button variant="ghost" class="w-full cq-button-sm" onclick={fetchStats}>
-      <Activity class="cq-icon mr-1" />刷新状态
+      <Activity class="cq-icon mr-1" />刷新
     </Button>
   </div>
 {/snippet}
@@ -500,15 +614,15 @@
 {#snippet renderBlockContent(blockId: string)}
   {#if blockId === 'mode'}{@render modeBlock()}
   {:else if blockId === 'timer'}{@render timerBlock()}
-  {:else if blockId === 'monitor'}{@render monitorBlock()}
+  {:else if blockId === 'status'}{@render statusBlock()}
   {:else if blockId === 'operation'}{@render operationBlock()}
   {:else if blockId === 'log'}{@render logBlock()}
   {/if}
 {/snippet}
 
-<div class="h-full w-full flex flex-col overflow-hidden" style={!isFullscreenRender ? 'max-width: 450px;' : ''}>
+<div class="h-full w-full flex flex-col overflow-hidden" style={!isFullscreenRender ? 'max-width: 480px;' : ''}>
   {#if !isFullscreenRender}
-    <NodeResizer minWidth={320} minHeight={280} maxWidth={450} />
+    <NodeResizer minWidth={360} minHeight={320} maxWidth={480} />
     <Handle type="target" position={Position.Left} class="bg-primary!" />
   {/if}
 

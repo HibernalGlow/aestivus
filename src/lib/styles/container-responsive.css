@@ -408,7 +408,7 @@
 
 /* 节点模式下（容器 < 500px）限制区块最大高度 */
 .block-card {
-  max-height: 400px;
+  max-height: 800px;
   overflow: auto;
 }
 
@@ -421,7 +421,7 @@
 
 /* Tab 分组卡片同样限制 */
 .tab-group-card {
-  max-height: 400px;
+  max-height: 800px;
   overflow: hidden;
 }
 

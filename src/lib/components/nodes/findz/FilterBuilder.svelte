@@ -117,6 +117,17 @@
       }
     },
     {
+      id: 'archive-no-avif',
+      name: '压缩包不含AVIF',
+      isBuiltin: true,
+      config: {
+        ...defaultConfig,
+        excludeExts: ['avif'],
+        locationEnabled: true,
+        inArchive: 'yes',
+      }
+    },
+    {
       id: 'large-files',
       name: '大文件 (>100MB)',
       isBuiltin: true,

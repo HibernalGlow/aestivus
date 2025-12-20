@@ -2,6 +2,9 @@
   /**
    * FormatVNode - 视频格式过滤节点组件
    * 添加/移除 .nov 后缀，检查重复项
+   * 
+   * 使用 Container Query 自动响应尺寸
+   * - 一套 HTML 结构，CSS 控制尺寸变化
    */
   import { Handle, Position, NodeResizer } from '@xyflow/svelte';
   import { Button } from '$lib/components/ui/button';
@@ -16,13 +19,21 @@
   import { getApiV1Url } from '$lib/stores/backend';
   import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
   import NodeWrapper from '../NodeWrapper.svelte';
-  import { getSizeClasses, type SizeMode } from '$lib/utils/sizeUtils';
   import { 
-    Play, LoaderCircle, FolderOpen, Clipboard, Video,
+    LoaderCircle, FolderOpen, Clipboard, Video,
     CircleCheck, CircleX, Plus, Minus, Search,
-    Copy, Check, RotateCcw, RefreshCw, File, Folder,
-    ChevronRight, ChevronDown, Image
+    Copy, Check, RotateCcw, RefreshCw, Folder, Package
   } from '@lucide/svelte';
+
+  /** NodeLayoutRenderer 组件实例类型 */
+  interface LayoutRendererInstance {
+    compact: () => void;
+    resetLayout: () => Promise<void>;
+    getCurrentLayout: () => import('$lib/components/ui/dashboard-grid').GridItem[];
+    getCurrentTabGroups: () => { id: string; blockIds: string[]; activeIndex: number }[];
+    applyLayout: (layout: import('$lib/components/ui/dashboard-grid').GridItem[], tabGroups?: { id: string; blockIds: string[]; activeIndex: number }[] | null) => Promise<void>;
+    createTab: (blockIds: string[]) => Promise<string | null>;
+  }
 
   interface Props {
     id: string;
@@ -78,19 +89,16 @@
   let phase = $state<Phase>(savedState?.phase ?? 'idle');
   let logs = $state<string[]>(data?.logs ? [...data.logs] : []);
   let hasInputConnection = $state(data?.hasInputConnection ?? false);
-  let copied = $state(false);
+  let copiedLogs = $state(false);
   let progress = $state(savedState?.progress ?? 0);
   let progressText = $state(savedState?.progressText ?? '');
   let scanResult = $state<ScanResult | null>(savedState?.scanResult ?? null);
   let duplicateCount = $state(savedState?.duplicateCount ?? 0);
   let fileListData = $state<FileListData | null>(savedState?.fileListData ?? null);
-  let prefixName = $state('hb');
-  let layoutRenderer = $state<any>(undefined);
+  let layoutRenderer = $state<LayoutRendererInstance | undefined>(undefined);
   
   // 选中的文件（用于预览）
   let selectedFile = $state<string | null>(null);
-  // 视图模式
-  let viewMode = $state<'tree' | 'list'>('tree');
 
   // 获取视频缩略图 URL（使用系统缩略图）
   function getThumbnailUrl(filePath: string): string {
@@ -117,127 +125,67 @@
 
   function log(msg: string) { logs = [...logs.slice(-30), msg]; }
 
-  // 获取文件名
-  function getFileName(path: string): string {
-    return path.split(/[/\\]/).pop() || path;
-  }
-
   /**
    * 构建完整的文件树结构
-   * 将所有文件路径合并成一棵树，保留完整的目录层级
    */
   function buildFullFileTree(fileListData: FileListData): FileTreeNode[] {
-    // 使用 Map 存储树节点，key 为完整路径
     const nodeMap = new Map<string, FileTreeNode>();
     
-    // 处理单个文件，确保所有父目录都存在
     function addFile(filePath: string, category: FileCategory) {
       const parts = filePath.split(/[/\\]/);
       let currentPath = '';
       
-      // 创建所有父目录节点
       for (let i = 0; i < parts.length - 1; i++) {
         const part = parts[i];
         const parentPath = currentPath;
         currentPath = currentPath ? `${currentPath}\\${part}` : part;
         
         if (!nodeMap.has(currentPath)) {
-          const dirNode: FileTreeNode = {
-            name: part,
-            path: currentPath,
-            isDir: true,
-            children: []
-          };
+          const dirNode: FileTreeNode = { name: part, path: currentPath, isDir: true, children: [] };
           nodeMap.set(currentPath, dirNode);
-          
-          // 添加到父节点的 children
           if (parentPath && nodeMap.has(parentPath)) {
             const parent = nodeMap.get(parentPath)!;
-            if (!parent.children!.find(c => c.path === currentPath)) {
-              parent.children!.push(dirNode);
-            }
+            if (!parent.children!.find(c => c.path === currentPath)) parent.children!.push(dirNode);
           }
         }
       }
       
-      // 创建文件节点
       const fileName = parts[parts.length - 1];
-      const fileNode: FileTreeNode = {
-        name: fileName,
-        path: filePath,
-        isDir: false,
-        category
-      };
+      const fileNode: FileTreeNode = { name: fileName, path: filePath, isDir: false, category };
       nodeMap.set(filePath, fileNode);
-      
-      // 添加到父目录
       if (currentPath && nodeMap.has(currentPath)) {
         const parent = nodeMap.get(currentPath)!;
-        if (!parent.children!.find(c => c.path === filePath)) {
-          parent.children!.push(fileNode);
-        }
+        if (!parent.children!.find(c => c.path === filePath)) parent.children!.push(fileNode);
       }
     }
     
-    // 添加所有文件
-    for (const file of fileListData.normal_files ?? []) {
-      addFile(file, 'normal');
-    }
-    for (const file of fileListData.nov_files ?? []) {
-      addFile(file, 'nov');
-    }
+    for (const file of fileListData.normal_files ?? []) addFile(file, 'normal');
+    for (const file of fileListData.nov_files ?? []) addFile(file, 'nov');
     for (const [prefix, files] of Object.entries(fileListData.prefixed_files ?? {})) {
-      for (const file of files ?? []) {
-        addFile(file, prefix);
-      }
+      for (const file of files ?? []) addFile(file, prefix);
     }
     
-    // 找出根节点（没有父节点的目录）
     const rootNodes: FileTreeNode[] = [];
     for (const [path, node] of nodeMap) {
       if (node.isDir) {
         const parentPath = path.split(/[/\\]/).slice(0, -1).join('\\');
-        if (!parentPath || !nodeMap.has(parentPath)) {
-          rootNodes.push(node);
-        }
+        if (!parentPath || !nodeMap.has(parentPath)) rootNodes.push(node);
       }
     }
     
-    // 递归排序所有节点的 children
     function sortChildren(node: FileTreeNode) {
       if (node.children && node.children.length > 0) {
         node.children.sort((a, b) => {
-          // 目录在前，文件在后
           if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
           return a.name.localeCompare(b.name);
         });
-        for (const child of node.children) {
-          sortChildren(child);
-        }
+        for (const child of node.children) sortChildren(child);
       }
     }
     
-    for (const root of rootNodes) {
-      sortChildren(root);
-    }
-    
-    // 排序根节点
+    for (const root of rootNodes) sortChildren(root);
     rootNodes.sort((a, b) => a.name.localeCompare(b.name));
-    
     return rootNodes;
-  }
-  
-  // 计算树中的文件总数
-  function countFilesInTree(nodes: FileTreeNode[]): number {
-    let count = 0;
-    for (const node of nodes) {
-      if (node.isDir && node.children) {
-        count += countFilesInTree(node.children);
-      } else if (!node.isDir) {
-        count++;
-      }
-    }
-    return count;
   }
 
   async function selectFolder() {
@@ -263,28 +211,15 @@
     progress = 0;
     progressText = action === 'scan' ? '扫描中...' : '处理中...';
     
-    const actionText = {
-      scan: '扫描',
-      add_nov: '添加 .nov',
-      remove_nov: '移除 .nov',
-      check_duplicates: '检查重复'
-    }[action];
-    
+    const actionText = { scan: '扫描', add_nov: '添加 .nov', remove_nov: '移除 .nov', check_duplicates: '检查重复' }[action];
     log(`🎬 开始${actionText}: ${targetPath}`);
 
     try {
       progress = 10;
-      const response = await api.executeNode('formatv', {
-        path: targetPath,
-        action,
-        prefix_name: prefixName
-      }) as any;
+      const response = await api.executeNode('formatv', { path: targetPath, action }) as any;
 
       if (response.success) {
-        phase = 'completed';
-        progress = 100;
-        progressText = '完成';
-        
+        phase = 'completed'; progress = 100; progressText = '完成';
         if (action === 'scan') {
           scanResult = {
             normal_count: response.data?.normal_count ?? 0,
@@ -299,240 +234,135 @@
         } else if (action === 'check_duplicates') {
           duplicateCount = response.data?.duplicate_count ?? 0;
         }
-        
         log(`✅ ${response.message}`);
       } else {
-        phase = 'error';
-        progress = 0;
+        phase = 'error'; progress = 0;
         log(`❌ 失败: ${response.message}`);
       }
     } catch (error) {
-      phase = 'error';
-      progress = 0;
+      phase = 'error'; progress = 0;
       log(`❌ 失败: ${error}`);
     }
   }
 
   function handleReset() {
-    phase = 'idle';
-    progress = 0;
-    progressText = '';
-    scanResult = null;
-    duplicateCount = 0;
-    fileListData = null;
-    selectedFile = null;
-    logs = [];
+    phase = 'idle'; progress = 0; progressText = '';
+    scanResult = null; duplicateCount = 0; fileListData = null; selectedFile = null; logs = [];
   }
 
-  async function copyLogs() {
+  async function copyToClipboard(text: string, setter: (v: boolean) => void) {
     try {
-      await navigator.clipboard.writeText(logs.join('\n'));
-      copied = true;
-      setTimeout(() => { copied = false; }, 2000);
+      await navigator.clipboard.writeText(text);
+      setter(true);
+      setTimeout(() => setter(false), 2000);
     } catch (e) { console.error('复制失败:', e); }
-  }
-
-  // 获取文件类型的颜色
-  function getCategoryColor(category: FileCategory): string {
-    switch (category) {
-      case 'normal': return 'text-green-500';
-      case 'nov': return 'text-yellow-500';
-      default: return 'text-blue-500';
-    }
-  }
-
-  // 获取文件类型的标签
-  function getCategoryLabel(category: FileCategory): string {
-    switch (category) {
-      case 'normal': return '普通';
-      case 'nov': return '.nov';
-      default: return `[${category}]`;
-    }
   }
 </script>
 
+<!-- ========== 统一 UI 结构的区块 ========== -->
+
 <!-- 路径输入区块 -->
-{#snippet pathBlock(size: SizeMode)}
-  {@const c = getSizeClasses(size)}
-  <div class="{c.mb}">
-    <div class="flex items-center gap-1 mb-1 {c.text}">
-      <Video class={c.icon} />
+{#snippet pathBlock()}
+  <div class="cq-mb">
+    <div class="flex items-center gap-1 mb-1 cq-text">
+      <Video class="cq-icon" />
       <span class="font-medium">目标目录</span>
     </div>
     {#if !hasInputConnection}
-      <div class="flex {c.gap}">
-        <Input bind:value={targetPath} placeholder="输入或选择目录..." disabled={isRunning} class="flex-1 {c.input}" />
-        <Button variant="outline" size="icon" class="{c.buttonIcon} shrink-0" onclick={selectFolder} disabled={isRunning}>
-          <FolderOpen class={c.icon} />
+      <div class="flex cq-gap">
+        <Input bind:value={targetPath} placeholder="输入或选择目录..." disabled={isRunning} class="flex-1 cq-input" />
+        <Button variant="outline" size="icon" class="cq-button-icon shrink-0" onclick={selectFolder} disabled={isRunning}>
+          <FolderOpen class="cq-icon" />
         </Button>
-        <Button variant="outline" size="icon" class="{c.buttonIcon} shrink-0" onclick={pasteFromClipboard} disabled={isRunning}>
-          <Clipboard class={c.icon} />
+        <Button variant="outline" size="icon" class="cq-button-icon shrink-0" onclick={pasteFromClipboard} disabled={isRunning}>
+          <Clipboard class="cq-icon" />
         </Button>
       </div>
     {:else}
-      <div class="text-muted-foreground {c.padding} bg-muted {c.rounded} flex items-center {c.gap} {c.text}">
+      <div class="text-muted-foreground cq-padding bg-muted cq-rounded flex items-center cq-gap cq-text">
         <span>←</span><span>输入来自上游节点</span>
       </div>
     {/if}
   </div>
 {/snippet}
 
-<!-- 操作区块 -->
-{#snippet operationBlock(size: SizeMode)}
-  {@const c = getSizeClasses(size)}
-  <div class="flex flex-col {c.gap}">
-    {#if size === 'normal'}
-      <InteractiveHover text="扫描" class="w-full h-10 text-sm" onclick={() => executeAction('scan')} disabled={!canExecute || isRunning}>
-        {#snippet icon()}{#if phase === 'scanning'}<LoaderCircle class="h-4 w-4 animate-spin" />{:else}<RefreshCw class="h-4 w-4" />{/if}{/snippet}
-      </InteractiveHover>
-      <div class="grid grid-cols-2 gap-2">
-        <Button variant="outline" class="h-9" onclick={() => executeAction('add_nov')} disabled={!canExecute || isRunning}>
-          <Plus class="h-4 w-4 mr-1" />.nov
-        </Button>
-        <Button variant="outline" class="h-9" onclick={() => executeAction('remove_nov')} disabled={!canExecute || isRunning}>
-          <Minus class="h-4 w-4 mr-1" />.nov
-        </Button>
-      </div>
-      <Button variant="secondary" class="h-9" onclick={() => executeAction('check_duplicates')} disabled={!canExecute || isRunning}>
-        <Search class="h-4 w-4 mr-2" />检查重复
+<!-- 操作区块（含状态显示） -->
+{#snippet operationBlock()}
+  <div class="flex flex-col cq-gap h-full">
+    <!-- 状态指示 -->
+    <div class="flex items-center cq-gap cq-padding bg-muted/30 cq-rounded">
+      {#if phase === 'completed'}
+        <CircleCheck class="cq-icon text-green-500 shrink-0" />
+        <span class="cq-text text-green-600 font-medium">完成</span>
+        <span class="cq-text-sm text-muted-foreground ml-auto">{scanResult?.normal_count ?? 0} 项</span>
+      {:else if phase === 'error'}
+        <CircleX class="cq-icon text-red-500 shrink-0" />
+        <span class="cq-text text-red-600 font-medium">失败</span>
+      {:else if isRunning}
+        <LoaderCircle class="cq-icon text-primary animate-spin shrink-0" />
+        <div class="flex-1">
+          <Progress value={progress} class="h-1.5" />
+        </div>
+        <span class="cq-text-sm text-muted-foreground">{progress}%</span>
+      {:else}
+        <Video class="cq-icon text-muted-foreground/50 shrink-0" />
+        <span class="cq-text text-muted-foreground">等待执行</span>
+      {/if}
+    </div>
+    <!-- 主按钮 -->
+    <Button class="w-full cq-button flex-1" onclick={() => executeAction('scan')} disabled={!canExecute || isRunning}>
+      {#if phase === 'scanning'}<LoaderCircle class="cq-icon mr-1 animate-spin" />{:else}<RefreshCw class="cq-icon mr-1" />{/if}
+      <span>扫描</span>
+    </Button>
+    <!-- 辅助按钮 -->
+    <div class="flex cq-gap">
+      <Button variant="outline" class="flex-1 cq-button-sm" onclick={() => executeAction('add_nov')} disabled={!canExecute || isRunning}>
+        <Plus class="cq-icon" /><span class="cq-wide-only ml-1">.nov</span>
       </Button>
-      <Button variant="ghost" class="h-8" onclick={handleReset} disabled={isRunning}>
-        <RotateCcw class="h-4 w-4 mr-2" />重置
+      <Button variant="outline" class="flex-1 cq-button-sm" onclick={() => executeAction('remove_nov')} disabled={!canExecute || isRunning}>
+        <Minus class="cq-icon" /><span class="cq-wide-only ml-1">.nov</span>
       </Button>
-    {:else}
-      <div class="flex flex-wrap {c.gap}">
-        <Button size="sm" class={c.button} onclick={() => executeAction('scan')} disabled={!canExecute || isRunning}>
-          {#if phase === 'scanning'}<LoaderCircle class="{c.icon} mr-1 animate-spin" />{:else}<RefreshCw class="{c.icon} mr-1" />{/if}扫描
+      <Button variant="secondary" class="flex-1 cq-button-sm" onclick={() => executeAction('check_duplicates')} disabled={!canExecute || isRunning}>
+        <Search class="cq-icon" /><span class="cq-wide-only ml-1">重复</span>
+      </Button>
+      {#if phase === 'completed' || phase === 'error'}
+        <Button variant="ghost" size="icon" class="cq-button-icon" onclick={handleReset}>
+          <RotateCcw class="cq-icon" />
         </Button>
-        <Button size="sm" variant="outline" class={c.button} onclick={() => executeAction('add_nov')} disabled={!canExecute || isRunning}>
-          <Plus class={c.icon} />.nov
-        </Button>
-        <Button size="sm" variant="outline" class={c.button} onclick={() => executeAction('remove_nov')} disabled={!canExecute || isRunning}>
-          <Minus class={c.icon} />.nov
-        </Button>
-        <Button size="sm" variant="secondary" class={c.button} onclick={() => executeAction('check_duplicates')} disabled={!canExecute || isRunning}>
-          <Search class={c.icon} />重复
-        </Button>
-      </div>
-    {/if}
+      {/if}
+    </div>
   </div>
 {/snippet}
 
 <!-- 统计区块 -->
-{#snippet statsBlock(size: SizeMode)}
-  {#if size === 'normal'}
-    <div class="space-y-2 flex-1">
-      {#if scanResult}
-        <div class="flex items-center justify-between p-3 bg-gradient-to-r from-green-500/15 to-green-500/5 rounded-xl border border-green-500/20">
-          <span class="text-sm text-muted-foreground">普通视频</span>
-          <span class="text-2xl font-bold text-green-600 tabular-nums">{scanResult.normal_count}</span>
+{#snippet statsBlock()}
+  {#if scanResult}
+    <div class="grid grid-cols-2 cq-gap">
+      <div class="cq-stat-card bg-green-500/10 col-span-2">
+        <div class="flex items-center justify-between">
+          <span class="cq-stat-label text-muted-foreground">普通视频</span>
+          <span class="cq-stat-value text-green-600 tabular-nums">{scanResult.normal_count}</span>
         </div>
-        <div class="flex items-center justify-between p-3 bg-gradient-to-r from-yellow-500/15 to-yellow-500/5 rounded-xl border border-yellow-500/20">
-          <span class="text-sm text-muted-foreground">.nov 文件</span>
-          <span class="text-2xl font-bold text-yellow-600 tabular-nums">{scanResult.nov_count}</span>
+      </div>
+      <div class="cq-stat-card bg-yellow-500/10">
+        <div class="flex items-center justify-between">
+          <span class="cq-stat-label text-muted-foreground">.nov</span>
+          <span class="cq-stat-value text-yellow-600 tabular-nums">{scanResult.nov_count}</span>
         </div>
-        {#each Object.entries(scanResult.prefixed_counts) as [name, count]}
-          {#if count > 0}
-            <div class="flex items-center justify-between p-3 bg-gradient-to-r from-blue-500/15 to-blue-500/5 rounded-xl border border-blue-500/20">
-              <span class="text-sm text-muted-foreground">[{name}]</span>
-              <span class="text-2xl font-bold text-blue-600 tabular-nums">{count}</span>
+      </div>
+      {#each Object.entries(scanResult.prefixed_counts) as [name, count]}
+        {#if count > 0}
+          <div class="cq-stat-card bg-blue-500/10">
+            <div class="flex items-center justify-between">
+              <span class="cq-stat-label text-muted-foreground">[{name}]</span>
+              <span class="cq-stat-value text-blue-600 tabular-nums">{count}</span>
             </div>
-          {/if}
-        {/each}
-      {:else}
-        <div class="text-center text-muted-foreground py-4">扫描后显示统计</div>
-      {/if}
-    </div>
-  {:else}
-    {#if scanResult}
-      <div class="grid grid-cols-2 gap-1.5">
-        <div class="text-center p-1.5 bg-green-500/10 rounded-lg">
-          <div class="text-sm font-bold text-green-600 tabular-nums">{scanResult.normal_count}</div>
-          <div class="text-[10px] text-muted-foreground">普通</div>
-        </div>
-        <div class="text-center p-1.5 bg-yellow-500/10 rounded-lg">
-          <div class="text-sm font-bold text-yellow-600 tabular-nums">{scanResult.nov_count}</div>
-          <div class="text-[10px] text-muted-foreground">.nov</div>
-        </div>
-      </div>
-    {:else}
-      <div class="text-xs text-muted-foreground text-center">-</div>
-    {/if}
-  {/if}
-{/snippet}
-
-<!-- 进度区块 -->
-{#snippet progressBlock(size: SizeMode)}
-  {@const c = getSizeClasses(size)}
-  {#if size === 'normal'}
-    <div class="h-full flex items-center gap-3">
-      {#if phase === 'completed'}
-        <CircleCheck class="w-8 h-8 text-green-500 shrink-0" />
-        <span class="font-semibold text-green-600">完成</span>
-      {:else if phase === 'error'}
-        <CircleX class="w-8 h-8 text-red-500 shrink-0" />
-        <span class="font-semibold text-red-600">失败</span>
-      {:else if isRunning}
-        <LoaderCircle class="w-8 h-8 text-primary animate-spin shrink-0" />
-        <div class="flex-1">
-          <div class="flex justify-between text-sm mb-1"><span>{progressText}</span><span>{progress}%</span></div>
-          <Progress value={progress} class="h-2" />
-        </div>
-      {:else}
-        <Video class="w-8 h-8 text-muted-foreground/50 shrink-0" />
-        <span class="text-muted-foreground">等待执行</span>
-      {/if}
-    </div>
-  {:else}
-    {#if phase === 'completed'}
-      <div class="flex items-center gap-2 {c.text}">
-        <CircleCheck class="{c.icon} text-green-500" />
-        <span class="text-green-600">完成</span>
-      </div>
-    {:else if isRunning}
-      <div class={c.spaceSm}>
-        <Progress value={progress} class="h-1.5" />
-        <div class="{c.text} text-muted-foreground">{progress}%</div>
-      </div>
-    {:else}
-      <div class="{c.text} text-muted-foreground">等待执行</div>
-    {/if}
-  {/if}
-{/snippet}
-
-<!-- 日志区块 -->
-{#snippet logBlock(size: SizeMode)}
-  {@const c = getSizeClasses(size)}
-  {#if size === 'normal'}
-    <div class="h-full flex flex-col">
-      <div class="flex items-center justify-between mb-2 shrink-0">
-        <span class="font-semibold text-sm">日志</span>
-        <Button variant="ghost" size="icon" class="h-6 w-6" onclick={copyLogs}>
-          {#if copied}<Check class="h-3 w-3 text-green-500" />{:else}<Copy class="h-3 w-3" />{/if}
-        </Button>
-      </div>
-      <div class="flex-1 overflow-y-auto bg-muted/30 rounded-xl p-2 font-mono text-xs space-y-1">
-        {#if logs.length > 0}
-          {#each logs.slice(-15) as logItem}
-            <div class="text-muted-foreground break-all">{logItem}</div>
-          {/each}
-        {:else}
-          <div class="text-muted-foreground text-center py-4">暂无日志</div>
+          </div>
         {/if}
-      </div>
-    </div>
-  {:else}
-    <div class="flex items-center justify-between mb-1">
-      <span class="{c.text} font-semibold">日志</span>
-      <Button variant="ghost" size="icon" class="h-5 w-5" onclick={copyLogs}>
-        {#if copied}<Check class="{c.iconSm} text-green-500" />{:else}<Copy class={c.iconSm} />{/if}
-      </Button>
-    </div>
-    <div class="bg-muted/30 {c.rounded} {c.paddingSm} font-mono {c.textSm} {c.maxHeightSm} overflow-y-auto {c.spaceSm}">
-      {#each logs.slice(-4) as logItem}
-        <div class="text-muted-foreground break-all">{logItem}</div>
       {/each}
     </div>
+  {:else}
+    <div class="cq-text text-muted-foreground text-center py-2">扫描后显示统计</div>
   {/if}
 {/snippet}
 
@@ -578,92 +408,68 @@
 {/snippet}
 
 <!-- 文件树区块 -->
-{#snippet treeBlock(size: SizeMode)}
-  {@const c = getSizeClasses(size)}
+{#snippet treeBlock()}
   {@const fileTree = fileListData ? buildFullFileTree(fileListData) : []}
-  {@const totalFiles = fileListData ? (fileListData.normal_files?.length ?? 0) + (fileListData.nov_files?.length ?? 0) + Object.values(fileListData.prefixed_files ?? {}).reduce((sum, arr) => sum + (arr?.length ?? 0), 0) : 0}
-  
-  {#if size === 'normal'}
-    <div class="h-full flex flex-col overflow-hidden">
-      <!-- 标题栏 -->
-      <div class="flex items-center justify-between p-2 border-b bg-muted/30 shrink-0">
-        <span class="font-semibold flex items-center gap-2">
-          <Folder class="w-5 h-5 text-yellow-500" />文件树
-        </span>
-        <div class="flex items-center gap-3 text-xs">
-          <span class="flex items-center gap-1 text-green-600">
-            <span class="w-2 h-2 rounded-full bg-green-500"></span>
-            {fileListData?.normal_files?.length ?? 0}
-          </span>
-          <span class="flex items-center gap-1 text-yellow-600">
-            <span class="w-2 h-2 rounded-full bg-yellow-500"></span>
-            {fileListData?.nov_files?.length ?? 0}
-          </span>
-          {#each Object.entries(fileListData?.prefixed_files ?? {}) as [prefix, files]}
-            {#if files?.length > 0}
-              <span class="flex items-center gap-1 text-blue-600">
-                <span class="w-2 h-2 rounded-full bg-blue-500"></span>
-                [{prefix}] {files.length}
-              </span>
-            {/if}
-          {/each}
-        </div>
-      </div>
-      
-      <!-- 文件树内容 -->
-      <div class="flex-1 overflow-y-auto p-2">
-        {#if fileTree.length > 0}
-          <TreeView.Root class="text-sm">
-            {#each fileTree as node}
-              {@render renderTreeNode(node)}
-            {/each}
-          </TreeView.Root>
-        {:else if fileListData}
-          <div class="text-center text-muted-foreground py-8">没有找到视频文件</div>
-        {:else}
-          <div class="text-center text-muted-foreground py-8">扫描后显示文件树</div>
-        {/if}
-      </div>
-    </div>
-  {:else}
-    <!-- 紧凑模式 -->
-    <div class="flex items-center justify-between mb-2">
-      <span class="{c.text} font-semibold flex items-center gap-1">
-        <Folder class="w-3 h-3 text-yellow-500" />文件树
+  <div class="h-full flex flex-col overflow-hidden">
+    <div class="flex items-center justify-between cq-padding border-b bg-muted/30 shrink-0">
+      <span class="cq-text font-semibold flex items-center gap-1">
+        <Folder class="cq-icon text-yellow-500" />文件树
       </span>
-      <div class="flex items-center gap-2 {c.textSm}">
-        <span class="flex items-center gap-0.5 text-green-600">
-          <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+      <div class="flex items-center gap-2 cq-text-sm">
+        <span class="flex items-center gap-1 text-green-600">
+          <span class="w-2 h-2 rounded-full bg-green-500"></span>
           {fileListData?.normal_files?.length ?? 0}
         </span>
-        <span class="flex items-center gap-0.5 text-yellow-600">
-          <span class="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>
+        <span class="flex items-center gap-1 text-yellow-600">
+          <span class="w-2 h-2 rounded-full bg-yellow-500"></span>
           {fileListData?.nov_files?.length ?? 0}
         </span>
       </div>
     </div>
-    <div class="{c.maxHeight} overflow-y-auto">
+    <div class="flex-1 overflow-y-auto cq-padding">
       {#if fileTree.length > 0}
-        <TreeView.Root class="text-xs">
+        <TreeView.Root class="text-sm">
           {#each fileTree as node}
             {@render renderTreeNode(node)}
           {/each}
         </TreeView.Root>
+      {:else if fileListData}
+        <div class="text-center text-muted-foreground py-8">没有找到视频文件</div>
       {:else}
-        <div class="{c.text} text-muted-foreground text-center py-3">扫描后显示</div>
+        <div class="text-center text-muted-foreground py-8">扫描后显示文件树</div>
       {/if}
     </div>
-  {/if}
+  </div>
 {/snippet}
 
-<!-- 通用区块渲染器 -->
-{#snippet renderBlockContent(blockId: string, size: SizeMode)}
-  {#if blockId === 'path'}{@render pathBlock(size)}
-  {:else if blockId === 'operation'}{@render operationBlock(size)}
-  {:else if blockId === 'stats'}{@render statsBlock(size)}
-  {:else if blockId === 'progress'}{@render progressBlock(size)}
-  {:else if blockId === 'log'}{@render logBlock(size)}
-  {:else if blockId === 'tree'}{@render treeBlock(size)}
+<!-- 日志区块 -->
+{#snippet logBlock()}
+  <div class="h-full flex flex-col">
+    <div class="flex items-center justify-between mb-1 shrink-0">
+      <span class="cq-text font-semibold">日志</span>
+      <Button variant="ghost" size="icon" class="h-5 w-5" onclick={() => copyToClipboard(logs.join('\n'), v => copiedLogs = v)}>
+        {#if copiedLogs}<Check class="w-3 h-3 text-green-500" />{:else}<Copy class="w-3 h-3" />{/if}
+      </Button>
+    </div>
+    <div class="flex-1 overflow-y-auto bg-muted/30 cq-rounded cq-padding font-mono cq-text-sm space-y-0.5">
+      {#if logs.length > 0}
+        {#each logs.slice(-10) as logItem}
+          <div class="text-muted-foreground break-all">{logItem}</div>
+        {/each}
+      {:else}
+        <div class="text-muted-foreground text-center py-2">暂无日志</div>
+      {/if}
+    </div>
+  </div>
+{/snippet}
+
+<!-- 区块渲染器 -->
+{#snippet renderBlockContent(blockId: string)}
+  {#if blockId === 'path'}{@render pathBlock()}
+  {:else if blockId === 'operation'}{@render operationBlock()}
+  {:else if blockId === 'stats'}{@render statsBlock()}
+  {:else if blockId === 'tree'}{@render treeBlock()}
+  {:else if blockId === 'log'}{@render logBlock()}
   {/if}
 {/snippet}
 
@@ -699,8 +505,8 @@
         isFullscreen={isFullscreenRender}
         defaultFullscreenLayout={FORMATV_DEFAULT_GRID_LAYOUT}
       >
-        {#snippet renderBlock(blockId: string, size: SizeMode)}
-          {@render renderBlockContent(blockId, size)}
+        {#snippet renderBlock(blockId: string)}
+          {@render renderBlockContent(blockId)}
         {/snippet}
       </NodeLayoutRenderer>
     {/snippet}

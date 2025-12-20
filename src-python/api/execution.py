@@ -33,6 +33,7 @@ class NodeExecuteResponse(BaseModel):
     data: Any = None
     stats: Dict[str, int] = Field(default_factory=dict)
     output_path: Optional[str] = None
+    logs: List[str] = Field(default_factory=list, description="执行日志")
 
 
 class FlowNode(BaseModel):
@@ -149,6 +150,9 @@ async def execute_node(request: NodeExecuteRequest):
     task_id = request.task_id or str(uuid.uuid4())
     node_id = request.node_id
     
+    # 收集日志
+    collected_logs: List[str] = []
+    
     try:
         # 获取适配器
         adapter = get_adapter(request.node_type)
@@ -165,6 +169,7 @@ async def execute_node(request: NodeExecuteRequest):
             await send_progress(task_id, progress, message, node_id)
         
         async def on_log(message: str):
+            collected_logs.append(message)
             await send_log(task_id, message, node_id)
         
         # 包装同步回调为异步
@@ -172,6 +177,7 @@ async def execute_node(request: NodeExecuteRequest):
             asyncio.create_task(on_progress(progress, message))
         
         def sync_on_log(message: str):
+            collected_logs.append(message)
             asyncio.create_task(on_log(message))
         
         # 执行（带回调）
@@ -191,7 +197,8 @@ async def execute_node(request: NodeExecuteRequest):
             message=result.message,
             data=result.data,
             stats=result.stats,
-            output_path=result.output_path
+            output_path=result.output_path,
+            logs=collected_logs
         )
         
     except ValueError as e:
@@ -199,10 +206,12 @@ async def execute_node(request: NodeExecuteRequest):
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
         error_msg = f"执行失败: {type(e).__name__}: {str(e)}"
+        collected_logs.append(f"❌ {error_msg}")
         await send_status(task_id, "error", error_msg, node_id)
         return NodeExecuteResponse(
             success=False,
-            message=error_msg
+            message=error_msg,
+            logs=collected_logs
         )
 
 

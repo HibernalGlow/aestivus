@@ -256,6 +256,13 @@
         max_results: 1000
       }) as any;
 
+      // 显示后端返回的日志
+      if (response.logs && Array.isArray(response.logs)) {
+        for (const logMsg of response.logs) {
+          log(logMsg);
+        }
+      }
+
       if (response.success) {
         phase = 'completed';
         progress = 100;

@@ -11,6 +11,7 @@ findz 适配器
 import io
 import os
 import sys
+import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Any
@@ -197,6 +198,9 @@ class FindzAdapter(BaseAdapter):
         where = input_data.where or "1"
         
         try:
+            if on_log:
+                on_log(f"📦 导入 findz 模块...")
+            
             module = self._import_module()
             format_size = module['format_size']
             WalkParams = module['WalkParams']
@@ -210,18 +214,28 @@ class FindzAdapter(BaseAdapter):
                     on_log(f"📝 过滤配置: JSON 模式")
                 else:
                     on_log(f"📝 过滤条件: {where}")
+                on_log(f"⚙️ 选项: no_archive={input_data.no_archive}, max_results={input_data.max_results}")
+            
             if on_progress:
                 on_progress(5, "解析过滤器...")
             
             # 创建过滤器（支持 SQL 和 JSON 两种模式）
             try:
+                if on_log:
+                    on_log(f"🔧 创建过滤器...")
                 filter_expr = self._create_filter(input_data, module)
+                if on_log:
+                    on_log(f"✅ 过滤器创建成功")
             except Exception as e:
+                if on_log:
+                    on_log(f"❌ 过滤器语法错误: {e}")
                 return FindzOutput(success=False, message=f"过滤器语法错误: {e}")
             
             # 错误收集
             errors = []
             def error_handler(msg: str) -> None:
+                if on_log:
+                    on_log(f"⚠️ 错误: {msg[:100]}")
                 if input_data.continue_on_error:
                     errors.append(msg)
                 else:
@@ -237,8 +251,13 @@ class FindzAdapter(BaseAdapter):
             file_count = 0
             dir_count = 0
             archive_count = 0
+            scanned_files = 0
+            scanned_archives = 0
             
             for search_path in paths:
+                if on_log:
+                    on_log(f"📂 扫描目录: {search_path}")
+                
                 params = WalkParams(
                     filter_expr=filter_expr,
                     follow_symlinks=input_data.follow_symlinks,
@@ -251,6 +270,12 @@ class FindzAdapter(BaseAdapter):
                 
                 try:
                     for file_info in walk(search_path, params):
+                        scanned_files += 1
+                        
+                        # 每 100 个文件记录一次进度
+                        if scanned_files % 100 == 0 and on_log:
+                            on_log(f"📊 已扫描 {scanned_files} 个文件，找到 {len(all_results)} 个匹配")
+                        
                         # 限制结果数量
                         if len(all_results) >= input_data.max_results:
                             if on_log:
@@ -268,6 +293,8 @@ class FindzAdapter(BaseAdapter):
                         if file_info.archive:
                             by_archive[file_info.archive] = by_archive.get(file_info.archive, 0) + 1
                             archive_count += 1
+                            if file_info.archive not in by_archive or by_archive[file_info.archive] == 1:
+                                scanned_archives += 1
                         
                         if file_info.file_type == 'dir':
                             dir_count += 1
@@ -275,12 +302,16 @@ class FindzAdapter(BaseAdapter):
                             file_count += 1
                     
                 except Exception as e:
+                    if on_log:
+                        on_log(f"❌ 搜索异常: {type(e).__name__}: {e}")
                     if input_data.continue_on_error:
                         errors.append(f"{search_path}: {e}")
                     else:
                         return FindzOutput(success=False, message=f"搜索失败: {e}")
             
             # 保存缓存
+            if on_log:
+                on_log(f"💾 保存缓存...")
             cache = get_global_cache()
             cache.flush()
             
@@ -288,7 +319,8 @@ class FindzAdapter(BaseAdapter):
                 on_progress(100, "搜索完成")
             
             if on_log:
-                on_log(f"✅ 找到 {len(all_results)} 个文件")
+                on_log(f"✅ 搜索完成: 扫描 {scanned_files} 个文件，{scanned_archives} 个压缩包")
+                on_log(f"📊 找到 {len(all_results)} 个匹配 (文件:{file_count}, 目录:{dir_count}, 压缩包内:{archive_count})")
                 if errors:
                     on_log(f"⚠️ {len(errors)} 个错误")
             
@@ -318,10 +350,14 @@ class FindzAdapter(BaseAdapter):
             )
             
         except ImportError as e:
+            if on_log:
+                on_log(f"❌ findz 模块未安装: {e}")
             return FindzOutput(success=False, message=f"findz 模块未安装: {e}")
         except Exception as e:
+            import traceback
             if on_log:
-                on_log(f"❌ 搜索失败: {e}")
+                on_log(f"❌ 搜索失败: {type(e).__name__}: {e}")
+                on_log(f"📋 堆栈: {traceback.format_exc()[:500]}")
             return FindzOutput(success=False, message=f"搜索失败: {type(e).__name__}: {e}")
     
     async def _find_nested(

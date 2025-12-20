@@ -2,7 +2,7 @@
   /**
    * FindzNode - 文件搜索节点组件
    * 
-   * 重构版：统一 UI 结构，使用 Container Query 自动响应尺寸
+   * 使用 Container Query 自动响应尺寸
    * - 一套 HTML 结构，CSS 控制尺寸变化
    * - 紧凑模式保留核心功能，详细操作在全屏
    */
@@ -12,16 +12,31 @@
   import { Progress } from '$lib/components/ui/progress';
 
   import { NodeLayoutRenderer } from '$lib/components/blocks';
+  import type { GridItem } from '$lib/components/ui/dashboard-grid';
+  import type { NodeConfig, LayoutMode } from '$lib/stores/nodeLayoutStore';
   import { FINDZ_DEFAULT_GRID_LAYOUT } from '$lib/components/blocks/blockRegistry';
   import { api } from '$lib/services/api';
   import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
   import NodeWrapper from '../NodeWrapper.svelte';
   import FilterBuilder from './FilterBuilder.svelte';
   import AnalysisPanel from './AnalysisPanel.svelte';
+  import type { FileData, SearchResult, FindzNodeState } from './types';
   import { 
     Search, LoaderCircle, FolderOpen, Clipboard, CircleCheck, CircleX, 
     File, Folder, Archive, Copy, Check, RotateCcw, Package, Layers
   } from '@lucide/svelte';
+
+  /** NodeLayoutRenderer 组件实例类型 */
+  interface LayoutRendererInstance {
+    compact: () => void;
+    resetLayout: () => Promise<void>;
+    getCurrentLayout: () => GridItem[];
+    getCurrentTabGroups: () => { id: string; blockIds: string[]; activeIndex: number }[];
+    applyLayout: (layout: GridItem[], tabGroups?: { id: string; blockIds: string[]; activeIndex: number }[] | null) => Promise<void>;
+    createTab: (blockIds: string[]) => Promise<string | null>;
+    getCurrentMode: () => LayoutMode;
+    getConfig: () => NodeConfig;
+  }
 
   interface Props {
     id: string;
@@ -39,35 +54,6 @@
   type Phase = 'idle' | 'searching' | 'completed' | 'error';
   type Action = 'search' | 'nested' | 'archives_only';
 
-  interface SearchResult {
-    total_count: number;
-    file_count: number;
-    dir_count: number;
-    archive_count: number;
-    nested_count: number;
-  }
-
-  interface FileData {
-    name: string;
-    path: string;
-    size: number;
-    size_formatted: string;
-    date: string;
-    time: string;
-    type: string;
-    ext: string;
-    archive: string;
-    container: string;
-  }
-
-  interface FindzNodeState {
-    phase: Phase;
-    progress: number;
-    searchResult: SearchResult | null;
-    files: FileData[];
-    byExtension: Record<string, number>;
-  }
-
   const savedState = getNodeState<FindzNodeState>(id);
 
   // 状态
@@ -76,14 +62,16 @@
   let phase = $state<Phase>(savedState?.phase ?? 'idle');
   let logs = $state<string[]>(data?.logs ? [...data.logs] : []);
   let hasInputConnection = $state(data?.hasInputConnection ?? false);
-  let copied = $state(false);
   let progress = $state(savedState?.progress ?? 0);
   let searchResult = $state<SearchResult | null>(savedState?.searchResult ?? null);
   let files = $state<FileData[]>(savedState?.files ?? []);
   let byExtension = $state<Record<string, number>>(savedState?.byExtension ?? {});
-  let copiedPath = $state(false);
-  let layoutRenderer = $state<any>(undefined);
+  let layoutRenderer = $state<LayoutRendererInstance | undefined>(undefined);
   let advancedMode = $state(false);
+  
+  // 复制状态
+  let copiedLogs = $state(false);
+  let copiedPath = $state(false);
 
   function saveState() {
     setNodeState<FindzNodeState>(id, { phase, progress, searchResult, files, byExtension });
@@ -158,18 +146,11 @@
     searchResult = null; files = []; byExtension = {}; logs = [];
   }
 
-  async function copyLogs() {
+  async function copyToClipboard(text: string, setter: (v: boolean) => void) {
     try {
-      await navigator.clipboard.writeText(logs.join('\n'));
-      copied = true; setTimeout(() => copied = false, 2000);
-    } catch (e) { console.error('复制失败:', e); }
-  }
-
-  async function copyAllPaths() {
-    try {
-      const paths = files.map(f => f.container ? `${f.container}//${f.path}` : f.path).join('\n');
-      await navigator.clipboard.writeText(paths);
-      copiedPath = true; setTimeout(() => copiedPath = false, 2000);
+      await navigator.clipboard.writeText(text);
+      setter(true);
+      setTimeout(() => setter(false), 2000);
     } catch (e) { console.error('复制失败:', e); }
   }
 
@@ -317,7 +298,7 @@
       <div class="flex items-center gap-1">
         <span class="cq-text-sm text-muted-foreground">{files.length}</span>
         {#if files.length > 0}
-          <Button variant="ghost" size="icon" class="h-5 w-5" onclick={copyAllPaths}>
+          <Button variant="ghost" size="icon" class="h-5 w-5" onclick={() => copyToClipboard(files.map(f => f.container ? `${f.container}//${f.path}` : f.path).join('\n'), v => copiedPath = v)}>
             {#if copiedPath}<Check class="w-3 h-3 text-green-500" />{:else}<Copy class="w-3 h-3" />{/if}
           </Button>
         {/if}
@@ -353,8 +334,8 @@
   <div class="h-full flex flex-col">
     <div class="flex items-center justify-between mb-1 shrink-0">
       <span class="cq-text font-semibold">日志</span>
-      <Button variant="ghost" size="icon" class="h-5 w-5" onclick={copyLogs}>
-        {#if copied}<Check class="w-3 h-3 text-green-500" />{:else}<Copy class="w-3 h-3" />{/if}
+      <Button variant="ghost" size="icon" class="h-5 w-5" onclick={() => copyToClipboard(logs.join('\n'), v => copiedLogs = v)}>
+        {#if copiedLogs}<Check class="w-3 h-3 text-green-500" />{:else}<Copy class="w-3 h-3" />{/if}
       </Button>
     </div>
     <div class="flex-1 overflow-y-auto bg-muted/30 cq-rounded cq-padding font-mono cq-text-sm space-y-0.5">

@@ -46,6 +46,8 @@
   // 复制状态
   let copiedGroupKey = $state<string | null>(null);
   let copiedAll = $state(false);
+  // 复制选项：是否包含压缩包内部路径
+  let copyIncludeInnerPath = $state(false);
 
   /** 分组配置 */
   const groupByOptions: { field: GroupByField; label: string; icon: typeof Package }[] = [
@@ -175,10 +177,26 @@
 
   async function copyAllFilteredPaths() {
     try {
+      // 收集所有分组的文件
       const allFiles: FileData[] = [];
       for (const group of analysisData) { allFiles.push(...getFilesInGroup(group.key)); }
-      const paths = allFiles.map(f => f.container ? `${f.container}//${f.path}` : f.path).join('\n');
-      await navigator.clipboard.writeText(paths);
+      
+      let paths: string[];
+      if (copyIncludeInnerPath) {
+        // 包含内部路径：完整路径
+        paths = allFiles.map(f => f.container ? `${f.container}//${f.path}` : f.path);
+      } else {
+        // 不包含内部路径：只取压缩包路径（去重）
+        const pathSet = new Set<string>();
+        for (const f of allFiles) {
+          // 如果有 container（压缩包），只取压缩包路径；否则取文件路径
+          const path = f.container || f.archive || f.path;
+          pathSet.add(path);
+        }
+        paths = Array.from(pathSet);
+      }
+      
+      await navigator.clipboard.writeText(paths.join('\n'));
       copiedAll = true;
       setTimeout(() => { copiedAll = false; }, 2000);
     } catch (e) { console.error('复制失败:', e); }
@@ -329,9 +347,17 @@
         {analysisData.length}<span class="cq-wide-only-inline">个{currentGroupOption.label}</span><span class="cq-compact-only-inline">组</span>
         · {filteredFileCount}文件
       </span>
-      <button class="flex items-center cq-gap-sm cq-text-sm text-primary hover:underline" onclick={copyAllFilteredPaths} title="复制所有过滤结果的文件路径">
-        {#if copiedAll}<Check class="cq-icon-sm" /><span class="text-green-600">已复制</span>{:else}<Copy class="cq-icon-sm" /><span>复制全部</span>{/if}
-      </button>
+      <div class="flex items-center cq-gap">
+        <!-- 复制选项：是否包含内部路径 -->
+        <label class="flex items-center cq-gap-sm cq-text-sm text-muted-foreground cursor-pointer" title="勾选后复制完整路径（含压缩包内部路径）">
+          <input type="checkbox" bind:checked={copyIncludeInnerPath} class="w-3 h-3" />
+          <span class="cq-wide-only-inline">含内部路径</span>
+          <span class="cq-compact-only-inline">内部</span>
+        </label>
+        <button class="flex items-center cq-gap-sm cq-text-sm text-primary hover:underline" onclick={copyAllFilteredPaths} title="复制所有过滤结果的文件路径">
+          {#if copiedAll}<Check class="cq-icon-sm" /><span class="text-green-600">已复制</span>{:else}<Copy class="cq-icon-sm" /><span>复制全部</span>{/if}
+        </button>
+      </div>
     </div>
   {/if}
 </div>

@@ -179,13 +179,24 @@
             : generateNormalLayout();
       if (defaultLayout.length > 0)
         updateGridLayout(nodeType, currentMode, defaultLayout);
+    } else {
+      // 检查是否有缺失的区块并添加
+      const updatedLayout = ensureAllBlocksInLayout(config[currentMode].gridLayout, currentMode);
+      if (updatedLayout.length > config[currentMode].gridLayout.length) {
+        updateGridLayout(nodeType, currentMode, updatedLayout);
+      }
     }
   });
 
   onMount(() => {
     const unsubscribe = subscribeNodeConfig(nodeType, (config) => {
       if (config) {
-        nodeConfig = config;
+        // 深拷贝确保 Svelte 5 检测到所有层级的变化
+        nodeConfig = {
+          ...config,
+          fullscreen: { ...config.fullscreen },
+          normal: { ...config.normal }
+        };
         onConfigChange?.(config);
       }
     });

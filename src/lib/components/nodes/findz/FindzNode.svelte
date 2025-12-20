@@ -199,11 +199,31 @@
   </div>
 {/snippet}
 
-<!-- 操作按钮 -->
+<!-- 操作按钮（含状态显示） -->
 {#snippet operationBlock()}
-  <div class="flex flex-col cq-gap">
+  <div class="flex flex-col cq-gap h-full">
+    <!-- 状态指示 -->
+    <div class="flex items-center cq-gap cq-padding bg-muted/30 cq-rounded">
+      {#if phase === 'completed'}
+        <CircleCheck class="cq-icon text-green-500 shrink-0" />
+        <span class="cq-text text-green-600 font-medium">完成</span>
+        <span class="cq-text-sm text-muted-foreground ml-auto">{searchResult?.total_count ?? 0} 项</span>
+      {:else if phase === 'error'}
+        <CircleX class="cq-icon text-red-500 shrink-0" />
+        <span class="cq-text text-red-600 font-medium">失败</span>
+      {:else if isRunning}
+        <LoaderCircle class="cq-icon text-primary animate-spin shrink-0" />
+        <div class="flex-1">
+          <Progress value={progress} class="h-1.5" />
+        </div>
+        <span class="cq-text-sm text-muted-foreground">{progress}%</span>
+      {:else}
+        <Search class="cq-icon text-muted-foreground/50 shrink-0" />
+        <span class="cq-text text-muted-foreground">等待执行</span>
+      {/if}
+    </div>
     <!-- 主按钮 -->
-    <Button class="w-full cq-button" onclick={() => executeAction('search')} disabled={!canExecute || isRunning}>
+    <Button class="w-full cq-button flex-1" onclick={() => executeAction('search')} disabled={!canExecute || isRunning}>
       {#if isRunning}<LoaderCircle class="cq-icon mr-1 animate-spin" />{:else}<Search class="cq-icon mr-1" />{/if}
       <span>搜索</span>
     </Button>
@@ -264,28 +284,6 @@
   {:else}
     <div class="cq-text text-muted-foreground text-center py-2">搜索后显示统计</div>
   {/if}
-{/snippet}
-
-<!-- 进度/状态 -->
-{#snippet progressBlock()}
-  <div class="flex items-center cq-gap h-full">
-    {#if phase === 'completed'}
-      <CircleCheck class="cq-icon-lg text-green-500 shrink-0" />
-      <span class="cq-text text-green-600 font-medium">完成</span>
-    {:else if phase === 'error'}
-      <CircleX class="cq-icon-lg text-red-500 shrink-0" />
-      <span class="cq-text text-red-600 font-medium">失败</span>
-    {:else if isRunning}
-      <LoaderCircle class="cq-icon-lg text-primary animate-spin shrink-0" />
-      <div class="flex-1">
-        <Progress value={progress} class="h-1.5" />
-        <div class="cq-text-sm text-muted-foreground mt-0.5">{progress}%</div>
-      </div>
-    {:else}
-      <Search class="cq-icon-lg text-muted-foreground/50 shrink-0" />
-      <span class="cq-text text-muted-foreground">等待执行</span>
-    {/if}
-  </div>
 {/snippet}
 
 <!-- 文件列表 -->
@@ -361,7 +359,6 @@
   {:else if blockId === 'filter'}{@render filterBlock()}
   {:else if blockId === 'operation'}{@render operationBlock()}
   {:else if blockId === 'stats'}{@render statsBlock()}
-  {:else if blockId === 'progress'}{@render progressBlock()}
   {:else if blockId === 'log'}{@render logBlock()}
   {:else if blockId === 'tree'}{@render treeBlock()}
   {:else if blockId === 'analysis'}{@render analysisBlock()}

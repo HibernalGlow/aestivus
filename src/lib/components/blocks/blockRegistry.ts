@@ -672,7 +672,7 @@ export const FINDZ_BLOCKS: BlockDefinition[] = [
     title: '操作',
     icon: Play,
     iconClass: 'text-green-500',
-    colSpan: 1,
+    colSpan: 2,
     visibleInNormal: true,
     visibleInFullscreen: true
   },
@@ -681,16 +681,7 @@ export const FINDZ_BLOCKS: BlockDefinition[] = [
     title: '统计',
     icon: BarChart3,
     iconClass: 'text-yellow-500',
-    colSpan: 1,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'progress',
-    title: '状态',
-    icon: Search,
-    iconClass: 'text-muted-foreground',
-    colSpan: 1,
+    colSpan: 2,
     visibleInNormal: true,
     visibleInFullscreen: true
   },
@@ -731,10 +722,9 @@ export const FINDZ_DEFAULT_GRID_LAYOUT: GridItem[] = [
   { id: 'filter', x: 2, y: 0, w: 2, h: 2, minW: 1, minH: 1 },
   { id: 'operation', x: 0, y: 2, w: 2, h: 2, minW: 1, minH: 1 },
   { id: 'stats', x: 2, y: 2, w: 2, h: 2, minW: 1, minH: 1 },
-  { id: 'progress', x: 0, y: 4, w: 1, h: 1, minW: 1, minH: 1 },
-  { id: 'tree', x: 0, y: 5, w: 2, h: 4, minW: 1, minH: 2 },
-  { id: 'analysis', x: 2, y: 4, w: 2, h: 5, minW: 1, minH: 2 },
-  { id: 'log', x: 0, y: 9, w: 4, h: 2, minW: 1, minH: 1 }
+  { id: 'tree', x: 0, y: 4, w: 2, h: 4, minW: 1, minH: 2 },
+  { id: 'analysis', x: 2, y: 4, w: 2, h: 4, minW: 1, minH: 2 },
+  { id: 'log', x: 0, y: 8, w: 4, h: 2, minW: 1, minH: 1 }
 ];
 
 // ============ 注册表 ============

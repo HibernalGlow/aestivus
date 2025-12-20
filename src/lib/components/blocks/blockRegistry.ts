@@ -1,11 +1,15 @@
 /**
- * 区块注册表 - 定义所有可用的区块类型
- * 参考 neoview 的 cardRegistry 设计
+ * 区块注册表 - 类型定义和注册逻辑
+ * 
+ * 各节点的 block 配置已拆分到各自目录下的 blocks.ts
+ * 此文件只负责类型定义、注册表管理和工具函数
  */
 import type { Component } from 'svelte';
 import type { GridItem } from '$lib/components/ui/dashboard-grid';
 
-// 区块定义
+// ============ 类型定义 ============
+
+/** 区块定义 */
 export interface BlockDefinition {
   /** 区块 ID */
   id: string;
@@ -37,31 +41,25 @@ export interface BlockDefinition {
   isTabContainer?: boolean;
 }
 
-// Tab 区块配置
+/** Tab 区块配置 */
 export interface TabBlockConfig {
-  /** 唯一标识符 */
   id: string;
-  /** 子区块 ID 数组 */
   children: string[];
-  /** 当前活动标签索引 */
   activeTab: number;
 }
 
-// Tab 区块状态（用于持久化）
+/** Tab 区块状态（用于持久化） */
 export interface TabBlockState {
-  /** 当前活动标签索引 */
   activeTab: number;
-  /** 子区块 ID 列表 */
   children: string[];
 }
 
-// 扩展 GridItem 以支持 Tab 区块数据
+/** 扩展 GridItem 以支持 Tab 区块数据 */
 export interface TabGridItem extends GridItem {
-  /** Tab 区块扩展数据 */
   tabData?: TabBlockState;
 }
 
-// 区块配置（运行时状态）
+/** 区块配置（运行时状态） */
 export interface BlockConfig {
   id: string;
   visible: boolean;
@@ -69,88 +67,36 @@ export interface BlockConfig {
   order: number;
 }
 
-// 节点区块布局配置
+/** 节点区块布局配置 */
 export interface NodeBlockLayout {
-  /** 节点类型 */
   nodeType: string;
-  /** 区块定义列表 */
   blocks: BlockDefinition[];
-  /** 全屏模式默认 GridStack 布局 */
   defaultGridLayout: GridItem[];
 }
 
-// ============ Repacku 节点区块定义 ============
+// ============ 导入各节点的 block 配置 ============
+
+// Findz
+import { FINDZ_BLOCKS, FINDZ_DEFAULT_GRID_LAYOUT } from '$lib/components/nodes/findz/blocks';
+export { FINDZ_BLOCKS, FINDZ_DEFAULT_GRID_LAYOUT };
+
+// 其他节点（暂时保留在此文件，后续可逐步拆分）
 import { 
-  FolderOpen, FileText, Play, FolderTree, Package, Copy
+  FolderOpen, FileText, Play, FolderTree, Package, Copy,
+  FilePenLine, RefreshCw, Upload, Settings2,
+  Filter, BarChart3, Pencil, Grid3X3, Video,
+  Search, Zap, Sliders, FolderInput, FolderOutput, ArrowRight
 } from '@lucide/svelte';
 
+// ============ Repacku 节点 ============
 export const REPACKU_BLOCKS: BlockDefinition[] = [
-  {
-    id: 'path',
-    title: '目标路径',
-    icon: FolderOpen,
-    iconClass: 'text-primary',
-    colSpan: 2,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'types',
-    title: '文件类型',
-    icon: FileText,
-    iconClass: 'text-blue-500',
-    colSpan: 1,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'operation',
-    title: '操作',
-    icon: Play,
-    iconClass: 'text-green-500',
-    colSpan: 1,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'stats',
-    title: '统计',
-    icon: FolderTree,
-    iconClass: 'text-yellow-500',
-    colSpan: 1,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'progress',
-    title: '状态',
-    icon: Package,
-    iconClass: 'text-muted-foreground',
-    colSpan: 1,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'tree',
-    title: '文件夹结构',
-    icon: FolderTree,
-    iconClass: 'text-yellow-500',
-    colSpan: 2,
-    fullHeight: true,
-    collapsible: true,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'log',
-    title: '日志',
-    icon: Copy,
-    iconClass: 'text-muted-foreground',
-    colSpan: 2,
-    collapsible: true,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  }
+  { id: 'path', title: '目标路径', icon: FolderOpen, iconClass: 'text-primary', colSpan: 2, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'types', title: '文件类型', icon: FileText, iconClass: 'text-blue-500', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'operation', title: '操作', icon: Play, iconClass: 'text-green-500', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'stats', title: '统计', icon: FolderTree, iconClass: 'text-yellow-500', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'progress', title: '状态', icon: Package, iconClass: 'text-muted-foreground', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'tree', title: '文件夹结构', icon: FolderTree, iconClass: 'text-yellow-500', colSpan: 2, fullHeight: true, collapsible: true, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'log', title: '日志', icon: Copy, iconClass: 'text-muted-foreground', colSpan: 2, collapsible: true, visibleInNormal: true, visibleInFullscreen: true }
 ];
 
 export const REPACKU_DEFAULT_GRID_LAYOUT: GridItem[] = [
@@ -162,85 +108,16 @@ export const REPACKU_DEFAULT_GRID_LAYOUT: GridItem[] = [
   { id: 'log', x: 3, y: 3, w: 1, h: 4, minW: 1, minH: 1 }
 ];
 
-// ============ Trename 节点区块定义 ============
-import { FilePenLine, RefreshCw, Upload, Settings2 } from '@lucide/svelte';
-
+// ============ Trename 节点 ============
 export const TRENAME_BLOCKS: BlockDefinition[] = [
-  {
-    id: 'path',
-    title: '扫描路径',
-    icon: FolderOpen,
-    iconClass: 'text-primary',
-    colSpan: 2,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'scan',
-    title: '扫描',
-    icon: RefreshCw,
-    iconClass: 'text-blue-500',
-    colSpan: 1,
-    visibleInNormal: true,
-    visibleInFullscreen: false // 全屏模式合并到 path
-  },
-  {
-    id: 'operation',
-    title: '操作',
-    icon: Play,
-    iconClass: 'text-green-500',
-    colSpan: 1,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'stats',
-    title: '统计',
-    icon: FilePenLine,
-    iconClass: 'text-yellow-500',
-    colSpan: 1,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'importExport',
-    title: '导入/导出',
-    icon: Upload,
-    iconClass: 'text-muted-foreground',
-    colSpan: 1,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'options',
-    title: '高级选项',
-    icon: Settings2,
-    iconClass: 'text-muted-foreground',
-    colSpan: 2,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'tree',
-    title: '文件树',
-    icon: FolderTree,
-    iconClass: 'text-yellow-500',
-    colSpan: 2,
-    fullHeight: true,
-    collapsible: true,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'log',
-    title: '日志',
-    icon: Copy,
-    iconClass: 'text-muted-foreground',
-    colSpan: 2,
-    collapsible: true,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  }
+  { id: 'path', title: '扫描路径', icon: FolderOpen, iconClass: 'text-primary', colSpan: 2, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'scan', title: '扫描', icon: RefreshCw, iconClass: 'text-blue-500', colSpan: 1, visibleInNormal: true, visibleInFullscreen: false },
+  { id: 'operation', title: '操作', icon: Play, iconClass: 'text-green-500', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'stats', title: '统计', icon: FilePenLine, iconClass: 'text-yellow-500', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'importExport', title: '导入/导出', icon: Upload, iconClass: 'text-muted-foreground', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'options', title: '高级选项', icon: Settings2, iconClass: 'text-muted-foreground', colSpan: 2, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'tree', title: '文件树', icon: FolderTree, iconClass: 'text-yellow-500', colSpan: 2, fullHeight: true, collapsible: true, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'log', title: '日志', icon: Copy, iconClass: 'text-muted-foreground', colSpan: 2, collapsible: true, visibleInNormal: true, visibleInFullscreen: true }
 ];
 
 export const TRENAME_DEFAULT_GRID_LAYOUT: GridItem[] = [
@@ -253,79 +130,15 @@ export const TRENAME_DEFAULT_GRID_LAYOUT: GridItem[] = [
   { id: 'log', x: 2, y: 5, w: 2, h: 2, minW: 1, minH: 1 }
 ];
 
-// ============ EngineV 节点区块定义 ============
-import { 
-  Image, Filter, BarChart3, Pencil, Grid3X3, Video, Globe, Layers
-} from '@lucide/svelte';
-
+// ============ EngineV 节点 ============
 export const ENGINEV_BLOCKS: BlockDefinition[] = [
-  {
-    id: 'path',
-    title: '工坊路径',
-    icon: FolderOpen,
-    iconClass: 'text-primary',
-    colSpan: 2,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'filter',
-    title: '过滤条件',
-    icon: Filter,
-    iconClass: 'text-blue-500',
-    colSpan: 2,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'stats',
-    title: '统计',
-    icon: BarChart3,
-    iconClass: 'text-yellow-500',
-    colSpan: 1,
-    collapsible: true,
-    defaultExpanded: true,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'operation',
-    title: '操作',
-    icon: Play,
-    iconClass: 'text-green-500',
-    colSpan: 1,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'rename',
-    title: '重命名',
-    icon: Pencil,
-    iconClass: 'text-orange-500',
-    colSpan: 2,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'gallery',
-    title: '壁纸列表',
-    icon: Grid3X3,
-    iconClass: 'text-purple-500',
-    colSpan: 2,
-    fullHeight: true,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'log',
-    title: '日志',
-    icon: Copy,
-    iconClass: 'text-muted-foreground',
-    colSpan: 2,
-    collapsible: true,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  }
+  { id: 'path', title: '工坊路径', icon: FolderOpen, iconClass: 'text-primary', colSpan: 2, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'filter', title: '过滤条件', icon: Filter, iconClass: 'text-blue-500', colSpan: 2, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'stats', title: '统计', icon: BarChart3, iconClass: 'text-yellow-500', colSpan: 1, collapsible: true, defaultExpanded: true, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'operation', title: '操作', icon: Play, iconClass: 'text-green-500', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'rename', title: '重命名', icon: Pencil, iconClass: 'text-orange-500', colSpan: 2, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'gallery', title: '壁纸列表', icon: Grid3X3, iconClass: 'text-purple-500', colSpan: 2, fullHeight: true, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'log', title: '日志', icon: Copy, iconClass: 'text-muted-foreground', colSpan: 2, collapsible: true, visibleInNormal: true, visibleInFullscreen: true }
 ];
 
 export const ENGINEV_DEFAULT_GRID_LAYOUT: GridItem[] = [
@@ -338,65 +151,14 @@ export const ENGINEV_DEFAULT_GRID_LAYOUT: GridItem[] = [
   { id: 'log', x: 3, y: 4, w: 1, h: 4, minW: 1, minH: 1 }
 ];
 
-// ============ Rawfilter 节点区块定义 ============
-import { Search, Settings2 as SettingsIcon, Trash2 } from '@lucide/svelte';
-
+// ============ Rawfilter 节点 ============
 export const RAWFILTER_BLOCKS: BlockDefinition[] = [
-  {
-    id: 'path',
-    title: '目标路径',
-    icon: FolderOpen,
-    iconClass: 'text-primary',
-    colSpan: 2,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'options',
-    title: '过滤选项',
-    icon: SettingsIcon,
-    iconClass: 'text-blue-500',
-    colSpan: 1,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'operation',
-    title: '操作',
-    icon: Play,
-    iconClass: 'text-green-500',
-    colSpan: 1,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'stats',
-    title: '统计',
-    icon: Search,
-    iconClass: 'text-yellow-500',
-    colSpan: 1,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'progress',
-    title: '状态',
-    icon: Search,
-    iconClass: 'text-muted-foreground',
-    colSpan: 1,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'log',
-    title: '日志',
-    icon: Copy,
-    iconClass: 'text-muted-foreground',
-    colSpan: 2,
-    collapsible: true,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  }
+  { id: 'path', title: '目标路径', icon: FolderOpen, iconClass: 'text-primary', colSpan: 2, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'options', title: '过滤选项', icon: Settings2, iconClass: 'text-blue-500', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'operation', title: '操作', icon: Play, iconClass: 'text-green-500', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'stats', title: '统计', icon: Search, iconClass: 'text-yellow-500', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'progress', title: '状态', icon: Search, iconClass: 'text-muted-foreground', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'log', title: '日志', icon: Copy, iconClass: 'text-muted-foreground', colSpan: 2, collapsible: true, visibleInNormal: true, visibleInFullscreen: true }
 ];
 
 export const RAWFILTER_DEFAULT_GRID_LAYOUT: GridItem[] = [
@@ -408,75 +170,15 @@ export const RAWFILTER_DEFAULT_GRID_LAYOUT: GridItem[] = [
   { id: 'log', x: 0, y: 4, w: 4, h: 3, minW: 1, minH: 1 }
 ];
 
-// ============ Crashu 节点区块定义 ============
-import { Zap, Sliders } from '@lucide/svelte';
-
+// ============ Crashu 节点 ============
 export const CRASHU_BLOCKS: BlockDefinition[] = [
-  {
-    id: 'path',
-    title: '目标路径',
-    icon: FolderOpen,
-    iconClass: 'text-primary',
-    colSpan: 2,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'options',
-    title: '检测选项',
-    icon: Sliders,
-    iconClass: 'text-blue-500',
-    colSpan: 1,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'operation',
-    title: '操作',
-    icon: Play,
-    iconClass: 'text-green-500',
-    colSpan: 1,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'stats',
-    title: '统计',
-    icon: Zap,
-    iconClass: 'text-yellow-500',
-    colSpan: 1,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'progress',
-    title: '状态',
-    icon: Zap,
-    iconClass: 'text-muted-foreground',
-    colSpan: 1,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'duplicates',
-    title: '重复文件',
-    icon: Copy,
-    iconClass: 'text-orange-500',
-    colSpan: 2,
-    fullHeight: true,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'log',
-    title: '日志',
-    icon: Copy,
-    iconClass: 'text-muted-foreground',
-    colSpan: 2,
-    collapsible: true,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  }
+  { id: 'path', title: '目标路径', icon: FolderOpen, iconClass: 'text-primary', colSpan: 2, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'options', title: '检测选项', icon: Sliders, iconClass: 'text-blue-500', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'operation', title: '操作', icon: Play, iconClass: 'text-green-500', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'stats', title: '统计', icon: Zap, iconClass: 'text-yellow-500', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'progress', title: '状态', icon: Zap, iconClass: 'text-muted-foreground', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'duplicates', title: '重复文件', icon: Copy, iconClass: 'text-orange-500', colSpan: 2, fullHeight: true, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'log', title: '日志', icon: Copy, iconClass: 'text-muted-foreground', colSpan: 2, collapsible: true, visibleInNormal: true, visibleInFullscreen: true }
 ];
 
 export const CRASHU_DEFAULT_GRID_LAYOUT: GridItem[] = [
@@ -489,83 +191,16 @@ export const CRASHU_DEFAULT_GRID_LAYOUT: GridItem[] = [
   { id: 'log', x: 3, y: 4, w: 1, h: 4, minW: 1, minH: 1 }
 ];
 
-// ============ MigrateF 节点区块定义 ============
-import { FolderInput, FolderOutput, ArrowRight } from '@lucide/svelte';
-
+// ============ MigrateF 节点 ============
 export const MIGRATEF_BLOCKS: BlockDefinition[] = [
-  {
-    id: 'path',
-    title: '路径配置',
-    icon: FolderInput,
-    iconClass: 'text-primary',
-    colSpan: 2,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'source',
-    title: '源目录',
-    icon: FolderInput,
-    iconClass: 'text-blue-500',
-    colSpan: 1,
-    visibleInNormal: false,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'target',
-    title: '目标目录',
-    icon: FolderOutput,
-    iconClass: 'text-green-500',
-    colSpan: 1,
-    visibleInNormal: false,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'options',
-    title: '迁移选项',
-    icon: SettingsIcon,
-    iconClass: 'text-blue-500',
-    colSpan: 1,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'operation',
-    title: '操作',
-    icon: Play,
-    iconClass: 'text-green-500',
-    colSpan: 1,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'stats',
-    title: '统计',
-    icon: BarChart3,
-    iconClass: 'text-yellow-500',
-    colSpan: 1,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'progress',
-    title: '状态',
-    icon: ArrowRight,
-    iconClass: 'text-muted-foreground',
-    colSpan: 1,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'log',
-    title: '日志',
-    icon: Copy,
-    iconClass: 'text-muted-foreground',
-    colSpan: 2,
-    collapsible: true,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  }
+  { id: 'path', title: '路径配置', icon: FolderInput, iconClass: 'text-primary', colSpan: 2, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'source', title: '源目录', icon: FolderInput, iconClass: 'text-blue-500', colSpan: 1, visibleInNormal: false, visibleInFullscreen: true },
+  { id: 'target', title: '目标目录', icon: FolderOutput, iconClass: 'text-green-500', colSpan: 1, visibleInNormal: false, visibleInFullscreen: true },
+  { id: 'options', title: '迁移选项', icon: Settings2, iconClass: 'text-blue-500', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'operation', title: '操作', icon: Play, iconClass: 'text-green-500', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'stats', title: '统计', icon: BarChart3, iconClass: 'text-yellow-500', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'progress', title: '状态', icon: ArrowRight, iconClass: 'text-muted-foreground', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'log', title: '日志', icon: Copy, iconClass: 'text-muted-foreground', colSpan: 2, collapsible: true, visibleInNormal: true, visibleInFullscreen: true }
 ];
 
 export const MIGRATEF_DEFAULT_GRID_LAYOUT: GridItem[] = [
@@ -578,64 +213,14 @@ export const MIGRATEF_DEFAULT_GRID_LAYOUT: GridItem[] = [
   { id: 'log', x: 2, y: 4, w: 2, h: 2, minW: 1, minH: 1 }
 ];
 
-// ============ FormatV 节点区块定义 ============
+// ============ FormatV 节点 ============
 export const FORMATV_BLOCKS: BlockDefinition[] = [
-  {
-    id: 'path',
-    title: '目标路径',
-    icon: FolderOpen,
-    iconClass: 'text-primary',
-    colSpan: 2,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'operation',
-    title: '操作',
-    icon: Play,
-    iconClass: 'text-green-500',
-    colSpan: 1,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'stats',
-    title: '统计',
-    icon: BarChart3,
-    iconClass: 'text-yellow-500',
-    colSpan: 1,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'progress',
-    title: '状态',
-    icon: Video,
-    iconClass: 'text-muted-foreground',
-    colSpan: 1,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'tree',
-    title: '文件列表',
-    icon: FolderTree,
-    iconClass: 'text-blue-500',
-    colSpan: 2,
-    fullHeight: true,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'log',
-    title: '日志',
-    icon: Copy,
-    iconClass: 'text-muted-foreground',
-    colSpan: 2,
-    collapsible: true,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  }
+  { id: 'path', title: '目标路径', icon: FolderOpen, iconClass: 'text-primary', colSpan: 2, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'operation', title: '操作', icon: Play, iconClass: 'text-green-500', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'stats', title: '统计', icon: BarChart3, iconClass: 'text-yellow-500', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'progress', title: '状态', icon: Video, iconClass: 'text-muted-foreground', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'tree', title: '文件列表', icon: FolderTree, iconClass: 'text-blue-500', colSpan: 2, fullHeight: true, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'log', title: '日志', icon: Copy, iconClass: 'text-muted-foreground', colSpan: 2, collapsible: true, visibleInNormal: true, visibleInFullscreen: true }
 ];
 
 export const FORMATV_DEFAULT_GRID_LAYOUT: GridItem[] = [
@@ -647,165 +232,50 @@ export const FORMATV_DEFAULT_GRID_LAYOUT: GridItem[] = [
   { id: 'log', x: 3, y: 4, w: 1, h: 4, minW: 1, minH: 1 }
 ];
 
-// ============ Findz 节点区块定义 ============
-export const FINDZ_BLOCKS: BlockDefinition[] = [
-  {
-    id: 'path',
-    title: '搜索路径',
-    icon: FolderOpen,
-    iconClass: 'text-primary',
-    colSpan: 2,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'filter',
-    title: 'WHERE 过滤',
-    icon: Filter,
-    iconClass: 'text-blue-500',
-    colSpan: 2,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'operation',
-    title: '操作',
-    icon: Play,
-    iconClass: 'text-green-500',
-    colSpan: 2,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'stats',
-    title: '统计',
-    icon: BarChart3,
-    iconClass: 'text-yellow-500',
-    colSpan: 2,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'tree',
-    title: '文件列表',
-    icon: FolderTree,
-    iconClass: 'text-blue-500',
-    colSpan: 2,
-    fullHeight: true,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'analysis',
-    title: '分组分析',
-    icon: BarChart3,
-    iconClass: 'text-orange-500',
-    colSpan: 2,
-    fullHeight: true,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  },
-  {
-    id: 'log',
-    title: '日志',
-    icon: Copy,
-    iconClass: 'text-muted-foreground',
-    colSpan: 2,
-    collapsible: true,
-    visibleInNormal: true,
-    visibleInFullscreen: true
-  }
-];
-
-export const FINDZ_DEFAULT_GRID_LAYOUT: GridItem[] = [
-  { id: 'path', x: 0, y: 0, w: 2, h: 2, minW: 1, minH: 1 },
-  { id: 'filter', x: 2, y: 0, w: 2, h: 2, minW: 1, minH: 1 },
-  { id: 'operation', x: 0, y: 2, w: 2, h: 2, minW: 1, minH: 1 },
-  { id: 'stats', x: 2, y: 2, w: 2, h: 2, minW: 1, minH: 1 },
-  { id: 'tree', x: 0, y: 4, w: 2, h: 4, minW: 1, minH: 2 },
-  { id: 'analysis', x: 2, y: 4, w: 2, h: 4, minW: 1, minH: 2 },
-  { id: 'log', x: 0, y: 8, w: 4, h: 2, minW: 1, minH: 1 }
-];
-
 // ============ 注册表 ============
 export const nodeBlockRegistry: Record<string, NodeBlockLayout> = {
-  repacku: {
-    nodeType: 'repacku',
-    blocks: REPACKU_BLOCKS,
-    defaultGridLayout: REPACKU_DEFAULT_GRID_LAYOUT
-  },
-  trename: {
-    nodeType: 'trename',
-    blocks: TRENAME_BLOCKS,
-    defaultGridLayout: TRENAME_DEFAULT_GRID_LAYOUT
-  },
-  enginev: {
-    nodeType: 'enginev',
-    blocks: ENGINEV_BLOCKS,
-    defaultGridLayout: ENGINEV_DEFAULT_GRID_LAYOUT
-  },
-  rawfilter: {
-    nodeType: 'rawfilter',
-    blocks: RAWFILTER_BLOCKS,
-    defaultGridLayout: RAWFILTER_DEFAULT_GRID_LAYOUT
-  },
-  crashu: {
-    nodeType: 'crashu',
-    blocks: CRASHU_BLOCKS,
-    defaultGridLayout: CRASHU_DEFAULT_GRID_LAYOUT
-  },
-  migratef: {
-    nodeType: 'migratef',
-    blocks: MIGRATEF_BLOCKS,
-    defaultGridLayout: MIGRATEF_DEFAULT_GRID_LAYOUT
-  },
-  formatv: {
-    nodeType: 'formatv',
-    blocks: FORMATV_BLOCKS,
-    defaultGridLayout: FORMATV_DEFAULT_GRID_LAYOUT
-  },
-  findz: {
-    nodeType: 'findz',
-    blocks: FINDZ_BLOCKS,
-    defaultGridLayout: FINDZ_DEFAULT_GRID_LAYOUT
-  }
+  repacku: { nodeType: 'repacku', blocks: REPACKU_BLOCKS, defaultGridLayout: REPACKU_DEFAULT_GRID_LAYOUT },
+  trename: { nodeType: 'trename', blocks: TRENAME_BLOCKS, defaultGridLayout: TRENAME_DEFAULT_GRID_LAYOUT },
+  enginev: { nodeType: 'enginev', blocks: ENGINEV_BLOCKS, defaultGridLayout: ENGINEV_DEFAULT_GRID_LAYOUT },
+  rawfilter: { nodeType: 'rawfilter', blocks: RAWFILTER_BLOCKS, defaultGridLayout: RAWFILTER_DEFAULT_GRID_LAYOUT },
+  crashu: { nodeType: 'crashu', blocks: CRASHU_BLOCKS, defaultGridLayout: CRASHU_DEFAULT_GRID_LAYOUT },
+  migratef: { nodeType: 'migratef', blocks: MIGRATEF_BLOCKS, defaultGridLayout: MIGRATEF_DEFAULT_GRID_LAYOUT },
+  formatv: { nodeType: 'formatv', blocks: FORMATV_BLOCKS, defaultGridLayout: FORMATV_DEFAULT_GRID_LAYOUT },
+  findz: { nodeType: 'findz', blocks: FINDZ_BLOCKS, defaultGridLayout: FINDZ_DEFAULT_GRID_LAYOUT }
 };
 
-// 获取节点的区块布局配置
+// ============ 工具函数 ============
+
+/** 获取节点的区块布局配置 */
 export function getNodeBlockLayout(nodeType: string): NodeBlockLayout | undefined {
   return nodeBlockRegistry[nodeType];
 }
 
-// 获取区块定义
+/** 获取区块定义 */
 export function getBlockDefinition(nodeType: string, blockId: string): BlockDefinition | undefined {
   const layout = nodeBlockRegistry[nodeType];
   return layout?.blocks.find(b => b.id === blockId);
 }
 
-// 获取 Tab 区块的子区块定义列表（过滤无效 ID）
+/** 获取 Tab 区块的子区块定义列表 */
 export function getTabBlockChildren(nodeType: string, childIds: string[]): BlockDefinition[] {
   const layout = nodeBlockRegistry[nodeType];
   if (!layout) return [];
-  
   return childIds
     .map(id => layout.blocks.find(b => b.id === id))
     .filter((b): b is BlockDefinition => b !== undefined);
 }
 
-// 序列化 TabBlockConfig 为 JSON
+/** 序列化 TabBlockConfig */
 export function serializeTabBlockConfig(config: TabBlockConfig): string {
   return JSON.stringify(config);
 }
 
-// 从 JSON 反序列化 TabBlockConfig
+/** 反序列化 TabBlockConfig */
 export function deserializeTabBlockConfig(json: string): TabBlockConfig | null {
   try {
     const parsed = JSON.parse(json);
-    if (
-      typeof parsed.id === 'string' &&
-      Array.isArray(parsed.children) &&
-      typeof parsed.activeTab === 'number'
-    ) {
+    if (typeof parsed.id === 'string' && Array.isArray(parsed.children) && typeof parsed.activeTab === 'number') {
       return parsed as TabBlockConfig;
     }
     return null;

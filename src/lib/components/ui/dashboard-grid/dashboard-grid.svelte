@@ -406,10 +406,25 @@
     cursor: grabbing;
   }
 
+  /* GridStack 12.x placeholder 样式 - 拖拽时的预落点提示 */
+  :global(.grid-stack-placeholder) {
+    z-index: 0 !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+  }
+
   :global(.grid-stack-placeholder > .placeholder-content) {
-    background: hsl(var(--primary) / 0.1);
-    border: 2px dashed hsl(var(--primary) / 0.5);
-    border-radius: 0.375rem;
+    background: hsl(var(--primary) / 0.2) !important;
+    border: 3px dashed hsl(var(--primary) / 0.7) !important;
+    border-radius: 0.75rem !important;
+    position: absolute !important;
+    inset: 4px !important;
+    width: auto !important;
+    height: auto !important;
+    top: 4px !important;
+    left: 4px !important;
+    right: 4px !important;
+    bottom: 4px !important;
   }
 
   :global(.ui-resizable-handle) {

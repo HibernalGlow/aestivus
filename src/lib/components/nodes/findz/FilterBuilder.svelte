@@ -2,14 +2,17 @@
   /**
    * FilterBuilder - 直观的文件过滤器构建器
    * 不是 SQL 可视化，而是重新设计的易用交互
+   * 支持预设保存/加载系统
    */
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
-  import { Slider } from '$lib/components/ui/slider';
   import * as Select from '$lib/components/ui/select';
+  import * as Dialog from '$lib/components/ui/dialog';
   import { 
     Plus, X, Code, Sparkles, FileText, Calendar, HardDrive,
-    Archive, Folder, Image, Video, Music, FileCode, File
+    Archive, Folder, Image, Video, Music, FileCode, File,
+    Save, FolderOpen, Trash2, Star, Package, Pencil, Check,
+    GripVertical, ArrowUp, ArrowDown
   } from '@lucide/svelte';
 
   // 过滤器配置类型
@@ -88,14 +91,181 @@
   let customExtInput = $state('');
   let internalSql = $state(sqlValue);
 
+  // 预设系统
+  interface Preset {
+    id: string;
+    name: string;
+    config: FilterConfig;
+    isBuiltin?: boolean;
+  }
+
+  // 内置预设
+  const BUILTIN_PRESETS: Preset[] = [
+    {
+      id: 'jxl-in-archive',
+      name: '压缩包内JXL',
+      isBuiltin: true,
+      config: {
+        ...defaultConfig,
+        customExts: ['jxl'],
+        locationEnabled: true,
+        inArchive: 'yes',
+      }
+    },
+    {
+      id: 'large-files',
+      name: '大文件 (>100MB)',
+      isBuiltin: true,
+      config: {
+        ...defaultConfig,
+        sizeEnabled: true,
+        sizeMin: '100M',
+        sizeMax: '',
+      }
+    },
+    {
+      id: 'recent-images',
+      name: '本周图片',
+      isBuiltin: true,
+      config: {
+        ...defaultConfig,
+        fileTypes: ['images'],
+        dateEnabled: true,
+        datePreset: 'week',
+      }
+    },
+    {
+      id: 'nested-archives',
+      name: '嵌套压缩包',
+      isBuiltin: true,
+      config: {
+        ...defaultConfig,
+        fileTypes: ['archives'],
+        locationEnabled: true,
+        inArchive: 'yes',
+      }
+    },
+  ];
+
+  const STORAGE_KEY = 'findz-filter-presets';
+  let userPresets = $state<Preset[]>([]);
+  let presetDialogOpen = $state(false);
+  let saveDialogOpen = $state(false);
+  let newPresetName = $state('');
+  
+  // 编辑模式状态
+  let editMode = $state(false);
+  let editingPresetId = $state<string | null>(null);
+  let editingPresetName = $state('');
+
+  // 加载用户预设
+  function loadUserPresets() {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        userPresets = JSON.parse(saved);
+      }
+    } catch (e) {
+      console.error('加载预设失败:', e);
+    }
+  }
+
+  // 保存用户预设到 localStorage
+  function saveUserPresets() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(userPresets));
+    } catch (e) {
+      console.error('保存预设失败:', e);
+    }
+  }
+
+  // 应用预设
+  function applyPreset(preset: Preset) {
+    config = { ...preset.config };
+    emitChange();
+    presetDialogOpen = false;
+  }
+
+  // 保存当前配置为新预设
+  function saveAsPreset() {
+    if (!newPresetName.trim()) return;
+    const newPreset: Preset = {
+      id: `user-${Date.now()}`,
+      name: newPresetName.trim(),
+      config: { ...config },
+    };
+    userPresets = [...userPresets, newPreset];
+    saveUserPresets();
+    newPresetName = '';
+    saveDialogOpen = false;
+  }
+
+  // 删除用户预设
+  function deletePreset(presetId: string) {
+    userPresets = userPresets.filter(p => p.id !== presetId);
+    saveUserPresets();
+  }
+
+  // 开始重命名预设
+  function startRenamePreset(preset: Preset) {
+    editingPresetId = preset.id;
+    editingPresetName = preset.name;
+  }
+
+  // 确认重命名
+  function confirmRename() {
+    if (!editingPresetId || !editingPresetName.trim()) return;
+    userPresets = userPresets.map(p => 
+      p.id === editingPresetId ? { ...p, name: editingPresetName.trim() } : p
+    );
+    saveUserPresets();
+    editingPresetId = null;
+    editingPresetName = '';
+  }
+
+  // 取消重命名
+  function cancelRename() {
+    editingPresetId = null;
+    editingPresetName = '';
+  }
+
+  // 移动预设位置
+  function movePreset(presetId: string, direction: 'up' | 'down') {
+    const index = userPresets.findIndex(p => p.id === presetId);
+    if (index === -1) return;
+    
+    const newIndex = direction === 'up' ? index - 1 : index + 1;
+    if (newIndex < 0 || newIndex >= userPresets.length) return;
+    
+    const newPresets = [...userPresets];
+    [newPresets[index], newPresets[newIndex]] = [newPresets[newIndex], newPresets[index]];
+    userPresets = newPresets;
+    saveUserPresets();
+  }
+
+  // 切换编辑模式
+  function toggleEditMode() {
+    editMode = !editMode;
+    if (!editMode) {
+      editingPresetId = null;
+      editingPresetName = '';
+    }
+  }
+
+  // 初始化加载预设
+  $effect(() => {
+    loadUserPresets();
+  });
+
   // 文件类型预设
   const FILE_TYPE_PRESETS = [
-    { id: 'images', label: '图片', icon: Image, exts: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico'] },
+    { id: 'images', label: '图片', icon: Image, exts: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico', 'jxl', 'avif'] },
     { id: 'videos', label: '视频', icon: Video, exts: ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4v'] },
     { id: 'audio', label: '音频', icon: Music, exts: ['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'wma'] },
     { id: 'docs', label: '文档', icon: FileText, exts: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'md', 'rtf'] },
     { id: 'archives', label: '压缩包', icon: Archive, exts: ['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz'] },
     { id: 'code', label: '代码', icon: FileCode, exts: ['py', 'js', 'ts', 'java', 'c', 'cpp', 'h', 'go', 'rs', 'rb', 'php', 'html', 'css', 'json', 'xml', 'yaml', 'yml'] },
+    { id: 'jxl', label: 'JXL', icon: Image, exts: ['jxl'] },
   ];
 
   // 日期预设
@@ -329,12 +499,161 @@
 </script>
 
 <div class="filter-builder space-y-3">
-  <!-- 模式切换 -->
+  <!-- 模式切换和预设按钮 -->
   {#if showAdvanced}
-    <div class="flex items-center justify-between">
-      <span class="text-xs text-muted-foreground">
-        {advancedMode ? 'SQL 模式' : '可视化模式'}
-      </span>
+    <div class="flex items-center justify-between gap-2">
+      <div class="flex items-center gap-1">
+        <!-- 预设按钮 -->
+        <Dialog.Root bind:open={presetDialogOpen}>
+          <Dialog.Trigger>
+            <Button variant="outline" size="sm" class="h-6 text-xs" {disabled}>
+              <FolderOpen class="w-3 h-3 mr-1" />预设
+            </Button>
+          </Dialog.Trigger>
+          <Dialog.Content class="max-w-md">
+            <Dialog.Header>
+              <div class="flex items-center justify-between">
+                <Dialog.Title>选择预设</Dialog.Title>
+                {#if userPresets.length > 0}
+                  <Button variant="ghost" size="sm" class="h-7 text-xs" onclick={toggleEditMode}>
+                    {#if editMode}
+                      <Check class="w-3 h-3 mr-1" />完成
+                    {:else}
+                      <Pencil class="w-3 h-3 mr-1" />编辑
+                    {/if}
+                  </Button>
+                {/if}
+              </div>
+              <Dialog.Description>选择一个预设快速配置过滤器</Dialog.Description>
+            </Dialog.Header>
+            <div class="space-y-3 max-h-80 overflow-y-auto">
+              <!-- 内置预设 -->
+              <div>
+                <div class="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
+                  <Star class="w-3 h-3" />内置预设
+                </div>
+                <div class="space-y-1">
+                  {#each BUILTIN_PRESETS as preset}
+                    <button
+                      class="w-full flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 transition-colors text-left"
+                      onclick={() => applyPreset(preset)}
+                    >
+                      <span class="text-sm">{preset.name}</span>
+                      <Package class="w-4 h-4 text-muted-foreground" />
+                    </button>
+                  {/each}
+                </div>
+              </div>
+              
+              <!-- 用户预设 -->
+              {#if userPresets.length > 0}
+                <div>
+                  <div class="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
+                    <Save class="w-3 h-3" />我的预设
+                  </div>
+                  <div class="space-y-1">
+                    {#each userPresets as preset, index}
+                      <div class="flex items-center gap-1">
+                        {#if editMode}
+                          <!-- 编辑模式 -->
+                          <div class="flex items-center gap-1 shrink-0">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              class="h-7 w-7" 
+                              onclick={() => movePreset(preset.id, 'up')}
+                              disabled={index === 0}
+                            >
+                              <ArrowUp class="w-3 h-3" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              class="h-7 w-7" 
+                              onclick={() => movePreset(preset.id, 'down')}
+                              disabled={index === userPresets.length - 1}
+                            >
+                              <ArrowDown class="w-3 h-3" />
+                            </Button>
+                          </div>
+                          
+                          {#if editingPresetId === preset.id}
+                            <!-- 重命名输入框 -->
+                            <Input 
+                              bind:value={editingPresetName}
+                              class="h-8 text-sm flex-1"
+                              onkeydown={(e) => {
+                                if (e.key === 'Enter') confirmRename();
+                                if (e.key === 'Escape') cancelRename();
+                              }}
+                            />
+                            <Button variant="ghost" size="icon" class="h-7 w-7" onclick={confirmRename}>
+                              <Check class="w-3 h-3 text-green-500" />
+                            </Button>
+                            <Button variant="ghost" size="icon" class="h-7 w-7" onclick={cancelRename}>
+                              <X class="w-3 h-3" />
+                            </Button>
+                          {:else}
+                            <!-- 预设名称（可点击重命名） -->
+                            <button
+                              class="flex-1 p-2 rounded-lg hover:bg-muted/50 transition-colors text-left text-sm"
+                              onclick={() => startRenamePreset(preset)}
+                            >
+                              {preset.name}
+                            </button>
+                            <Button variant="ghost" size="icon" class="h-7 w-7" onclick={() => startRenamePreset(preset)}>
+                              <Pencil class="w-3 h-3 text-muted-foreground" />
+                            </Button>
+                            <Button variant="ghost" size="icon" class="h-7 w-7" onclick={() => deletePreset(preset.id)}>
+                              <Trash2 class="w-3 h-3 text-destructive" />
+                            </Button>
+                          {/if}
+                        {:else}
+                          <!-- 普通模式 -->
+                          <button
+                            class="flex-1 flex items-center justify-between p-2 rounded-lg hover:bg-muted/50 transition-colors text-left"
+                            onclick={() => applyPreset(preset)}
+                          >
+                            <span class="text-sm">{preset.name}</span>
+                          </button>
+                        {/if}
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+            </div>
+          </Dialog.Content>
+        </Dialog.Root>
+
+        <!-- 保存预设按钮 -->
+        <Dialog.Root bind:open={saveDialogOpen}>
+          <Dialog.Trigger>
+            <Button variant="ghost" size="sm" class="h-6 text-xs" {disabled}>
+              <Save class="w-3 h-3" />
+            </Button>
+          </Dialog.Trigger>
+          <Dialog.Content class="max-w-sm">
+            <Dialog.Header>
+              <Dialog.Title>保存预设</Dialog.Title>
+              <Dialog.Description>将当前配置保存为预设</Dialog.Description>
+            </Dialog.Header>
+            <div class="space-y-3">
+              <Input 
+                bind:value={newPresetName}
+                placeholder="预设名称"
+                onkeydown={(e) => e.key === 'Enter' && saveAsPreset()}
+              />
+              <div class="flex justify-end gap-2">
+                <Button variant="outline" onclick={() => saveDialogOpen = false}>取消</Button>
+                <Button onclick={saveAsPreset} disabled={!newPresetName.trim()}>保存</Button>
+              </div>
+            </div>
+          </Dialog.Content>
+        </Dialog.Root>
+      </div>
+
+      <!-- 模式切换 -->
       <Button variant="ghost" size="sm" class="h-6 text-xs" onclick={toggleAdvanced}>
         {#if advancedMode}
           <Sparkles class="w-3 h-3 mr-1" />可视化

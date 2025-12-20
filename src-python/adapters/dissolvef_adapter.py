@@ -162,7 +162,10 @@ class DissolvefAdapter(BaseAdapter):
         on_log: Optional[Callable[[str], None]] = None
     ) -> DissolvefOutput:
         """执行解散操作"""
-        path = Path(input_data.path)
+        if not input_data.path or not input_data.path.strip():
+            return DissolvefOutput(success=False, message="请输入要处理的文件夹路径")
+        
+        path = Path(input_data.path.strip())
         
         if not path.exists():
             return DissolvefOutput(success=False, message=f"路径不存在: {path}")
@@ -246,12 +249,13 @@ class DissolvefAdapter(BaseAdapter):
                     if on_log:
                         on_log(f"[NESTED] {mode_prefix}解散嵌套文件夹...")
                     
-                    # 调用带相似度检测的函数
+                    # 调用带相似度检测的函数，传递日志回调
                     result = mod["flatten_single_subfolder"](
                         path, exclude_keywords,
                         preview=input_data.preview,
                         similarity_threshold=similarity,
-                        enable_undo=not input_data.preview
+                        enable_undo=not input_data.preview,
+                        on_log=on_log
                     )
                     # 兼容新旧返回值
                     if isinstance(result, tuple):

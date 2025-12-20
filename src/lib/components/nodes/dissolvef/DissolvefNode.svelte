@@ -117,15 +117,20 @@
   let operationHistory = $state<OperationRecord[]>([]);
   let lastOperationId = $state('');
 
+  // 初始化标记
+  let initialized = $state(false);
+  
   $effect(() => {
-    pathText = configPath;
+    if (initialized) return;
+    
     logs = [...dataLogs];
     hasInputConnection = dataHasInputConnection;
+    
     if (savedState) {
       phase = savedState.phase ?? 'idle';
       progress = savedState.progress ?? 0;
       progressText = savedState.progressText ?? '';
-      pathText = savedState.pathText ?? '';
+      pathText = savedState.pathText || configPath || '';
       nestedMode = savedState.nestedMode ?? true;
       mediaMode = savedState.mediaMode ?? true;
       archiveMode = savedState.archiveMode ?? true;
@@ -139,7 +144,11 @@
       result = savedState.result ?? null;
       operationHistory = savedState.operationHistory ?? [];
       lastOperationId = savedState.lastOperationId ?? '';
+    } else {
+      pathText = configPath || '';
     }
+    
+    initialized = true;
   });
 
   function saveState() {
@@ -498,15 +507,18 @@
         {#if copied}<Check class="w-3 h-3 text-green-500" />{:else}<Copy class="w-3 h-3" />{/if}
       </Button>
     </div>
-    <div class="flex-1 overflow-y-auto bg-muted/30 cq-rounded cq-padding font-mono cq-text-sm space-y-0.5 mb-2" style="max-height: 80px;">
+    <div class="flex-1 overflow-y-auto bg-muted/30 cq-rounded cq-padding font-mono cq-text-sm space-y-0.5" style="min-height: 60px;">
       {#if logs.length > 0}
-        {#each logs.slice(-8) as logItem}<div class="text-muted-foreground break-all">{logItem}</div>{/each}
+        {#each logs as logItem}<div class="text-muted-foreground break-all">{logItem}</div>{/each}
       {:else}
         <div class="text-muted-foreground text-center py-2">暂无日志</div>
       {/if}
     </div>
-    
-    <!-- 操作历史 -->
+  </div>
+{/snippet}
+
+{#snippet historyBlock()}
+  <div class="h-full flex flex-col">
     <div class="flex items-center gap-2 mb-1 shrink-0">
       <Undo2 class="cq-icon" />
       <span class="cq-text font-semibold">操作历史</span>
@@ -542,6 +554,7 @@
   {:else if blockId === 'operation'}{@render operationBlock()}
   {:else if blockId === 'result'}{@render resultBlock()}
   {:else if blockId === 'log'}{@render logBlock()}
+  {:else if blockId === 'history'}{@render historyBlock()}
   {/if}
 {/snippet}
 

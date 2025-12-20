@@ -20,6 +20,7 @@ import { TrenameNode } from '$lib/components/nodes/trename';
 import { EngineVNode } from '$lib/components/nodes/enginev';
 import { MigrateFNode } from '$lib/components/nodes/migratefnode';
 import { FormatVNode } from '$lib/components/nodes/formatv';
+import { FindzNode } from '$lib/components/nodes/findz';
 
 /** 节点注册项 - 包含定义和组件 */
 export interface NodeRegistryEntry extends NodeDefinition {
@@ -173,6 +174,21 @@ export const NODE_REGISTRY: NodeRegistryEntry[] = [
       path: { type: 'path', label: '目标路径', required: true },
       action: { type: 'select', label: '操作类型', default: 'scan' },
       prefix_name: { type: 'string', label: '前缀名称', default: 'hb' }
+    }
+  },
+  {
+    type: 'findz',
+    category: 'tool',
+    label: 'findz',
+    description: '文件搜索：使用 SQL-like WHERE 语法搜索文件（支持压缩包内部）',
+    icon: 'Search',
+    inputs: ['path'],
+    outputs: ['path'],
+    component: FindzNode,
+    configSchema: {
+      path: { type: 'path', label: '搜索路径', required: true },
+      where: { type: 'string', label: 'WHERE 过滤', default: '1' },
+      action: { type: 'select', label: '操作类型', default: 'search' }
     }
   },
 

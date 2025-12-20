@@ -13,3 +13,4 @@ export { TrenameNode } from './trename';
 export { EngineVNode } from './enginev';
 export { MigrateFNode } from './migratefnode';
 export { FormatVNode } from './formatv';
+export { FindzNode } from './findz';

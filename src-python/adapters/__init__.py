@@ -18,6 +18,7 @@ _ADAPTER_REGISTRY: Dict[str, str] = {
     "enginev": "adapters.enginev_adapter.EngineVAdapter",
     "migratef": "adapters.migratef_adapter.MigrateFAdapter",
     "formatv": "adapters.formatv_adapter.FormatVAdapter",
+    "findz": "adapters.findz_adapter.FindzAdapter",
 }
 
 # 适配器实例缓存

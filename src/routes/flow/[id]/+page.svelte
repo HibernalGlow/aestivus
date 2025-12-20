@@ -6,11 +6,12 @@
   import FlowCanvas from '$lib/components/flow/FlowCanvas.svelte';
   import TitleBar from '$lib/components/flow/TitleBar.svelte';
   import AutoHideTitleBar from '$lib/components/layout/AutoHideTitleBar.svelte';
-  import FloatingPalette from '$lib/components/flow/FloatingPalette.svelte';
+  import LeftSidebar from '$lib/components/layout/LeftSidebar.svelte';
   import LogViewer from '$lib/components/execution/LogViewer.svelte';
   import { themeStore } from '$lib/stores/theme.svelte';
   import { fullscreenNodeStore } from '$lib/stores/fullscreenNode.svelte';
   import { getNodeTypes } from '$lib/stores/nodeRegistry';
+  import { sidebarStore } from '$lib/stores/sidebar.svelte';
 
   const flowId = $derived(page.params.id);
   
@@ -90,7 +91,7 @@
   </div>
 
   <!-- 浮动面板 -->
-  <FloatingPalette />
+  <LeftSidebar />
 
   <!-- 日志面板 -->
   {#if $taskStore.status !== 'idle' || $taskStore.logs.length > 0}

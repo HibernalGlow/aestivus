@@ -75,6 +75,40 @@
     return modeState.gridLayout.length > 0;
   }
 
+  /** 检查并添加缺失的区块到布局中 */
+  function ensureAllBlocksInLayout(layout: GridItem[], modeType: 'normal' | 'fullscreen'): GridItem[] {
+    const blockLayout = getNodeBlockLayout(nodeType);
+    if (!blockLayout) return layout;
+    
+    const existingIds = new Set(layout.map(item => item.id));
+    const visibleBlocks = blockLayout.blocks.filter(b => 
+      modeType === 'normal' 
+        ? b.visibleInNormal !== false && !b.isTabContainer
+        : b.visibleInFullscreen !== false && !b.isTabContainer
+    );
+    
+    // 找出缺失的区块
+    const missingBlocks = visibleBlocks.filter(b => !existingIds.has(b.id));
+    
+    if (missingBlocks.length === 0) return layout;
+    
+    // 计算新区块的位置（放在最下面）
+    const maxY = layout.reduce((max, item) => Math.max(max, item.y + item.h), 0);
+    
+    const newItems: GridItem[] = missingBlocks.map((b, idx) => ({
+      id: b.id,
+      x: idx % 4,
+      y: maxY + Math.floor(idx / 4),
+      w: b.colSpan ?? 1,
+      h: 2,
+      minW: 1,
+      minH: 1,
+    }));
+    
+    console.log(`[NodeLayoutRenderer] 添加缺失区块到 ${nodeType}:`, missingBlocks.map(b => b.id));
+    return [...layout, ...newItems];
+  }
+
   function initNodeConfig(): NodeConfig {
     const config = getOrCreateNodeConfig(
       nodeId,
@@ -83,6 +117,8 @@
       defaultNormalLayout
     );
     let needsUpdate = false;
+    
+    // 检查普通模式
     if (!hasSavedLayout(config.normal)) {
       const normalLayout =
         defaultNormalLayout.length > 0
@@ -92,14 +128,28 @@
         updateGridLayout(nodeType, "normal", normalLayout);
         needsUpdate = true;
       }
+    } else {
+      // 检查是否有缺失的区块
+      const updatedNormal = ensureAllBlocksInLayout(config.normal.gridLayout, 'normal');
+      if (updatedNormal.length > config.normal.gridLayout.length) {
+        updateGridLayout(nodeType, "normal", updatedNormal);
+        needsUpdate = true;
+      }
     }
-    if (
-      !hasSavedLayout(config.fullscreen) &&
-      defaultFullscreenLayout.length > 0
-    ) {
+    
+    // 检查全屏模式
+    if (!hasSavedLayout(config.fullscreen) && defaultFullscreenLayout.length > 0) {
       updateGridLayout(nodeType, "fullscreen", defaultFullscreenLayout);
       needsUpdate = true;
+    } else if (hasSavedLayout(config.fullscreen)) {
+      // 检查是否有缺失的区块
+      const updatedFullscreen = ensureAllBlocksInLayout(config.fullscreen.gridLayout, 'fullscreen');
+      if (updatedFullscreen.length > config.fullscreen.gridLayout.length) {
+        updateGridLayout(nodeType, "fullscreen", updatedFullscreen);
+        needsUpdate = true;
+      }
     }
+    
     return needsUpdate
       ? getOrCreateNodeConfig(
           nodeId,

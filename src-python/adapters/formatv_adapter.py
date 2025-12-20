@@ -161,11 +161,16 @@ class FormatVAdapter(BaseAdapter):
             total_normal = 0
             total_nov = 0
             prefixed_counts: Dict[str, int] = {}
+            all_normal_files: List[str] = []
+            all_nov_files: List[str] = []
+            all_prefixed_files: Dict[str, List[str]] = {}
             
             # 初始化前缀计数
             prefixes = get_prefix_list()
             for p in prefixes:
-                prefixed_counts[p.get("name", "")] = 0
+                name = p.get("name", "")
+                prefixed_counts[name] = 0
+                all_prefixed_files[name] = []
             
             for i, path in enumerate(paths):
                 if on_progress:
@@ -173,14 +178,22 @@ class FormatVAdapter(BaseAdapter):
                     on_progress(progress, f"扫描: {path}")
                 
                 result = find_video_files(path)
-                total_normal += len(result.get("normal_files", []))
-                total_nov += len(result.get("nov_files", []))
+                normal_files = result.get("normal_files", [])
+                nov_files = result.get("nov_files", [])
+                
+                total_normal += len(normal_files)
+                total_nov += len(nov_files)
+                all_normal_files.extend(normal_files)
+                all_nov_files.extend(nov_files)
                 
                 for name, files in result.get("prefixed_files", {}).items():
                     prefixed_counts[name] = prefixed_counts.get(name, 0) + len(files)
+                    if name not in all_prefixed_files:
+                        all_prefixed_files[name] = []
+                    all_prefixed_files[name].extend(files)
                 
                 if on_log:
-                    on_log(f"✓ {path}: {len(result.get('normal_files', []))} 普通, {len(result.get('nov_files', []))} .nov")
+                    on_log(f"✓ {path}: {len(normal_files)} 普通, {len(nov_files)} .nov")
             
             if on_progress:
                 on_progress(100, "扫描完成")
@@ -197,10 +210,16 @@ class FormatVAdapter(BaseAdapter):
                 normal_count=total_normal,
                 nov_count=total_nov,
                 prefixed_counts=prefixed_counts,
+                normal_files=all_normal_files,
+                nov_files=all_nov_files,
+                prefixed_files=all_prefixed_files,
                 data={
                     'normal_count': total_normal,
                     'nov_count': total_nov,
                     'prefixed_counts': prefixed_counts,
+                    'normal_files': all_normal_files,
+                    'nov_files': all_nov_files,
+                    'prefixed_files': all_prefixed_files,
                     'paths': paths
                 }
             )

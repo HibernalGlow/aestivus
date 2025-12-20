@@ -617,6 +617,16 @@ export const FORMATV_BLOCKS: BlockDefinition[] = [
     visibleInFullscreen: true
   },
   {
+    id: 'tree',
+    title: '文件列表',
+    icon: FolderTree,
+    iconClass: 'text-blue-500',
+    colSpan: 2,
+    fullHeight: true,
+    visibleInNormal: true,
+    visibleInFullscreen: true
+  },
+  {
     id: 'log',
     title: '日志',
     icon: Copy,
@@ -631,9 +641,10 @@ export const FORMATV_BLOCKS: BlockDefinition[] = [
 export const FORMATV_DEFAULT_GRID_LAYOUT: GridItem[] = [
   { id: 'path', x: 0, y: 0, w: 2, h: 2, minW: 1, minH: 1 },
   { id: 'operation', x: 2, y: 0, w: 2, h: 3, minW: 1, minH: 2 },
-  { id: 'stats', x: 0, y: 2, w: 2, h: 3, minW: 1, minH: 2 },
-  { id: 'progress', x: 2, y: 3, w: 2, h: 2, minW: 1, minH: 1 },
-  { id: 'log', x: 0, y: 5, w: 4, h: 2, minW: 1, minH: 1 }
+  { id: 'stats', x: 0, y: 2, w: 2, h: 2, minW: 1, minH: 1 },
+  { id: 'progress', x: 2, y: 3, w: 2, h: 1, minW: 1, minH: 1 },
+  { id: 'tree', x: 0, y: 4, w: 3, h: 4, minW: 1, minH: 2 },
+  { id: 'log', x: 3, y: 4, w: 1, h: 4, minW: 1, minH: 1 }
 ];
 
 // ============ 注册表 ============

@@ -54,12 +54,6 @@
     cpuThreshold: number;
     cpuDuration: number;
     dryrun: boolean;
-    progress: number;
-    progressText: string;
-    remainingSeconds: number;
-    currentUpload: number;
-    currentDownload: number;
-    currentCpu: number;
   }
 
   const nodeId = $derived(id);
@@ -70,8 +64,8 @@
   let timerMode = $state<TimerMode>('countdown');
   let powerMode = $state<PowerMode>('sleep');
   let hours = $state(0);
-  let minutes = $state(30);
-  let seconds = $state(0);
+  let minutes = $state(0);
+  let seconds = $state(5);
   let targetDatetime = $state('');
   let uploadThreshold = $state(242);
   let downloadThreshold = $state(242);
@@ -86,12 +80,10 @@
   let copied = $state(false);
   let progress = $state(0);
   let progressText = $state('');
-  let remainingSeconds = $state(0);
   let currentUpload = $state(0);
   let currentDownload = $state(0);
   let currentCpu = $state(0);
   let layoutRenderer = $state<any>(undefined);
-  let statsInterval: ReturnType<typeof setInterval> | null = null;
 
   let initialized = $state(false);
   
@@ -99,12 +91,12 @@
     if (initialized) return;
     
     if (savedState) {
-      phase = savedState.phase ?? 'idle';
+      phase = 'idle'; // 重置状态
       timerMode = savedState.timerMode ?? 'countdown';
       powerMode = savedState.powerMode ?? 'sleep';
       hours = savedState.hours ?? 0;
-      minutes = savedState.minutes ?? 30;
-      seconds = savedState.seconds ?? 0;
+      minutes = savedState.minutes ?? 0;
+      seconds = savedState.seconds ?? 5;
       targetDatetime = savedState.targetDatetime ?? '';
       uploadThreshold = savedState.uploadThreshold ?? 242;
       downloadThreshold = savedState.downloadThreshold ?? 242;
@@ -113,14 +105,12 @@
       cpuThreshold = savedState.cpuThreshold ?? 10;
       cpuDuration = savedState.cpuDuration ?? 2;
       dryrun = savedState.dryrun ?? true;
-      progress = savedState.progress ?? 0;
-      progressText = savedState.progressText ?? '';
     }
     
     // 设置默认目标时间为1小时后
     if (!targetDatetime) {
       const d = new Date(Date.now() + 3600000);
-      targetDatetime = d.toISOString().slice(0, 16).replace('T', ' ') + ':00';
+      targetDatetime = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:00`;
     }
     
     initialized = true;
@@ -133,8 +123,7 @@
     setNodeState<SleeptState>(nodeId, {
       phase, timerMode, powerMode, hours, minutes, seconds, targetDatetime,
       uploadThreshold, downloadThreshold, netDuration, netTriggerMode,
-      cpuThreshold, cpuDuration, dryrun, progress, progressText,
-      remainingSeconds, currentUpload, currentDownload, currentCpu
+      cpuThreshold, cpuDuration, dryrun
     });
   }
 
@@ -144,23 +133,9 @@
     completed: 'border-green-500/50', cancelled: 'border-yellow-500/50', error: 'border-destructive/50'
   }[phase]);
 
-  $effect(() => { if (phase || timerMode || powerMode) saveState(); });
+  $effect(() => { if (timerMode || powerMode || dryrun) saveState(); });
 
   function log(msg: string) { logs = [...logs.slice(-50), msg]; }
-
-  // 获取系统状态
-  async function fetchStats() {
-    try {
-      const response = await api.executeNode('sleept', { action: 'get_stats' }) as any;
-      if (response.success) {
-        currentUpload = response.current_upload ?? 0;
-        currentDownload = response.current_download ?? 0;
-        currentCpu = response.current_cpu ?? 0;
-      }
-    } catch (e) {
-      console.error('获取状态失败:', e);
-    }
-  }
 
   // 启动定时器
   async function handleStart() {
@@ -169,12 +144,13 @@
     phase = 'running';
     progress = 0;
     progressText = '启动中...';
-    log(`⏰ 启动定时器 - 模式: ${timerMode}, 电源: ${powerMode}`);
+    log(`⏰ 启动 ${timerMode} 模式`);
     
     const taskId = `sleept-${nodeId}-${Date.now()}`;
     let ws: WebSocket | null = null;
     
     try {
+      // 建立 WebSocket 连接
       const wsUrl = `${getWsBaseUrl()}/v1/ws/tasks/${taskId}`;
       ws = new WebSocket(wsUrl);
       
@@ -192,15 +168,16 @@
         }
       };
       
+      // 等待连接
       await new Promise<void>((resolve) => {
-        const timeout = setTimeout(resolve, 2000);
+        const timeout = setTimeout(resolve, 1000);
         ws!.onopen = () => { clearTimeout(timeout); resolve(); };
         ws!.onerror = () => { clearTimeout(timeout); resolve(); };
       });
       
+      // 构建参数 - action 直接使用 timerMode
       const params: Record<string, any> = {
-        action: 'start',
-        timer_mode: timerMode,
+        action: timerMode,
         power_mode: powerMode,
         dryrun
       };
@@ -221,46 +198,25 @@
         params.cpu_duration = cpuDuration;
       }
       
+      // 发送请求（这个请求会阻塞直到定时器完成）
       const response = await api.executeNode('sleept', params, { taskId, nodeId }) as any;
       
       if (response.success) {
+        phase = 'completed';
+        progress = 100;
+        progressText = '完成';
         log(`✅ ${response.message}`);
-        if (response.target_time) {
-          log(`📅 目标时间: ${response.target_time}`);
-        }
-        // 启动状态轮询
-        startStatsPolling();
       } else {
         phase = 'error';
         log(`❌ ${response.message}`);
       }
     } catch (error) {
       phase = 'error';
-      log(`❌ 启动失败: ${error}`);
+      log(`❌ 执行失败: ${error}`);
     } finally {
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.close();
       }
-    }
-  }
-
-  // 取消定时器
-  async function handleCancel() {
-    if (!isRunning) return;
-    
-    try {
-      const response = await api.executeNode('sleept', { action: 'cancel' }) as any;
-      if (response.success) {
-        phase = 'cancelled';
-        progress = 0;
-        progressText = '已取消';
-        log(`❌ ${response.message}`);
-        stopStatsPolling();
-      } else {
-        log(`⚠️ ${response.message}`);
-      }
-    } catch (error) {
-      log(`❌ 取消失败: ${error}`);
     }
   }
 
@@ -270,48 +226,19 @@
     progress = 0;
     progressText = '';
     logs = [];
-    stopStatsPolling();
   }
 
-  // 状态轮询
-  function startStatsPolling() {
-    stopStatsPolling();
-    fetchStats();
-    statsInterval = setInterval(async () => {
-      await fetchStats();
-      // 检查定时器状态
-      try {
-        const response = await api.executeNode('sleept', { action: 'status' }) as any;
-        if (response.timer_status === 'completed') {
-          phase = 'completed';
-          progress = 100;
-          progressText = '已完成';
-          log('✅ 定时器已完成');
-          stopStatsPolling();
-        } else if (response.timer_status === 'cancelled') {
-          phase = 'cancelled';
-          stopStatsPolling();
-        } else if (response.timer_status === 'idle' && phase === 'running') {
-          // 可能是后端重启了
-          phase = 'idle';
-          stopStatsPolling();
-        } else if (response.remaining_seconds > 0) {
-          remainingSeconds = response.remaining_seconds;
-          const h = Math.floor(remainingSeconds / 3600);
-          const m = Math.floor((remainingSeconds % 3600) / 60);
-          const s = remainingSeconds % 60;
-          progressText = `剩余 ${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-        }
-      } catch (e) {
-        console.error('获取状态失败:', e);
+  // 获取系统状态
+  async function fetchStats() {
+    try {
+      const response = await api.executeNode('sleept', { action: 'get_stats' }) as any;
+      if (response.success) {
+        currentUpload = response.current_upload ?? 0;
+        currentDownload = response.current_download ?? 0;
+        currentCpu = response.current_cpu ?? 0;
       }
-    }, 1000);
-  }
-
-  function stopStatsPolling() {
-    if (statsInterval) {
-      clearInterval(statsInterval);
-      statsInterval = null;
+    } catch (e) {
+      console.error('获取状态失败:', e);
     }
   }
 
@@ -430,8 +357,8 @@
         </div>
       </div>
       <div class="grid grid-cols-4 cq-gap">
+        <Button variant="outline" size="sm" class="cq-button-sm" onclick={() => setPreset(0, 0, 5)} disabled={isRunning}>5秒</Button>
         <Button variant="outline" size="sm" class="cq-button-sm" onclick={() => setPreset(0, 5, 0)} disabled={isRunning}>5分</Button>
-        <Button variant="outline" size="sm" class="cq-button-sm" onclick={() => setPreset(0, 15, 0)} disabled={isRunning}>15分</Button>
         <Button variant="outline" size="sm" class="cq-button-sm" onclick={() => setPreset(0, 30, 0)} disabled={isRunning}>30分</Button>
         <Button variant="outline" size="sm" class="cq-button-sm" onclick={() => setPreset(1, 0, 0)} disabled={isRunning}>1时</Button>
       </div>
@@ -533,17 +460,13 @@
       {/if}
     </div>
     
-    {#if phase === 'idle' || phase === 'error' || phase === 'cancelled'}
-      <Button class="w-full cq-button flex-1" onclick={handleStart}>
+    {#if phase === 'idle' || phase === 'error' || phase === 'cancelled' || phase === 'completed'}
+      <Button class="w-full cq-button flex-1" onclick={handleStart} disabled={isRunning}>
         <Play class="cq-icon mr-1" /><span>开始</span>
       </Button>
-    {:else if isRunning}
-      <Button class="w-full cq-button flex-1" variant="destructive" onclick={handleCancel}>
-        <XCircle class="cq-icon mr-1" /><span>取消</span>
-      </Button>
     {:else}
-      <Button class="w-full cq-button flex-1" onclick={handleReset}>
-        <RotateCcw class="cq-icon mr-1" /><span>重新开始</span>
+      <Button class="w-full cq-button flex-1" disabled>
+        <LoaderCircle class="cq-icon mr-1 animate-spin" /><span>运行中...</span>
       </Button>
     {/if}
     

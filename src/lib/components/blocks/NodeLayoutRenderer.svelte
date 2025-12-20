@@ -429,7 +429,7 @@
         {@const tabGroup = tabGroups.find(g => g.blockIds[0] === gridItem.id)}
         {@const isHiddenByTab = hiddenBlockIds.has(gridItem.id)}
         {#if tabGroup}
-          <div class={colSpan === 2 ? "col-span-2" : ""}>
+          <div class="{colSpan === 2 ? 'col-span-2' : ''}">
             <TabGroupCard
               group={tabGroup}
               {nodeType}

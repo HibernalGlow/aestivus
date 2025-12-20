@@ -34,7 +34,10 @@
   );
 
   // Tauri 窗口 API
-  let windowApi: any = null;
+  let windowApi: any = $state(null);
+  
+  // 是否在 Tauri 环境中（用于控制窗口按钮显示）
+  let isTauri = $derived(windowApi !== null);
   
   // 动态导入 Tauri API
   import { onMount } from 'svelte';
@@ -296,30 +299,32 @@
       </Button>
     {/if}
     
-    <div class="w-px h-5 bg-border mx-1"></div>
-    
-    <!-- 窗口控制按钮 -->
-    <button 
-      class="h-7 w-10 flex items-center justify-center hover:bg-muted transition-colors"
-      onclick={minimizeWindow}
-      title="最小化"
-    >
-      <Minus class="w-4 h-4" />
-    </button>
-    <button 
-      class="h-7 w-10 flex items-center justify-center hover:bg-muted transition-colors"
-      onclick={toggleMaximize}
-      title="最大化"
-    >
-      <MaxIcon class="w-3.5 h-3.5" />
-    </button>
-    <button 
-      class="h-7 w-10 flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground transition-colors"
-      onclick={closeWindow}
-      title="关闭"
-    >
-      <CloseIcon class="w-4 h-4" />
-    </button>
+    <!-- 窗口控制按钮 - 仅在 Tauri 环境显示 -->
+    {#if isTauri}
+      <div class="w-px h-5 bg-border mx-1"></div>
+      
+      <button 
+        class="h-7 w-10 flex items-center justify-center hover:bg-muted transition-colors"
+        onclick={minimizeWindow}
+        title="最小化"
+      >
+        <Minus class="w-4 h-4" />
+      </button>
+      <button 
+        class="h-7 w-10 flex items-center justify-center hover:bg-muted transition-colors"
+        onclick={toggleMaximize}
+        title="最大化"
+      >
+        <MaxIcon class="w-3.5 h-3.5" />
+      </button>
+      <button 
+        class="h-7 w-10 flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground transition-colors"
+        onclick={closeWindow}
+        title="关闭"
+      >
+        <CloseIcon class="w-4 h-4" />
+      </button>
+    {/if}
   </div>
 </div>
 

@@ -109,7 +109,8 @@ export const nodeBlockRegistry: Record<string, NodeBlockLayout> = {
   crashu: { nodeType: 'crashu', blocks: CRASHU_BLOCKS, defaultGridLayout: CRASHU_DEFAULT_GRID_LAYOUT },
   migratef: { nodeType: 'migratef', blocks: MIGRATEF_BLOCKS, defaultGridLayout: MIGRATEF_DEFAULT_GRID_LAYOUT },
   formatv: { nodeType: 'formatv', blocks: FORMATV_BLOCKS, defaultGridLayout: FORMATV_DEFAULT_GRID_LAYOUT },
-  bandia: { nodeType: 'bandia', blocks: BANDIA_BLOCKS, defaultGridLayout: BANDIA_DEFAULT_GRID_LAYOUT }
+  bandia: { nodeType: 'bandia', blocks: BANDIA_BLOCKS, defaultGridLayout: BANDIA_DEFAULT_GRID_LAYOUT },
+  dissolvef: { nodeType: 'dissolvef', blocks: DISSOLVEF_BLOCKS, defaultGridLayout: DISSOLVEF_DEFAULT_GRID_LAYOUT }
 };
 
 // ============ 工具函数 ============

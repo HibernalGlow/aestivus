@@ -711,7 +711,7 @@ export const FINDZ_BLOCKS: BlockDefinition[] = [
     iconClass: 'text-orange-500',
     colSpan: 2,
     fullHeight: true,
-    visibleInNormal: false,  // 普通模式不显示，全屏模式显示
+    visibleInNormal: true,
     visibleInFullscreen: true
   },
   {

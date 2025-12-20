@@ -55,7 +55,7 @@ class FindzInput(AdapterInput):
     long_format: bool = Field(default=True, description="显示详细信息（日期、大小）")
     follow_symlinks: bool = Field(default=False, description="跟随符号链接")
     no_archive: bool = Field(default=False, description="禁用压缩包搜索")
-    max_results: int = Field(default=1000, description="最大结果数量")
+    max_results: int = Field(default=0, description="最大结果数量，0表示无限制")
     continue_on_error: bool = Field(default=True, description="遇到错误继续搜索")
 
 
@@ -276,8 +276,8 @@ class FindzAdapter(BaseAdapter):
                         if scanned_files % 100 == 0 and on_log:
                             on_log(f"📊 已扫描 {scanned_files} 个文件，找到 {len(all_results)} 个匹配")
                         
-                        # 限制结果数量
-                        if len(all_results) >= input_data.max_results:
+                        # 限制结果数量（0表示无限制）
+                        if input_data.max_results > 0 and len(all_results) >= input_data.max_results:
                             if on_log:
                                 on_log(f"⚠️ 结果已达上限 {input_data.max_results}")
                             break
@@ -535,7 +535,8 @@ class FindzAdapter(BaseAdapter):
                 
                 try:
                     for file_info in walk(search_path, params):
-                        if len(all_results) >= input_data.max_results:
+                        # 限制结果数量（0表示无限制）
+                        if input_data.max_results > 0 and len(all_results) >= input_data.max_results:
                             if on_log:
                                 on_log(f"⚠️ 结果已达上限 {input_data.max_results}")
                             break

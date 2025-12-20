@@ -150,7 +150,7 @@
     try {
       progress = 10;
       const response = await api.executeNode('findz', {
-        path: targetPath, where: whereClause, action, long_format: true, max_results: 1000
+        path: targetPath, where: whereClause, action, long_format: true, max_results: 0
       }) as any;
 
       if (response.logs) for (const m of response.logs) log(m);

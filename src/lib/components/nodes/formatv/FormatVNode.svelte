@@ -82,23 +82,44 @@
     fileListData: FileListData | null;
   }
 
-  const savedState = getNodeState<FormatVNodeState>(id);
+  // 使用 $derived 确保响应式
+  const nodeId = $derived(id);
+  const savedState = $derived(getNodeState<FormatVNodeState>(nodeId));
+  const configPath = $derived(data?.config?.path ?? 'E:\\1Hub\\EH\\1EHV');
+  const dataLogs = $derived(data?.logs ?? []);
+  const dataHasInputConnection = $derived(data?.hasInputConnection ?? false);
 
   // 状态
-  let targetPath = $state(data?.config?.path ?? 'E:\\1Hub\\EH\\1EHV');
-  let phase = $state<Phase>(savedState?.phase ?? 'idle');
-  let logs = $state<string[]>(data?.logs ? [...data.logs] : []);
-  let hasInputConnection = $state(data?.hasInputConnection ?? false);
+  let targetPath = $state('E:\\1Hub\\EH\\1EHV');
+  let phase = $state<Phase>('idle');
+  let logs = $state<string[]>([]);
+  let hasInputConnection = $state(false);
   let copiedLogs = $state(false);
-  let progress = $state(savedState?.progress ?? 0);
-  let progressText = $state(savedState?.progressText ?? '');
-  let scanResult = $state<ScanResult | null>(savedState?.scanResult ?? null);
-  let duplicateCount = $state(savedState?.duplicateCount ?? 0);
-  let fileListData = $state<FileListData | null>(savedState?.fileListData ?? null);
+  let progress = $state(0);
+  let progressText = $state('');
+  let scanResult = $state<ScanResult | null>(null);
+  let duplicateCount = $state(0);
+  let fileListData = $state<FileListData | null>(null);
   let layoutRenderer = $state<LayoutRendererInstance | undefined>(undefined);
   
   // 选中的文件（用于预览）
   let selectedFile = $state<string | null>(null);
+
+  // 初始化状态
+  $effect(() => {
+    targetPath = configPath;
+    logs = [...dataLogs];
+    hasInputConnection = dataHasInputConnection;
+    
+    if (savedState) {
+      phase = savedState.phase ?? 'idle';
+      progress = savedState.progress ?? 0;
+      progressText = savedState.progressText ?? '';
+      scanResult = savedState.scanResult ?? null;
+      duplicateCount = savedState.duplicateCount ?? 0;
+      fileListData = savedState.fileListData ?? null;
+    }
+  });
 
   // 获取视频缩略图 URL（使用系统缩略图）
   function getThumbnailUrl(filePath: string): string {
@@ -106,7 +127,7 @@
   }
 
   function saveState() {
-    setNodeState<FormatVNodeState>(id, {
+    setNodeState<FormatVNodeState>(nodeId, {
       phase, progress, progressText, scanResult, duplicateCount, fileListData
     });
   }
@@ -481,7 +502,7 @@
   {/if}
 
   <NodeWrapper 
-    nodeId={id} 
+    nodeId={nodeId} 
     title="formatv" 
     icon={Video} 
     status={phase} 
@@ -500,7 +521,7 @@
     {#snippet children()}
       <NodeLayoutRenderer
         bind:this={layoutRenderer}
-        nodeId={id}
+        nodeId={nodeId}
         nodeType="formatv"
         isFullscreen={isFullscreenRender}
         defaultFullscreenLayout={FORMATV_DEFAULT_GRID_LAYOUT}

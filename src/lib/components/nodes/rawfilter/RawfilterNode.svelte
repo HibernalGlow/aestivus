@@ -41,23 +41,48 @@
   interface FilterResult { totalScanned: number; filtered: number; moved: number; shortcuts: number; }
   interface RawfilterState { phase: Phase; progress: number; progressText: string; filterResult: FilterResult | null; nameOnlyMode: boolean; createShortcuts: boolean; trashOnly: boolean; }
 
-  const savedState = getNodeState<RawfilterState>(id);
+  // 使用 $derived 确保响应式
+  const nodeId = $derived(id);
+  const savedState = $derived(getNodeState<RawfilterState>(nodeId));
+  const configPath = $derived(data?.config?.path ?? '');
+  const configNameOnlyMode = $derived(data?.config?.name_only_mode ?? false);
+  const configCreateShortcuts = $derived(data?.config?.create_shortcuts ?? false);
+  const configTrashOnly = $derived(data?.config?.trash_only ?? false);
+  const dataLogs = $derived(data?.logs ?? []);
+  const dataHasInputConnection = $derived(data?.hasInputConnection ?? false);
 
-  let path = $state(data?.config?.path ?? '');
-  let nameOnlyMode = $state(savedState?.nameOnlyMode ?? data?.config?.name_only_mode ?? false);
-  let createShortcuts = $state(savedState?.createShortcuts ?? data?.config?.create_shortcuts ?? false);
-  let trashOnly = $state(savedState?.trashOnly ?? data?.config?.trash_only ?? false);
-  let phase = $state<Phase>(savedState?.phase ?? 'idle');
-  let logs = $state<string[]>(data?.logs ? [...data.logs] : []);
-  let hasInputConnection = $state(data?.hasInputConnection ?? false);
+  let path = $state('');
+  let nameOnlyMode = $state(false);
+  let createShortcuts = $state(false);
+  let trashOnly = $state(false);
+  let phase = $state<Phase>('idle');
+  let logs = $state<string[]>([]);
+  let hasInputConnection = $state(false);
   let copied = $state(false);
-  let progress = $state(savedState?.progress ?? 0);
-  let progressText = $state(savedState?.progressText ?? '');
-  let filterResult = $state<FilterResult | null>(savedState?.filterResult ?? null);
+  let progress = $state(0);
+  let progressText = $state('');
+  let filterResult = $state<FilterResult | null>(null);
 
-  let layoutRenderer = $state<{ createTab: (blockIds: string[]) => void; getUsedBlockIdsForTab: () => string[]; compact: () => void; resetLayout: () => void; applyLayout: (layout: any[]) => void; getCurrentLayout: () => any[]; getCurrentTabGroups: () => any[]; } | undefined>(undefined);
+  let layoutRenderer = $state<any>(undefined);
 
-  function saveState() { setNodeState<RawfilterState>(id, { phase, progress, progressText, filterResult, nameOnlyMode, createShortcuts, trashOnly }); }
+  // 初始化状态
+  $effect(() => {
+    path = configPath;
+    nameOnlyMode = savedState?.nameOnlyMode ?? configNameOnlyMode;
+    createShortcuts = savedState?.createShortcuts ?? configCreateShortcuts;
+    trashOnly = savedState?.trashOnly ?? configTrashOnly;
+    logs = [...dataLogs];
+    hasInputConnection = dataHasInputConnection;
+    
+    if (savedState) {
+      phase = savedState.phase ?? 'idle';
+      progress = savedState.progress ?? 0;
+      progressText = savedState.progressText ?? '';
+      filterResult = savedState.filterResult ?? null;
+    }
+  });
+
+  function saveState() { setNodeState<RawfilterState>(nodeId, { phase, progress, progressText, filterResult, nameOnlyMode, createShortcuts, trashOnly }); }
 
   let canExecute = $derived(phase === 'idle' && (path.trim() !== '' || hasInputConnection));
   let isRunning = $derived(phase === 'scanning');
@@ -255,7 +280,7 @@
   {/if}
 
   <NodeWrapper 
-    nodeId={id} 
+    nodeId={nodeId} 
     title="rawfilter" 
     icon={Search} 
     status={phase} 
@@ -274,7 +299,7 @@
     {#snippet children()}
       <NodeLayoutRenderer
         bind:this={layoutRenderer}
-        nodeId={id}
+        nodeId={nodeId}
         nodeType="rawfilter"
         isFullscreen={isFullscreenRender}
         defaultFullscreenLayout={RAWFILTER_DEFAULT_GRID_LAYOUT}

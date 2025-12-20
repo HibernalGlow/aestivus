@@ -36,26 +36,47 @@
   
   let { id, data = {}, isFullscreenRender = false }: Props = $props();
   
-  const savedState = getNodeState<EngineVState>(id);
+  // 使用 $derived 确保响应式
+  const nodeId = $derived(id);
+  const savedState = $derived(getNodeState<EngineVState>(nodeId));
   const DEFAULT_WORKSHOP_PATH = 'E:\\SteamLibrary\\steamapps\\workshop\\content\\431960';
   const apiBase = getApiV1Url();
+  const configPath = $derived(data?.config?.path ?? DEFAULT_WORKSHOP_PATH);
+  const dataLogs = $derived(data?.logs ?? []);
   
-  let phase = $state<Phase>(savedState?.phase ?? 'idle');
-  let logs = $state<string[]>(savedState?.logs ?? (data?.logs ? [...data.logs] : []));
+  let phase = $state<Phase>('idle');
+  let logs = $state<string[]>([]);
   let copied = $state(false);
-  let workshopPath = $state(savedState?.workshopPath ?? data?.config?.path ?? DEFAULT_WORKSHOP_PATH);
+  let workshopPath = $state(DEFAULT_WORKSHOP_PATH);
 
-  let wallpapers = $state<WallpaperItem[]>(savedState?.wallpapers ?? []);
-  let filteredWallpapers = $state<WallpaperItem[]>(savedState?.filteredWallpapers ?? []);
-  let stats = $state<EngineVStats>(savedState?.stats ?? { ...DEFAULT_STATS });
-  let filters = $state<FilterOptions>(savedState?.filters ?? { ...DEFAULT_FILTERS });
-  let renameConfig = $state<RenameConfig>(savedState?.renameConfig ?? { ...DEFAULT_RENAME_CONFIG });
-  let selectedIds = $state<Set<string>>(new Set(savedState?.selectedIds ?? []));
-  let viewMode = $state<'grid' | 'list'>(savedState?.viewMode ?? 'grid');
+  let wallpapers = $state<WallpaperItem[]>([]);
+  let filteredWallpapers = $state<WallpaperItem[]>([]);
+  let stats = $state<EngineVStats>({ ...DEFAULT_STATS });
+  let filters = $state<FilterOptions>({ ...DEFAULT_FILTERS });
+  let renameConfig = $state<RenameConfig>({ ...DEFAULT_RENAME_CONFIG });
+  let selectedIds = $state<Set<string>>(new Set());
+  let viewMode = $state<'grid' | 'list'>('grid');
 
-  let layoutRenderer = $state<{ createTab: (blockIds: string[]) => void; getUsedBlockIdsForTab: () => string[]; compact: () => void; resetLayout: () => void; applyLayout: (layout: any[]) => void; getCurrentLayout: () => any[]; } | undefined>(undefined);
+  let layoutRenderer = $state<any>(undefined);
+
+  // 初始化状态
+  $effect(() => {
+    workshopPath = savedState?.workshopPath ?? configPath;
+    logs = savedState?.logs ?? [...dataLogs];
+    
+    if (savedState) {
+      phase = savedState.phase ?? 'idle';
+      wallpapers = savedState.wallpapers ?? [];
+      filteredWallpapers = savedState.filteredWallpapers ?? [];
+      stats = savedState.stats ?? { ...DEFAULT_STATS };
+      filters = savedState.filters ?? { ...DEFAULT_FILTERS };
+      renameConfig = savedState.renameConfig ?? { ...DEFAULT_RENAME_CONFIG };
+      selectedIds = new Set(savedState.selectedIds ?? []);
+      viewMode = savedState.viewMode ?? 'grid';
+    }
+  });
   
-  function saveState() { setNodeState<EngineVState>(id, { phase, logs, workshopPath, wallpapers, filteredWallpapers, stats, filters, renameConfig, selectedIds, viewMode }); }
+  function saveState() { setNodeState<EngineVState>(nodeId, { phase, logs, workshopPath, wallpapers, filteredWallpapers, stats, filters, renameConfig, selectedIds, viewMode }); }
   
   let isRunning = $derived(phase === 'scanning' || phase === 'renaming');
   let borderClass = $derived(getPhaseBorderClass(phase));
@@ -341,7 +362,7 @@
   {/if}
   
   <NodeWrapper 
-    nodeId={id} 
+    nodeId={nodeId} 
     title="enginev" 
     icon={Image} 
     status={phase} 
@@ -360,7 +381,7 @@
     {#snippet children()}
       <NodeLayoutRenderer
         bind:this={layoutRenderer}
-        nodeId={id}
+        nodeId={nodeId}
         nodeType="enginev"
         isFullscreen={isFullscreenRender}
         defaultFullscreenLayout={ENGINEV_DEFAULT_GRID_LAYOUT}

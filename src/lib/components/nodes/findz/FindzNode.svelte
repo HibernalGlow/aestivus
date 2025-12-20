@@ -54,18 +54,24 @@
   type Phase = 'idle' | 'searching' | 'completed' | 'error';
   type Action = 'search' | 'nested' | 'archives_only';
 
-  const savedState = getNodeState<FindzNodeState>(id);
+  // 使用 $derived 确保响应式
+  const nodeId = $derived(id);
+  const savedState = $derived(getNodeState<FindzNodeState>(nodeId));
+  const configPath = $derived(data?.config?.path ?? '.');
+  const configWhere = $derived(data?.config?.where ?? '1');
+  const dataLogs = $derived(data?.logs ?? []);
+  const dataHasInputConnection = $derived(data?.hasInputConnection ?? false);
 
   // 状态
-  let targetPath = $state(data?.config?.path ?? '.');
-  let whereClause = $state(data?.config?.where ?? '1');
-  let phase = $state<Phase>(savedState?.phase ?? 'idle');
-  let logs = $state<string[]>(data?.logs ? [...data.logs] : []);
-  let hasInputConnection = $state(data?.hasInputConnection ?? false);
-  let progress = $state(savedState?.progress ?? 0);
-  let searchResult = $state<SearchResult | null>(savedState?.searchResult ?? null);
-  let files = $state<FileData[]>(savedState?.files ?? []);
-  let byExtension = $state<Record<string, number>>(savedState?.byExtension ?? {});
+  let targetPath = $state('.');
+  let whereClause = $state('1');
+  let phase = $state<Phase>('idle');
+  let logs = $state<string[]>([]);
+  let hasInputConnection = $state(false);
+  let progress = $state(0);
+  let searchResult = $state<SearchResult | null>(null);
+  let files = $state<FileData[]>([]);
+  let byExtension = $state<Record<string, number>>({});
   let layoutRenderer = $state<LayoutRendererInstance | undefined>(undefined);
   let advancedMode = $state(false);
   
@@ -73,8 +79,24 @@
   let copiedLogs = $state(false);
   let copiedPath = $state(false);
 
+  // 初始化状态
+  $effect(() => {
+    targetPath = configPath;
+    whereClause = configWhere;
+    logs = [...dataLogs];
+    hasInputConnection = dataHasInputConnection;
+    
+    if (savedState) {
+      phase = savedState.phase ?? 'idle';
+      progress = savedState.progress ?? 0;
+      searchResult = savedState.searchResult ?? null;
+      files = savedState.files ?? [];
+      byExtension = savedState.byExtension ?? {};
+    }
+  });
+
   function saveState() {
-    setNodeState<FindzNodeState>(id, { phase, progress, searchResult, files, byExtension });
+    setNodeState<FindzNodeState>(nodeId, { phase, progress, searchResult, files, byExtension });
   }
 
   let canExecute = $derived(phase === 'idle' && (targetPath.trim() !== '' || hasInputConnection));
@@ -373,7 +395,7 @@
   {/if}
 
   <NodeWrapper 
-    nodeId={id} 
+    nodeId={nodeId} 
     title="findz" 
     icon={Search} 
     status={phase} 
@@ -392,12 +414,12 @@
     {#snippet children()}
       <NodeLayoutRenderer
         bind:this={layoutRenderer}
-        nodeId={id}
+        nodeId={nodeId}
         nodeType="findz"
         isFullscreen={isFullscreenRender}
         defaultFullscreenLayout={FINDZ_DEFAULT_GRID_LAYOUT}
       >
-        {#snippet renderBlock(blockId: string, _size: import('$lib/utils/sizeUtils').SizeMode)}
+        {#snippet renderBlock(blockId: string)}
           {@render renderBlockContent(blockId)}
         {/snippet}
       </NodeLayoutRenderer>

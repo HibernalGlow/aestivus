@@ -44,23 +44,47 @@
   interface CrashuResult { totalScanned: number; duplicateGroups: number; duplicateFiles: number; savedSpace: number; groups: DuplicateGroup[]; }
   interface CrashuState { phase: Phase; progress: number; progressText: string; crashuResult: CrashuResult | null; similarityThreshold: number; autoMove: boolean; expandedGroups: string[]; }
 
-  const savedState = getNodeState<CrashuState>(id);
+  // 使用 $derived 确保响应式
+  const nodeId = $derived(id);
+  const savedState = $derived(getNodeState<CrashuState>(nodeId));
+  const configPath = $derived(data?.config?.path ?? '');
+  const configSimilarityThreshold = $derived(data?.config?.similarity_threshold ?? 0.8);
+  const configAutoMove = $derived(data?.config?.auto_move ?? false);
+  const dataLogs = $derived(data?.logs ?? []);
+  const dataHasInputConnection = $derived(data?.hasInputConnection ?? false);
 
-  let path = $state(data?.config?.path ?? '');
-  let similarityThreshold = $state(savedState?.similarityThreshold ?? data?.config?.similarity_threshold ?? 0.8);
-  let autoMove = $state(savedState?.autoMove ?? data?.config?.auto_move ?? false);
-  let phase = $state<Phase>(savedState?.phase ?? 'idle');
-  let logs = $state<string[]>(data?.logs ? [...data.logs] : []);
-  let hasInputConnection = $state(data?.hasInputConnection ?? false);
+  let path = $state('');
+  let similarityThreshold = $state(0.8);
+  let autoMove = $state(false);
+  let phase = $state<Phase>('idle');
+  let logs = $state<string[]>([]);
+  let hasInputConnection = $state(false);
   let copied = $state(false);
-  let progress = $state(savedState?.progress ?? 0);
-  let progressText = $state(savedState?.progressText ?? '');
-  let crashuResult = $state<CrashuResult | null>(savedState?.crashuResult ?? null);
-  let expandedGroups = $state<Set<string>>(new Set(savedState?.expandedGroups ?? []));
+  let progress = $state(0);
+  let progressText = $state('');
+  let crashuResult = $state<CrashuResult | null>(null);
+  let expandedGroups = $state<Set<string>>(new Set());
 
-  let layoutRenderer = $state<{ createTab: (blockIds: string[]) => void; getUsedBlockIdsForTab: () => string[]; compact: () => void; resetLayout: () => void; applyLayout: (layout: any[]) => void; getCurrentLayout: () => any[]; getCurrentTabGroups: () => any[]; } | undefined>(undefined);
+  let layoutRenderer = $state<any>(undefined);
 
-  function saveState() { setNodeState<CrashuState>(id, { phase, progress, progressText, crashuResult, similarityThreshold, autoMove, expandedGroups: Array.from(expandedGroups) }); }
+  // 初始化状态
+  $effect(() => {
+    path = configPath;
+    similarityThreshold = savedState?.similarityThreshold ?? configSimilarityThreshold;
+    autoMove = savedState?.autoMove ?? configAutoMove;
+    logs = [...dataLogs];
+    hasInputConnection = dataHasInputConnection;
+    
+    if (savedState) {
+      phase = savedState.phase ?? 'idle';
+      progress = savedState.progress ?? 0;
+      progressText = savedState.progressText ?? '';
+      crashuResult = savedState.crashuResult ?? null;
+      expandedGroups = new Set(savedState.expandedGroups ?? []);
+    }
+  });
+
+  function saveState() { setNodeState<CrashuState>(nodeId, { phase, progress, progressText, crashuResult, similarityThreshold, autoMove, expandedGroups: Array.from(expandedGroups) }); }
 
   let canExecute = $derived(phase === 'idle' && (path.trim() !== '' || hasInputConnection));
   let isRunning = $derived(phase === 'scanning');
@@ -122,10 +146,10 @@
   <div class="cq-space">
     <div class="cq-space-sm">
       <div class="flex items-center justify-between cq-text"><span>相似度阈值</span><span class="font-mono">{(similarityThreshold * 100).toFixed(0)}%</span></div>
-      <Slider value={[similarityThreshold]} onValueChange={(v) => similarityThreshold = v[0]} min={0.5} max={1} step={0.05} disabled={isRunning} class="w-full" />
+      <Slider type="single" value={similarityThreshold} onValueChange={(v: number) => similarityThreshold = v} min={0.5} max={1} step={0.05} disabled={isRunning} class="w-full" />
     </div>
     <label class="flex items-center cq-gap cursor-pointer">
-      <Checkbox id="auto-move-{id}" bind:checked={autoMove} disabled={isRunning} />
+      <Checkbox id="auto-move-{nodeId}" bind:checked={autoMove} disabled={isRunning} />
       <span class="cq-text flex items-center gap-1"><Trash2 class="cq-icon" />自动移动重复文件</span>
     </label>
   </div>
@@ -303,7 +327,7 @@
   {/if}
 
   <NodeWrapper 
-    nodeId={id} 
+    nodeId={nodeId} 
     title="crashu" 
     icon={Zap} 
     status={phase} 
@@ -322,7 +346,7 @@
     {#snippet children()}
       <NodeLayoutRenderer
         bind:this={layoutRenderer}
-        nodeId={id}
+        nodeId={nodeId}
         nodeType="crashu"
         isFullscreen={isFullscreenRender}
         defaultFullscreenLayout={CRASHU_DEFAULT_GRID_LAYOUT}

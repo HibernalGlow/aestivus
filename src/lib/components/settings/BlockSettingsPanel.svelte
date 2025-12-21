@@ -1,11 +1,13 @@
 <script lang="ts">
   /**
    * 区块管理设置面板
-   * 使用 tab 切换不同节点的区块配置
+   * 使用动画下拉选择器切换不同节点的区块配置
    */
   import { Badge } from '$lib/components/ui/badge';
+  import { Input } from '$lib/components/ui/input';
+  import { AnimatedDropdown } from '$lib/components/ui/animated-dropdown';
   import { nodeBlockRegistry } from '$lib/components/blocks/blockRegistry';
-  import { LayoutGrid, Eye, EyeOff, Package, FilePenLine } from '@lucide/svelte';
+  import { LayoutGrid, Eye, EyeOff, Package, FilePenLine, Search } from '@lucide/svelte';
 
   // 节点类型图标映射
   const nodeIcons: Record<string, typeof Package> = {
@@ -16,8 +18,33 @@
   // 获取所有节点类型
   const nodeTypes = Object.keys(nodeBlockRegistry);
   
-  // 当前选中的节点 tab
+  // 构建下拉菜单项
+  const dropdownItems = nodeTypes.map(nodeType => ({
+    id: nodeType,
+    name: nodeType,
+    icon: nodeIcons[nodeType] || LayoutGrid,
+    badge: nodeBlockRegistry[nodeType]?.blocks.length || 0
+  }));
+  
+  // 当前选中的节点
   let activeNode = $state<string>(nodeTypes[0] || 'repacku');
+  
+  // 搜索关键词
+  let searchQuery = $state('');
+  
+  // 过滤后的区块列表
+  let filteredBlocks = $derived.by(() => {
+    const layout = nodeBlockRegistry[activeNode];
+    if (!layout) return [];
+    
+    if (!searchQuery.trim()) return layout.blocks;
+    
+    const query = searchQuery.toLowerCase();
+    return layout.blocks.filter(block => 
+      block.id.toLowerCase().includes(query) ||
+      block.title.toLowerCase().includes(query)
+    );
+  });
 </script>
 
 <div class="p-6 space-y-4">
@@ -30,30 +57,44 @@
     <p class="text-sm text-muted-foreground mt-1">管理各节点的区块显示和布局</p>
   </div>
 
-  <!-- 节点 Tab 切换 -->
-  <div class="flex gap-1 border-b">
-    {#each nodeTypes as nodeType}
-      {@const NodeIcon = nodeIcons[nodeType] || LayoutGrid}
-      {@const isActive = activeNode === nodeType}
-      <button
-        type="button"
-        class="flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 transition-colors {isActive 
-          ? 'border-primary text-primary' 
-          : 'border-transparent text-muted-foreground hover:text-foreground'}"
-        onclick={() => activeNode = nodeType}
-      >
-        <NodeIcon class="w-4 h-4" />
-        {nodeType}
-      </button>
-    {/each}
+  <!-- 节点选择器和搜索 -->
+  <div class="flex gap-2">
+    <!-- 动画下拉选择器 -->
+    <div class="w-48">
+      <AnimatedDropdown
+        items={dropdownItems}
+        bind:value={activeNode}
+        placeholder="选择节点"
+        triggerIcon={LayoutGrid}
+      />
+    </div>
+
+    <!-- 搜索框 -->
+    <div class="relative flex-1">
+      <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+      <Input 
+        bind:value={searchQuery}
+        placeholder="搜索区块..."
+        class="pl-8"
+      />
+    </div>
   </div>
 
+  <!-- 统计信息 -->
+  {#if nodeBlockRegistry[activeNode]}
+    {@const layout = nodeBlockRegistry[activeNode]}
+    <div class="flex items-center gap-4 text-xs text-muted-foreground">
+      <span>共 {layout.blocks.length} 个区块</span>
+      {#if searchQuery.trim()}
+        <span>• 匹配 {filteredBlocks.length} 个</span>
+      {/if}
+    </div>
+  {/if}
 
   <!-- 区块列表 -->
   {#if nodeBlockRegistry[activeNode]}
-    {@const layout = nodeBlockRegistry[activeNode]}
-    <div class="space-y-2">
-      {#each layout.blocks as block}
+    <div class="space-y-2 max-h-[400px] overflow-y-auto">
+      {#each filteredBlocks as block}
         {@const BlockIcon = block.icon}
         <div class="flex items-center justify-between p-3 rounded-lg border bg-card hover:border-primary/50 transition-colors">
           <div class="flex items-center gap-3">
@@ -97,6 +138,14 @@
               {/if}
             </div>
           </div>
+        </div>
+      {:else}
+        <div class="text-center py-8 text-muted-foreground">
+          {#if searchQuery.trim()}
+            没有找到匹配的区块
+          {:else}
+            暂无区块配置
+          {/if}
         </div>
       {/each}
     </div>

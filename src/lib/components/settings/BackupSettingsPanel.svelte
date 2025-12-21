@@ -48,6 +48,7 @@
 
 	// 已迁移数据分析
 	let migratedData = $state<ReturnType<typeof autoBackupStore.analyzeMigratedStorage>>([]);
+	let migratedDataChecked = $state(false); // 是否已检查过
 
 	// 间隔选项
 	const intervalOptions = [
@@ -188,6 +189,7 @@
 	// 分析已迁移的数据
 	function analyzeMigratedData() {
 		migratedData = autoBackupStore.analyzeMigratedStorage();
+		migratedDataChecked = true;
 	}
 
 	// 清理已迁移的 localStorage 数据
@@ -199,6 +201,7 @@
 		if (count > 0) {
 			showSuccessToast(`已清理 ${count} 个旧数据项`);
 			migratedData = [];
+			migratedDataChecked = true;
 		} else {
 			showInfoToast('没有需要清理的数据');
 		}
@@ -334,7 +337,9 @@
 						</Button>
 					</div>
 				</div>
-			{:else if migratedData.length === 0}
+			{:else if migratedDataChecked}
+				<p class="text-xs text-green-600">✓ 没有需要清理的旧数据</p>
+			{:else}
 				<p class="text-xs text-muted-foreground">点击"检查"按钮查看可清理的数据</p>
 			{/if}
 		</div>

@@ -5,6 +5,8 @@
  */
 
 import { getApiBaseUrl } from '$lib/stores/backend';
+import * as storageClient from '$lib/services/storageClient';
+import type { StorageExportData } from '$lib/services/storageClient';
 
 // ==================== 类型定义 ====================
 
@@ -38,6 +40,7 @@ export interface FullBackupPayload {
 	backupType: 'auto' | 'manual';
 	appSettings: Record<string, unknown>;
 	rawLocalStorage: Record<string, string>; // 所有 localStorage 原始数据
+	databaseStorage?: StorageExportData; // 数据库存储数据（布局、预设、默认配置）
 }
 
 // ==================== 常量 ====================
@@ -445,16 +448,31 @@ class AutoBackupStore {
 	}
 
 	/**
-	 * 构建完整备份数据
+	 * 构建完整备份数据（包含数据库存储）
 	 */
-	buildFullBackupPayload(backupType: 'auto' | 'manual'): FullBackupPayload {
+	async buildFullBackupPayload(backupType: 'auto' | 'manual'): Promise<FullBackupPayload> {
 		const payload: FullBackupPayload = {
-			version: '1.0.0',
+			version: '1.1.0', // 版本升级，支持数据库存储
 			timestamp: Date.now(),
 			backupType,
 			appSettings: {},
 			rawLocalStorage: this.settings.includeAllLocalStorage ? this.collectAllLocalStorage() : {}
 		};
+
+		// 获取数据库存储数据
+		try {
+			const dbData = await storageClient.exportAllStorage();
+			if (dbData) {
+				payload.databaseStorage = dbData;
+				console.log('[AutoBackup] 已包含数据库存储数据:', {
+					layouts: Object.keys(dbData.layouts).length,
+					presets: dbData.presets.length,
+					defaults: Object.keys(dbData.defaults).length
+				});
+			}
+		} catch (e) {
+			console.error('[AutoBackup] 获取数据库存储数据失败:', e);
+		}
 
 		return payload;
 	}
@@ -478,7 +496,7 @@ class AutoBackupStore {
 		this.lastError = null;
 
 		try {
-			const payload = this.buildFullBackupPayload(type);
+			const payload = await this.buildFullBackupPayload(type);
 			const json = JSON.stringify(payload, null, 2);
 
 			// 生成文件名
@@ -601,6 +619,22 @@ class AutoBackupStore {
 				}
 			}
 
+			// 恢复数据库存储数据（布局、预设、默认配置）
+			if (payload.databaseStorage) {
+				try {
+					const importResult = await storageClient.importAllStorage(payload.databaseStorage, true);
+					if (importResult) {
+						console.log('[AutoBackup] 数据库存储恢复成功:', {
+							layouts: importResult.layouts,
+							presets: importResult.presets,
+							defaults: importResult.defaults
+						});
+					}
+				} catch (e) {
+					console.error('[AutoBackup] 恢复数据库存储失败:', e);
+				}
+			}
+
 			console.log('[AutoBackup] 恢复成功');
 			return true;
 		} catch (e) {
@@ -640,7 +674,7 @@ class AutoBackupStore {
 			const dateStr = date.toISOString().replace(/[:.]/g, '-').slice(0, 19);
 			const filename = `aestivus-backup-manual-${dateStr}.json`;
 
-			const payload = this.buildFullBackupPayload('manual');
+			const payload = await this.buildFullBackupPayload('manual');
 			const json = JSON.stringify(payload, null, 2);
 
 			// 使用浏览器下载
@@ -689,6 +723,22 @@ class AutoBackupStore {
 							} catch (err) {
 								console.error(`恢复 localStorage 键失败: ${key}`, err);
 							}
+						}
+					}
+
+					// 恢复数据库存储数据
+					if (payload.databaseStorage) {
+						try {
+							const importResult = await storageClient.importAllStorage(payload.databaseStorage, true);
+							if (importResult) {
+								console.log('[AutoBackup] 数据库存储导入成功:', {
+									layouts: importResult.layouts,
+									presets: importResult.presets,
+									defaults: importResult.defaults
+								});
+							}
+						} catch (err) {
+							console.error('[AutoBackup] 导入数据库存储失败:', err);
 						}
 					}
 

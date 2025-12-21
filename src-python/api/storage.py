@@ -420,3 +420,156 @@ def bulk_create_presets(
     
     session.commit()
     return {"success": True, "count": count}
+
+
+# ========== 备份/恢复 API ==========
+
+class StorageExportData(BaseModel):
+    """存储数据导出格式"""
+    layouts: dict  # {node_type: config}
+    presets: List[dict]  # 预设列表
+    defaults: dict  # {node_type: {fullscreen_preset_id, normal_preset_id}}
+
+
+class StorageImportRequest(BaseModel):
+    """存储数据导入请求"""
+    data: StorageExportData
+    merge: bool = True  # True: 合并（保留现有数据），False: 覆盖（清空后导入）
+
+
+@router.get("/export")
+def export_all_storage(session: Session = Depends(get_session)) -> StorageExportData:
+    """
+    导出所有存储数据（用于备份）
+    
+    Returns:
+        包含 layouts, presets, defaults 的完整数据
+    """
+    # 导出布局
+    layouts = {}
+    for layout in session.exec(select(NodeLayout)).all():
+        layouts[layout.node_type] = json.loads(layout.config)
+    
+    # 导出预设
+    presets = []
+    for preset in session.exec(select(LayoutPreset)).all():
+        item = {
+            "id": preset.id,
+            "name": preset.name,
+            "nodeType": preset.node_type,
+            "layout": json.loads(preset.layout),
+            "createdAt": preset.created_at,
+            "isBuiltin": preset.is_builtin,
+        }
+        if preset.tab_groups:
+            item["tabGroups"] = json.loads(preset.tab_groups)
+        presets.append(item)
+    
+    # 导出默认预设配置
+    defaults = {}
+    for default in session.exec(select(DefaultPreset)).all():
+        defaults[default.node_type] = {
+            "fullscreenPresetId": default.fullscreen_preset_id,
+            "normalPresetId": default.normal_preset_id,
+        }
+    
+    return StorageExportData(layouts=layouts, presets=presets, defaults=defaults)
+
+
+@router.post("/import")
+def import_all_storage(
+    request: StorageImportRequest,
+    session: Session = Depends(get_session)
+) -> dict:
+    """
+    导入存储数据（用于恢复备份）
+    
+    Args:
+        request: 包含 data 和 merge 选项
+        - merge=True: 合并模式，保留现有数据，只添加/更新导入的数据
+        - merge=False: 覆盖模式，清空现有数据后导入
+    
+    Returns:
+        {"success": True, "layouts": N, "presets": N, "defaults": N}
+    """
+    data = request.data
+    counts = {"layouts": 0, "presets": 0, "defaults": 0}
+    
+    # 如果是覆盖模式，先清空所有数据
+    if not request.merge:
+        session.exec(select(NodeLayout)).all()
+        for layout in session.exec(select(NodeLayout)).all():
+            session.delete(layout)
+        for preset in session.exec(select(LayoutPreset)).all():
+            session.delete(preset)
+        for default in session.exec(select(DefaultPreset)).all():
+            session.delete(default)
+        session.commit()
+    
+    # 导入布局
+    for node_type, config in data.layouts.items():
+        existing = session.get(NodeLayout, node_type)
+        config_json = json.dumps(config, ensure_ascii=False)
+        
+        if existing:
+            existing.config = config_json
+            existing.updated_at = time.time() * 1000
+            session.add(existing)
+        else:
+            layout = NodeLayout(
+                node_type=node_type,
+                config=config_json,
+                updated_at=time.time() * 1000
+            )
+            session.add(layout)
+        counts["layouts"] += 1
+    
+    # 导入预设
+    for preset_data in data.presets:
+        preset_id = preset_data.get("id")
+        if not preset_id:
+            continue
+        
+        existing = session.get(LayoutPreset, preset_id)
+        layout_json = json.dumps(preset_data.get("layout", []), ensure_ascii=False)
+        tab_groups = preset_data.get("tabGroups")
+        tab_groups_json = json.dumps(tab_groups, ensure_ascii=False) if tab_groups else None
+        
+        if existing:
+            existing.name = preset_data.get("name", existing.name)
+            existing.node_type = preset_data.get("nodeType", existing.node_type)
+            existing.layout = layout_json
+            existing.tab_groups = tab_groups_json
+            session.add(existing)
+        else:
+            preset = LayoutPreset(
+                id=preset_id,
+                name=preset_data.get("name", "未命名"),
+                node_type=preset_data.get("nodeType", "unknown"),
+                layout=layout_json,
+                tab_groups=tab_groups_json,
+                created_at=preset_data.get("createdAt", time.time() * 1000),
+                is_builtin=preset_data.get("isBuiltin", False),
+            )
+            session.add(preset)
+        counts["presets"] += 1
+    
+    # 导入默认预设配置
+    for node_type, config in data.defaults.items():
+        existing = session.get(DefaultPreset, node_type)
+        
+        if existing:
+            existing.fullscreen_preset_id = config.get("fullscreenPresetId")
+            existing.normal_preset_id = config.get("normalPresetId")
+            session.add(existing)
+        else:
+            default = DefaultPreset(
+                node_type=node_type,
+                fullscreen_preset_id=config.get("fullscreenPresetId"),
+                normal_preset_id=config.get("normalPresetId"),
+            )
+            session.add(default)
+        counts["defaults"] += 1
+    
+    session.commit()
+    return {"success": True, **counts}

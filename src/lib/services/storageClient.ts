@@ -511,3 +511,53 @@ export function invalidateCache(type: 'layout' | 'preset' | 'defaults', key?: st
     }
   }
 }
+
+// ============ 备份/恢复 API ============
+
+/** 存储数据导出格式 */
+export interface StorageExportData {
+  layouts: Record<string, NodeConfig>;
+  presets: LayoutPresetBackend[];
+  defaults: Record<string, { fullscreenPresetId: string | null; normalPresetId: string | null }>;
+}
+
+/**
+ * 导出所有存储数据（用于备份）
+ */
+export async function exportAllStorage(): Promise<StorageExportData | null> {
+  try {
+    const data = await request<StorageExportData>('/storage/export');
+    return data;
+  } catch (error) {
+    console.error('[storageClient] exportAllStorage failed:', error);
+    return null;
+  }
+}
+
+/**
+ * 导入存储数据（用于恢复备份）
+ * @param data 要导入的数据
+ * @param merge true: 合并模式（保留现有数据），false: 覆盖模式（清空后导入）
+ */
+export async function importAllStorage(
+  data: StorageExportData, 
+  merge: boolean = true
+): Promise<{ success: boolean; layouts: number; presets: number; defaults: number } | null> {
+  try {
+    const result = await request<{ success: boolean; layouts: number; presets: number; defaults: number }>(
+      '/storage/import',
+      {
+        method: 'POST',
+        body: JSON.stringify({ data, merge })
+      }
+    );
+    
+    // 清除所有缓存，确保下次读取时获取最新数据
+    clearCache();
+    
+    return result;
+  } catch (error) {
+    console.error('[storageClient] importAllStorage failed:', error);
+    return null;
+  }
+}

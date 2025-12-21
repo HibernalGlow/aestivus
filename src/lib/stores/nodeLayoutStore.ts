@@ -1,6 +1,8 @@
 /**
  * 节点布局状态存储 - 统一管理节点的所有配置
  * 
+ * 存储后端：使用 SQLModel + SQLite 后端存储（通过 storageClient）
+ * 
  * Tab 分组采用"虚拟分组"模式：
  * - 区块始终保留在 gridLayout 中，Tab 只是渲染层的逻辑分组
  * - Tab 分组使用主区块（第一个区块）的位置渲染
@@ -10,8 +12,10 @@
 
 import { Store } from '@tanstack/store';
 import type { GridItem } from '$lib/components/ui/dashboard-grid';
+import * as storageClient from '$lib/services/storageClient';
 
-const STORAGE_KEY = 'aestival-node-layouts';
+// 旧的 localStorage key（用于迁移检测）
+const LEGACY_STORAGE_KEY = 'aestival-node-layouts';
 
 // ============ 类型定义 ============
 
@@ -223,10 +227,47 @@ function validateAndFixConfig(config: unknown): NodeConfig {
 
 // ============ 存储 ============
 
-function loadFromStorage(): NodeConfigMap {
+// 防抖保存定时器
+let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+const SAVE_DEBOUNCE_MS = 500;
+
+/** 从后端加载配置（异步） */
+async function loadFromBackend(nodeType: string): Promise<NodeConfig | null> {
+  try {
+    const config = await storageClient.getLayout(nodeType);
+    if (config) {
+      return validateAndFixConfig(config);
+    }
+    return null;
+  } catch (e) {
+    console.error('[nodeLayoutStore] 从后端加载失败:', e);
+    return null;
+  }
+}
+
+/** 保存到后端（异步，带防抖） */
+function saveToBackend(nodeType: string, config: NodeConfig): void {
+  // 清除之前的定时器
+  if (saveDebounceTimer) {
+    clearTimeout(saveDebounceTimer);
+  }
+  
+  // 防抖保存
+  saveDebounceTimer = setTimeout(async () => {
+    try {
+      const compressed = compressConfig(config);
+      await storageClient.setLayout(nodeType, compressed);
+    } catch (e) {
+      console.error('[nodeLayoutStore] 保存到后端失败:', e);
+    }
+  }, SAVE_DEBOUNCE_MS);
+}
+
+/** 从 localStorage 加载（仅用于迁移） */
+function loadFromLocalStorage(): NodeConfigMap {
   if (typeof window === 'undefined') return new Map();
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(LEGACY_STORAGE_KEY);
     if (!stored) return new Map();
     const parsed = JSON.parse(stored);
     
@@ -236,51 +277,9 @@ function loadFromStorage(): NodeConfigMap {
     }
     return result;
   } catch (e) {
-    console.error('[nodeLayoutStore] 加载失败:', e);
+    console.error('[nodeLayoutStore] 从 localStorage 加载失败:', e);
     return new Map();
   }
-}
-
-/** 估算 localStorage 使用量 */
-function getStorageUsage(): { used: number; total: number; percent: number } {
-  if (typeof window === 'undefined') return { used: 0, total: 5 * 1024 * 1024, percent: 0 };
-  
-  let used = 0;
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key) {
-      const value = localStorage.getItem(key);
-      if (value) {
-        used += key.length + value.length;
-      }
-    }
-  }
-  // localStorage 通常限制为 5MB
-  const total = 5 * 1024 * 1024;
-  return { used: used * 2, total, percent: (used * 2 / total) * 100 }; // UTF-16 每字符 2 字节
-}
-
-/** 清理旧的/不常用的配置 */
-function cleanupOldConfigs(configs: NodeConfigMap, targetSize: number): NodeConfigMap {
-  if (configs.size <= 1) return configs;
-  
-  // 按更新时间排序，保留最近使用的
-  const sorted = [...configs.entries()].sort((a, b) => b[1].updatedAt - a[1].updatedAt);
-  
-  const result = new Map<string, NodeConfig>();
-  let currentSize = 0;
-  
-  for (const [key, value] of sorted) {
-    const itemSize = JSON.stringify({ [key]: value }).length * 2;
-    if (currentSize + itemSize <= targetSize || result.size === 0) {
-      result.set(key, value);
-      currentSize += itemSize;
-    } else {
-      console.log(`[nodeLayoutStore] 清理旧配置: ${key}`);
-    }
-  }
-  
-  return result;
 }
 
 /** 压缩配置数据（移除不必要的精度和空值） */
@@ -312,82 +311,72 @@ function compressConfig(config: NodeConfig): NodeConfig {
   };
 }
 
-function saveToStorage(configs: NodeConfigMap): void {
-  if (typeof window === 'undefined') return;
-  
-  // 压缩所有配置
-  const compressedConfigs = new Map<string, NodeConfig>();
-  for (const [key, value] of configs) {
-    compressedConfigs.set(key, compressConfig(value));
-  }
-  
-  const data = JSON.stringify(Object.fromEntries(compressedConfigs));
-  
-  try {
-    localStorage.setItem(STORAGE_KEY, data);
-  } catch (e) {
-    if (e instanceof DOMException && e.name === 'QuotaExceededError') {
-      console.warn('[nodeLayoutStore] localStorage 配额已满，尝试清理...');
-      
-      // 获取当前使用量
-      const usage = getStorageUsage();
-      console.log(`[nodeLayoutStore] 当前使用: ${(usage.used / 1024).toFixed(1)}KB (${usage.percent.toFixed(1)}%)`);
-      
-      // 清理其他可能的旧数据
-      const keysToCheck = ['aestival-layout-presets', 'aestival-default-preset'];
-      for (const key of keysToCheck) {
-        const item = localStorage.getItem(key);
-        if (item && item.length > 100000) { // 超过 100KB 的预设数据
-          console.log(`[nodeLayoutStore] 清理大型数据: ${key} (${(item.length / 1024).toFixed(1)}KB)`);
-          // 不直接删除，而是尝试压缩
-        }
-      }
-      
-      // 清理旧配置，目标大小为 500KB
-      const cleanedConfigs = cleanupOldConfigs(compressedConfigs, 500 * 1024);
-      const cleanedData = JSON.stringify(Object.fromEntries(cleanedConfigs));
-      
-      try {
-        localStorage.setItem(STORAGE_KEY, cleanedData);
-        console.log('[nodeLayoutStore] 清理后保存成功');
-        
-        // 更新内存中的状态
-        if (cleanedConfigs.size < compressedConfigs.size) {
-          nodeLayoutStore.setState(() => cleanedConfigs);
-        }
-      } catch (e2) {
-        console.error('[nodeLayoutStore] 清理后仍无法保存，尝试最小化保存');
-        // 最后手段：只保留最新的一个配置
-        const latest = [...compressedConfigs.entries()].sort((a, b) => b[1].updatedAt - a[1].updatedAt)[0];
-        if (latest) {
-          try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify({ [latest[0]]: latest[1] }));
-          } catch {
-            console.error('[nodeLayoutStore] 无法保存任何配置');
-          }
-        }
-      }
-    } else {
-      console.warn('[nodeLayoutStore] 保存失败:', e);
-    }
-  }
-}
-
 export const nodeLayoutStore = new Store<NodeConfigMap>(new Map());
 
 let isHydrated = false;
 
-export function hydrateFromStorage(): void {
+/** 从后端初始化（异步） */
+export async function hydrateFromBackend(): Promise<void> {
   if (isHydrated || typeof window === 'undefined') return;
   isHydrated = true;
-  const stored = loadFromStorage();
-  if (stored.size > 0) {
-    nodeLayoutStore.setState(() => stored);
+  
+  try {
+    // 先尝试迁移 localStorage 数据
+    const migrationResult = await storageClient.migrateFromLocalStorage();
+    if (migrationResult.layouts > 0) {
+      console.log(`[nodeLayoutStore] 已迁移 ${migrationResult.layouts} 个布局配置`);
+    }
+    
+    // 从后端加载所有布局
+    const nodeTypes = await storageClient.listLayouts();
+    const configs = new Map<string, NodeConfig>();
+    
+    for (const nodeType of nodeTypes) {
+      const config = await storageClient.getLayout(nodeType);
+      if (config) {
+        configs.set(nodeType, validateAndFixConfig(config));
+      }
+    }
+    
+    if (configs.size > 0) {
+      nodeLayoutStore.setState(() => configs);
+    }
+    
+    console.log(`[nodeLayoutStore] 从后端加载了 ${configs.size} 个布局配置`);
+  } catch (e) {
+    console.error('[nodeLayoutStore] 从后端初始化失败，尝试从 localStorage 加载:', e);
+    // 降级：从 localStorage 加载
+    const stored = loadFromLocalStorage();
+    if (stored.size > 0) {
+      nodeLayoutStore.setState(() => stored);
+    }
   }
 }
 
+/** 同步版本的 hydrate（兼容旧代码） */
+export function hydrateFromStorage(): void {
+  if (isHydrated || typeof window === 'undefined') return;
+  
+  // 先从 localStorage 加载（快速启动）
+  const stored = loadFromLocalStorage();
+  if (stored.size > 0) {
+    nodeLayoutStore.setState(() => stored);
+  }
+  
+  // 然后异步从后端加载
+  hydrateFromBackend().catch(console.error);
+  
+  isHydrated = true;
+}
+
+// 订阅变化并保存到后端
 nodeLayoutStore.subscribe(() => {
-  if (isHydrated) saveToStorage(nodeLayoutStore.state);
+  if (!isHydrated) return;
+  
+  // 保存每个变化的配置到后端
+  for (const [nodeType, config] of nodeLayoutStore.state) {
+    saveToBackend(nodeType, config);
+  }
 });
 
 // ============ CRUD ============
@@ -821,35 +810,55 @@ export type { LayoutMode };
 
 // ============ 存储管理 ============
 
-/** 获取存储使用情况 */
+/** 获取存储信息（后端存储无配额限制） */
 export function getStorageInfo(): { used: number; total: number; percent: number; nodeCount: number } {
-  const usage = getStorageUsage();
   return {
-    ...usage,
+    used: 0,
+    total: Infinity,
+    percent: 0,
     nodeCount: nodeLayoutStore.state.size
   };
 }
 
 /** 清理所有节点布局配置 */
-export function clearAllNodeConfigs(): void {
+export async function clearAllNodeConfigs(): Promise<void> {
   if (typeof window === 'undefined') return;
-  localStorage.removeItem(STORAGE_KEY);
+  
+  // 清理后端
+  const nodeTypes = await storageClient.listLayouts();
+  for (const nodeType of nodeTypes) {
+    await storageClient.deleteLayout(nodeType);
+  }
+  
+  // 清理内存
   nodeLayoutStore.setState(() => new Map());
+  
+  // 清理旧的 localStorage（如果有）
+  localStorage.removeItem(LEGACY_STORAGE_KEY);
+  
   console.log('[nodeLayoutStore] 已清理所有节点配置');
 }
 
 /** 清理指定时间之前的配置 */
-export function clearOldConfigs(beforeTimestamp: number): number {
-  hydrateFromStorage();
+export async function clearOldConfigs(beforeTimestamp: number): Promise<number> {
   let count = 0;
+  
+  const toDelete: string[] = [];
+  for (const [key, config] of nodeLayoutStore.state) {
+    if (config.updatedAt < beforeTimestamp) {
+      toDelete.push(key);
+    }
+  }
+  
+  for (const nodeType of toDelete) {
+    await storageClient.deleteLayout(nodeType);
+    count++;
+  }
   
   nodeLayoutStore.setState((prev) => {
     const next = new Map(prev);
-    for (const [key, config] of prev) {
-      if (config.updatedAt < beforeTimestamp) {
-        next.delete(key);
-        count++;
-      }
+    for (const key of toDelete) {
+      next.delete(key);
     }
     return next;
   });

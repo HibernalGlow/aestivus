@@ -9,7 +9,7 @@
   import { Badge } from '$lib/components/ui/badge';
   import { onMount } from 'svelte';
   import { 
-    getAllPresets, savePreset, deletePreset, exportPreset, importPreset,
+    getAllPresetsAsync, savePreset, deletePreset, exportPreset, importPreset,
     renamePreset, updatePreset, setDefaultPreset, unsetDefaultPreset,
     getDefaultPresetId, getPresetDefaultModes, type LayoutPreset, type PresetMode
   } from '$lib/stores/layoutPresets';
@@ -42,9 +42,10 @@
   // 存储每个预设的默认模式列表（用于显示圆点）
   let presetModes = $state<Record<string, PresetMode[]>>({});
 
-  // 加载预设列表和默认模式
-  function refreshPresets() {
-    presets = getAllPresets(nodeType);
+  // 加载预设列表和默认模式（异步）
+  async function refreshPresets() {
+    // 使用异步版本从后端加载最新数据
+    presets = await getAllPresetsAsync(nodeType);
     // 加载每个预设的默认模式
     const modes: Record<string, PresetMode[]> = {};
     for (const preset of presets) {
@@ -54,8 +55,8 @@
   }
 
   // 初始化：只在挂载时执行一次
-  onMount(() => {
-    refreshPresets();
+  onMount(async () => {
+    await refreshPresets();
     // 默认选中当前模式的默认预设
     const defaultId = getDefaultPresetId(nodeType, currentMode);
     if (defaultId) {
@@ -64,7 +65,7 @@
   });
 
   // 切换默认状态（点击已设为默认则取消，否则设为默认）
-  function toggleDefault(mode: PresetMode) {
+  async function toggleDefault(mode: PresetMode) {
     if (!selectedId) return;
     const currentModes = presetModes[selectedId] || [];
     if (currentModes.includes(mode)) {
@@ -74,7 +75,7 @@
       // 设为默认
       setDefaultPreset(nodeType, selectedId, mode);
     }
-    refreshPresets();
+    await refreshPresets();
   }
 
   // 选中并应用预设（点击已选中的不重复应用）
@@ -94,7 +95,7 @@
   }
 
   // 保存当前布局为预设（包含 Tab 分组）
-  function handleSave() {
+  async function handleSave() {
     if (!inputValue.trim()) return;
     // 始终保存 tabGroups（即使是空数组），这样预设明确表示当前的 Tab 状态
     const newPreset = savePreset(
@@ -108,26 +109,29 @@
     saveSuccess = true;
     selectedId = newPreset.id;
     setTimeout(() => saveSuccess = false, 2000);
-    refreshPresets();
+    // 等待一小段时间让后端保存完成，然后刷新
+    setTimeout(async () => await refreshPresets(), 100);
   }
 
   // 重命名预设
-  function handleRename() {
+  async function handleRename() {
     if (!inputValue.trim() || !selectedId) return;
     renamePreset(selectedId, inputValue.trim());
     inputValue = '';
     showRenameInput = false;
-    refreshPresets();
+    // 等待一小段时间让后端保存完成，然后刷新
+    setTimeout(async () => await refreshPresets(), 100);
   }
 
   // 删除预设
-  function handleDelete() {
+  async function handleDelete() {
     if (!selectedId) return;
     const preset = presets.find(p => p.id === selectedId);
     if (preset?.isBuiltin) return;
     deletePreset(selectedId);
     selectedId = null;
-    refreshPresets();
+    // 等待一小段时间让后端删除完成，然后刷新
+    setTimeout(async () => await refreshPresets(), 100);
   }
 
   // 导出预设
@@ -146,7 +150,8 @@
       const preset = importPreset(json);
       if (preset) {
         selectedId = preset.id;
-        refreshPresets();
+        // 等待一小段时间让后端保存完成，然后刷新
+        setTimeout(async () => await refreshPresets(), 100);
       }
     } catch (e) {
       console.error('导入失败:', e);
@@ -154,7 +159,7 @@
   }
 
   // 更新预设布局（覆盖当前选中的预设，包含 Tab 分组）
-  function handleUpdate() {
+  async function handleUpdate() {
     if (!selectedId || !canModify) return;
     // 始终保存 tabGroups（即使是空数组），这样预设明确表示当前的 Tab 状态
     const success = updatePreset(
@@ -165,7 +170,8 @@
     if (success) {
       saveSuccess = true;
       setTimeout(() => saveSuccess = false, 2000);
-      refreshPresets();
+      // 等待一小段时间让后端保存完成，然后刷新
+      setTimeout(async () => await refreshPresets(), 100);
     }
   }
 

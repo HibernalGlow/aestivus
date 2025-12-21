@@ -1,21 +1,16 @@
 /**
  * 布局预设管理
- * 支持保存、加载、导出布局配置
+ * 使用后端 SQLModel + SQLite 存储
  */
 import type { GridItem } from '$lib/components/ui/dashboard-grid';
+import * as storageClient from '$lib/services/storageClient';
 
-// localStorage key
-const PRESETS_KEY = 'aestival-layout-presets';
-const DEFAULT_PRESET_KEY = 'aestival-default-preset';  // 存储每个 nodeType 的默认预设 ID（按模式分开）
+// 旧的 localStorage key（用于迁移检测）
+const LEGACY_PRESETS_KEY = 'aestival-layout-presets';
+const LEGACY_DEFAULT_KEY = 'aestival-default-preset';
 
 /** 布局模式类型 */
 export type PresetMode = 'fullscreen' | 'normal';
-
-/** 默认预设配置结构 */
-interface DefaultPresetConfig {
-  fullscreen?: string;  // 全屏模式默认预设 ID
-  normal?: string;      // 节点模式默认预设 ID
-}
 
 /** Tab 分组配置（与 nodeLayoutStore 中的 TabGroup 保持一致） */
 export interface PresetTabGroup {
@@ -28,11 +23,11 @@ export interface PresetTabGroup {
 export interface LayoutPreset {
   id: string;
   name: string;
-  nodeType: string;  // 适用的节点类型，如 'trename', 'repacku'
+  nodeType: string;
   layout: GridItem[];
-  tabGroups?: PresetTabGroup[];  // Tab 分组配置（可选，兼容旧预设）
+  tabGroups?: PresetTabGroup[];
   createdAt: number;
-  isBuiltin?: boolean;  // 是否为内置预设
+  isBuiltin?: boolean;
 }
 
 /** 内置预设 */
@@ -131,81 +126,87 @@ const BUILTIN_PRESETS: LayoutPreset[] = [
   }
 ];
 
-/** 从 localStorage 加载用户预设 */
-function loadUserPresets(): LayoutPreset[] {
-  if (typeof window === 'undefined') return [];
+// ============ 内存缓存 ============
+
+let cachedUserPresets: LayoutPreset[] | null = null;
+let cachedDefaults: Map<string, { fullscreen?: string; normal?: string }> = new Map();
+
+/** 转换后端格式到前端格式 */
+function convertFromBackend(preset: storageClient.LayoutPresetBackend): LayoutPreset {
+  return {
+    id: preset.id,
+    name: preset.name,
+    nodeType: preset.nodeType,
+    layout: preset.layout,
+    tabGroups: preset.tabGroups,
+    createdAt: preset.createdAt,
+    isBuiltin: preset.isBuiltin
+  };
+}
+
+// ============ 预设 API ============
+
+/** 获取所有预设（内置 + 用户，异步） */
+export async function getAllPresetsAsync(nodeType?: string): Promise<LayoutPreset[]> {
   try {
-    const stored = localStorage.getItem(PRESETS_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
+    const backendPresets = await storageClient.getPresets(nodeType);
+    const userPresets = backendPresets.map(convertFromBackend);
+    cachedUserPresets = userPresets;
+    
+    const all = [...BUILTIN_PRESETS, ...userPresets];
+    return nodeType ? all.filter(p => p.nodeType === nodeType) : all;
+  } catch (error) {
+    console.error('[layoutPresets] 获取预设失败:', error);
+    // 降级：返回内置预设
+    return nodeType ? BUILTIN_PRESETS.filter(p => p.nodeType === nodeType) : [...BUILTIN_PRESETS];
   }
 }
 
-/** 估算数据大小（字节） */
-function estimateSize(data: unknown): number {
-  return JSON.stringify(data).length * 2; // UTF-16
-}
-
-/** 清理旧预设，保留最近的 N 个 */
-function cleanupOldPresets(presets: LayoutPreset[], maxCount: number = 20): LayoutPreset[] {
-  if (presets.length <= maxCount) return presets;
-  
-  // 按创建时间排序，保留最新的
-  const sorted = [...presets].sort((a, b) => b.createdAt - a.createdAt);
-  const removed = sorted.slice(maxCount);
-  
-  if (removed.length > 0) {
-    console.log(`[layoutPresets] 清理 ${removed.length} 个旧预设:`, removed.map(p => p.name));
-  }
-  
-  return sorted.slice(0, maxCount);
-}
-
-/** 保存用户预设到 localStorage */
-function saveUserPresets(presets: LayoutPreset[]): void {
-  if (typeof window === 'undefined') return;
-  
-  try {
-    localStorage.setItem(PRESETS_KEY, JSON.stringify(presets));
-  } catch (e) {
-    if (e instanceof DOMException && e.name === 'QuotaExceededError') {
-      console.warn('[layoutPresets] localStorage 配额已满，尝试清理...');
-      
-      // 清理旧预设
-      const cleaned = cleanupOldPresets(presets, 10);
-      
-      try {
-        localStorage.setItem(PRESETS_KEY, JSON.stringify(cleaned));
-        console.log('[layoutPresets] 清理后保存成功');
-      } catch (e2) {
-        console.error('[layoutPresets] 清理后仍无法保存，只保留最新 5 个');
-        const minimal = cleanupOldPresets(presets, 5);
-        try {
-          localStorage.setItem(PRESETS_KEY, JSON.stringify(minimal));
-        } catch {
-          console.error('[layoutPresets] 无法保存预设');
-        }
-      }
-    } else {
-      console.warn('[layoutPresets] Failed to save:', e);
-    }
-  }
-}
-
-/** 获取所有预设（内置 + 用户） */
+/** 获取所有预设（同步，使用缓存） */
 export function getAllPresets(nodeType?: string): LayoutPreset[] {
-  const userPresets = loadUserPresets();
+  const userPresets = cachedUserPresets || [];
   const all = [...BUILTIN_PRESETS, ...userPresets];
   return nodeType ? all.filter(p => p.nodeType === nodeType) : all;
 }
 
 /** 获取单个预设 */
 export function getPreset(id: string): LayoutPreset | undefined {
-  return getAllPresets().find(p => p.id === id);
+  // 先查内置
+  const builtin = BUILTIN_PRESETS.find(p => p.id === id);
+  if (builtin) return builtin;
+  
+  // 再查缓存
+  return cachedUserPresets?.find(p => p.id === id);
 }
 
-/** 保存新预设（包含 Tab 分组） */
+/** 保存新预设（异步） */
+export async function savePresetAsync(
+  name: string, 
+  nodeType: string, 
+  layout: GridItem[], 
+  tabGroups?: PresetTabGroup[]
+): Promise<LayoutPreset | null> {
+  const id = `${nodeType}-${Date.now()}`;
+  
+  const result = await storageClient.createPreset({
+    id,
+    name,
+    nodeType,
+    layout: JSON.parse(JSON.stringify(layout)),
+    tabGroups: tabGroups ? JSON.parse(JSON.stringify(tabGroups)) : undefined,
+    isBuiltin: false
+  });
+  
+  if (result) {
+    // 刷新缓存
+    cachedUserPresets = null;
+    return convertFromBackend(result);
+  }
+  
+  return null;
+}
+
+/** 保存新预设（同步兼容，内部异步） */
 export function savePreset(
   name: string, 
   nodeType: string, 
@@ -216,44 +217,98 @@ export function savePreset(
     id: `${nodeType}-${Date.now()}`,
     name,
     nodeType,
-    layout: JSON.parse(JSON.stringify(layout)), // 深拷贝
+    layout: JSON.parse(JSON.stringify(layout)),
     tabGroups: tabGroups ? JSON.parse(JSON.stringify(tabGroups)) : undefined,
     createdAt: Date.now()
   };
-  const userPresets = loadUserPresets();
-  userPresets.push(preset);
-  saveUserPresets(userPresets);
+  
+  // 异步保存到后端
+  storageClient.createPreset({
+    id: preset.id,
+    name: preset.name,
+    nodeType: preset.nodeType,
+    layout: preset.layout,
+    tabGroups: preset.tabGroups,
+    isBuiltin: false
+  }).then(() => {
+    cachedUserPresets = null;
+  }).catch(console.error);
+  
+  // 立即更新缓存
+  if (cachedUserPresets) {
+    cachedUserPresets.push(preset);
+  }
+  
   return preset;
 }
 
 /** 删除用户预设 */
+export async function deletePresetAsync(id: string): Promise<boolean> {
+  const success = await storageClient.deletePreset(id);
+  if (success) {
+    cachedUserPresets = null;
+  }
+  return success;
+}
+
+/** 删除用户预设（同步兼容） */
 export function deletePreset(id: string): boolean {
-  const userPresets = loadUserPresets();
-  const index = userPresets.findIndex(p => p.id === id);
-  if (index === -1) return false;
-  userPresets.splice(index, 1);
-  saveUserPresets(userPresets);
+  // 异步删除
+  storageClient.deletePreset(id).then(() => {
+    cachedUserPresets = null;
+  }).catch(console.error);
+  
+  // 立即从缓存移除
+  if (cachedUserPresets) {
+    const index = cachedUserPresets.findIndex(p => p.id === id);
+    if (index !== -1) {
+      cachedUserPresets.splice(index, 1);
+      return true;
+    }
+  }
+  
   return true;
 }
 
 /** 重命名用户预设 */
 export function renamePreset(id: string, newName: string): boolean {
-  const userPresets = loadUserPresets();
-  const preset = userPresets.find(p => p.id === id);
-  if (!preset) return false;
-  preset.name = newName;
-  saveUserPresets(userPresets);
+  // 异步更新
+  storageClient.updatePreset(id, { name: newName }).then(() => {
+    cachedUserPresets = null;
+  }).catch(console.error);
+  
+  // 立即更新缓存
+  if (cachedUserPresets) {
+    const preset = cachedUserPresets.find(p => p.id === id);
+    if (preset) {
+      preset.name = newName;
+      return true;
+    }
+  }
+  
   return true;
 }
 
-/** 更新用户预设的布局（覆盖，包含 Tab 分组） */
+/** 更新用户预设的布局 */
 export function updatePreset(id: string, layout: GridItem[], tabGroups?: PresetTabGroup[]): boolean {
-  const userPresets = loadUserPresets();
-  const preset = userPresets.find(p => p.id === id);
-  if (!preset) return false;
-  preset.layout = JSON.parse(JSON.stringify(layout)); // 深拷贝
-  preset.tabGroups = tabGroups ? JSON.parse(JSON.stringify(tabGroups)) : undefined;
-  saveUserPresets(userPresets);
+  // 异步更新
+  storageClient.updatePreset(id, { 
+    layout: JSON.parse(JSON.stringify(layout)),
+    tabGroups: tabGroups ? JSON.parse(JSON.stringify(tabGroups)) : undefined
+  }).then(() => {
+    cachedUserPresets = null;
+  }).catch(console.error);
+  
+  // 立即更新缓存
+  if (cachedUserPresets) {
+    const preset = cachedUserPresets.find(p => p.id === id);
+    if (preset) {
+      preset.layout = JSON.parse(JSON.stringify(layout));
+      preset.tabGroups = tabGroups ? JSON.parse(JSON.stringify(tabGroups)) : undefined;
+      return true;
+    }
+  }
+  
   return true;
 }
 
@@ -271,97 +326,92 @@ export function importPreset(json: string): LayoutPreset | null {
     if (!preset.name || !preset.nodeType || !Array.isArray(preset.layout)) {
       return null;
     }
+    
     // 生成新 ID 避免冲突
     preset.id = `${preset.nodeType}-imported-${Date.now()}`;
     preset.createdAt = Date.now();
     preset.isBuiltin = false;
     
-    const userPresets = loadUserPresets();
-    userPresets.push(preset);
-    saveUserPresets(userPresets);
+    // 异步保存
+    storageClient.createPreset({
+      id: preset.id,
+      name: preset.name,
+      nodeType: preset.nodeType,
+      layout: preset.layout,
+      tabGroups: preset.tabGroups,
+      isBuiltin: false
+    }).then(() => {
+      cachedUserPresets = null;
+    }).catch(console.error);
+    
+    // 立即更新缓存
+    if (cachedUserPresets) {
+      cachedUserPresets.push(preset);
+    }
+    
     return preset;
   } catch {
     return null;
   }
 }
 
-/** 加载默认预设配置（新格式：按模式分开） */
-function loadDefaultPresets(): Record<string, DefaultPresetConfig> {
-  if (typeof window === 'undefined') return {};
-  try {
-    const stored = localStorage.getItem(DEFAULT_PRESET_KEY);
-    if (!stored) return {};
-    const parsed = JSON.parse(stored);
-    
-    // 兼容旧格式：如果值是字符串，转换为新格式
-    const result: Record<string, DefaultPresetConfig> = {};
-    for (const [nodeType, value] of Object.entries(parsed)) {
-      if (typeof value === 'string') {
-        // 旧格式：单个预设 ID，同时设为两种模式的默认
-        result[nodeType] = { fullscreen: value, normal: value };
-      } else if (typeof value === 'object' && value !== null) {
-        // 新格式
-        result[nodeType] = value as DefaultPresetConfig;
-      }
-    }
-    return result;
-  } catch {
-    return {};
-  }
-}
-
-/** 保存默认预设配置 */
-function saveDefaultPresets(defaults: Record<string, DefaultPresetConfig>): void {
-  if (typeof window === 'undefined') return;
-  try {
-    localStorage.setItem(DEFAULT_PRESET_KEY, JSON.stringify(defaults));
-  } catch (e) {
-    console.warn('[layoutPresets] Failed to save defaults:', e);
-  }
-}
+// ============ 默认预设 API ============
 
 /** 设置默认预设（指定模式） */
+export async function setDefaultPresetAsync(nodeType: string, presetId: string, mode: PresetMode): Promise<void> {
+  const current = cachedDefaults.get(nodeType) || {};
+  current[mode] = presetId;
+  
+  await storageClient.setDefaults(nodeType, {
+    fullscreenPresetId: current.fullscreen,
+    normalPresetId: current.normal
+  });
+  
+  cachedDefaults.set(nodeType, current);
+}
+
+/** 设置默认预设（同步兼容） */
 export function setDefaultPreset(nodeType: string, presetId: string, mode: PresetMode): void {
-  const defaults = loadDefaultPresets();
-  if (!defaults[nodeType]) {
-    defaults[nodeType] = {};
-  }
-  defaults[nodeType][mode] = presetId;
-  saveDefaultPresets(defaults);
+  const current = cachedDefaults.get(nodeType) || {};
+  current[mode] = presetId;
+  cachedDefaults.set(nodeType, current);
+  
+  // 异步保存
+  storageClient.setDefaults(nodeType, {
+    fullscreenPresetId: current.fullscreen,
+    normalPresetId: current.normal
+  }).catch(console.error);
 }
 
 /** 取消默认预设（指定模式） */
 export function unsetDefaultPreset(nodeType: string, mode: PresetMode): void {
-  const defaults = loadDefaultPresets();
-  if (defaults[nodeType]) {
-    delete defaults[nodeType][mode];
-    // 如果两种模式都没有默认了，删除整个 nodeType 条目
-    if (!defaults[nodeType].fullscreen && !defaults[nodeType].normal) {
-      delete defaults[nodeType];
-    }
-    saveDefaultPresets(defaults);
+  const current = cachedDefaults.get(nodeType);
+  if (current) {
+    delete current[mode];
+    
+    // 异步保存
+    storageClient.setDefaults(nodeType, {
+      fullscreenPresetId: current.fullscreen || null,
+      normalPresetId: current.normal || null
+    }).catch(console.error);
   }
 }
 
 /** 获取默认预设 ID（指定模式） */
 export function getDefaultPresetId(nodeType: string, mode?: PresetMode): string | null {
-  const defaults = loadDefaultPresets();
-  const config = defaults[nodeType];
+  const config = cachedDefaults.get(nodeType);
   if (!config) return null;
   
-  // 如果指定了模式，返回该模式的默认
   if (mode) {
     return config[mode] || null;
   }
   
-  // 未指定模式时，优先返回 fullscreen，兼容旧代码
   return config.fullscreen || config.normal || null;
 }
 
-/** 获取预设的默认模式列表（用于显示圆点指示器） */
+/** 获取预设的默认模式列表 */
 export function getPresetDefaultModes(nodeType: string, presetId: string): PresetMode[] {
-  const defaults = loadDefaultPresets();
-  const config = defaults[nodeType];
+  const config = cachedDefaults.get(nodeType);
   if (!config) return [];
   
   const modes: PresetMode[] = [];
@@ -370,47 +420,101 @@ export function getPresetDefaultModes(nodeType: string, presetId: string): Prese
   return modes;
 }
 
-/** 获取默认预设（如果没有设置，返回第一个内置预设） */
+/** 获取默认预设 */
 export function getDefaultPreset(nodeType: string, mode?: PresetMode): LayoutPreset | null {
   const defaultId = getDefaultPresetId(nodeType, mode);
   if (defaultId) {
     const preset = getPreset(defaultId);
     if (preset) return preset;
   }
+  
   // 返回第一个内置预设作为默认
-  const builtinPreset = BUILTIN_PRESETS.find(p => p.nodeType === nodeType);
-  return builtinPreset || null;
+  return BUILTIN_PRESETS.find(p => p.nodeType === nodeType) || null;
+}
+
+// ============ 初始化 ============
+
+/** 从后端加载默认预设配置 */
+export async function loadDefaultsFromBackend(nodeTypes: string[]): Promise<void> {
+  for (const nodeType of nodeTypes) {
+    try {
+      const defaults = await storageClient.getDefaults(nodeType);
+      if (defaults) {
+        cachedDefaults.set(nodeType, {
+          fullscreen: defaults.fullscreenPresetId || undefined,
+          normal: defaults.normalPresetId || undefined
+        });
+      }
+    } catch (error) {
+      console.error(`[layoutPresets] 加载 ${nodeType} 默认预设失败:`, error);
+    }
+  }
+}
+
+/** 初始化预设系统（从后端加载） */
+export async function initPresets(): Promise<void> {
+  try {
+    // 加载用户预设
+    const backendPresets = await storageClient.getPresets();
+    cachedUserPresets = backendPresets.map(convertFromBackend);
+    
+    // 加载默认预设配置
+    const nodeTypes = [...new Set([
+      ...BUILTIN_PRESETS.map(p => p.nodeType),
+      ...cachedUserPresets.map(p => p.nodeType)
+    ])];
+    await loadDefaultsFromBackend(nodeTypes);
+    
+    console.log(`[layoutPresets] 已加载 ${cachedUserPresets.length} 个用户预设`);
+  } catch (error) {
+    console.error('[layoutPresets] 初始化失败:', error);
+  }
 }
 
 // ============ 存储管理 ============
 
-/** 获取用户预设数量和大小 */
+/** 获取用户预设数量 */
 export function getPresetsInfo(): { count: number; sizeKB: number } {
-  const presets = loadUserPresets();
-  const size = estimateSize(presets);
   return {
-    count: presets.length,
-    sizeKB: Math.round(size / 1024)
+    count: cachedUserPresets?.length || 0,
+    sizeKB: 0  // 后端存储无需计算大小
   };
 }
 
 /** 清理所有用户预设 */
-export function clearAllUserPresets(): void {
-  if (typeof window === 'undefined') return;
-  localStorage.removeItem(PRESETS_KEY);
+export async function clearAllUserPresets(): Promise<void> {
+  if (cachedUserPresets) {
+    for (const preset of cachedUserPresets) {
+      await storageClient.deletePreset(preset.id);
+    }
+  }
+  cachedUserPresets = [];
+  
+  // 清理旧的 localStorage
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem(LEGACY_PRESETS_KEY);
+    localStorage.removeItem(LEGACY_DEFAULT_KEY);
+  }
+  
   console.log('[layoutPresets] 已清理所有用户预设');
 }
 
 /** 清理指定节点类型的用户预设 */
-export function clearPresetsForNodeType(nodeType: string): number {
-  const presets = loadUserPresets();
-  const filtered = presets.filter(p => p.nodeType !== nodeType);
-  const removed = presets.length - filtered.length;
+export async function clearPresetsForNodeType(nodeType: string): Promise<number> {
+  let count = 0;
   
-  if (removed > 0) {
-    saveUserPresets(filtered);
-    console.log(`[layoutPresets] 清理了 ${removed} 个 ${nodeType} 预设`);
+  if (cachedUserPresets) {
+    const toDelete = cachedUserPresets.filter(p => p.nodeType === nodeType);
+    for (const preset of toDelete) {
+      await storageClient.deletePreset(preset.id);
+      count++;
+    }
+    cachedUserPresets = cachedUserPresets.filter(p => p.nodeType !== nodeType);
   }
   
-  return removed;
+  if (count > 0) {
+    console.log(`[layoutPresets] 清理了 ${count} 个 ${nodeType} 预设`);
+  }
+  
+  return count;
 }

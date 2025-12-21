@@ -14,7 +14,7 @@
   import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
   import NodeWrapper from '../NodeWrapper.svelte';
   import { 
-    Play, LoaderCircle, FileText, FolderOpen, MousePointer,
+    Play, LoaderCircle, FileText, FolderOpen, MousePointer, Clipboard, Search,
     CircleCheck, CircleX, Copy, Check, Plus, Minus
   } from '@lucide/svelte';
 
@@ -90,6 +90,17 @@
   $effect(() => { if (pathText || hive || onlyKey) saveState(); });
 
   function log(msg: string) { logs = [...logs.slice(-30), msg]; }
+
+  async function pasteFromClipboard() {
+    try {
+      const { platform } = await import('$lib/api/platform');
+      const text = await platform.readClipboard();
+      if (text) {
+        pathText = text.trim().replace(/^["']|["']$/g, '');
+        log(`📋 从剪贴板读取路径`);
+      }
+    } catch (e) { log(`❌ 读取剪贴板失败: ${e}`); }
+  }
 
   async function selectFile() {
     try {
@@ -205,10 +216,15 @@
 
 {#snippet sourceBlock()}
   <div class="flex flex-col cq-gap h-full">
-    <Button variant="outline" size="sm" class="cq-button-sm" onclick={selectFile} disabled={isRunning}>
-      <FileText class="cq-icon mr-1" />选择 TOML 配置
-    </Button>
-    <Input bind:value={pathText} placeholder="配置文件路径" disabled={isRunning} class="cq-text font-mono" />
+    <div class="flex cq-gap">
+      <Button variant="outline" size="sm" class="cq-button-sm flex-1" onclick={pasteFromClipboard} disabled={isRunning}>
+        <Clipboard class="cq-icon mr-1" />剪贴板
+      </Button>
+      <Button variant="outline" size="sm" class="cq-button-sm flex-1" onclick={selectFile} disabled={isRunning}>
+        <FolderOpen class="cq-icon mr-1" />选择
+      </Button>
+    </div>
+    <Input bind:value={pathText} placeholder="TOML 配置文件路径" disabled={isRunning} class="cq-text font-mono" />
   </div>
 {/snippet}
 
@@ -275,6 +291,9 @@
         <span class="cq-text text-muted-foreground">等待操作</span>
       {/if}
     </div>
+    <Button variant="outline" class="w-full cq-button-sm" onclick={handlePreview} disabled={!canExecute || isRunning}>
+      <Search class="cq-icon mr-1" />扫描配置
+    </Button>
     <Button class="w-full cq-button" onclick={handleRegister} disabled={!canExecute || isRunning}>
       <Plus class="cq-icon mr-1" />注册
     </Button>

@@ -3,7 +3,7 @@
  * 
  * 添加新节点只需要在 NODE_REGISTRY 中添加一条记录
  */
-import type { ComponentType } from 'svelte';
+import type { Component } from 'svelte';
 import type { NodeDefinition } from '$lib/types';
 
 // 导出类型供其他模块使用
@@ -32,10 +32,11 @@ import { RecycleuNode } from '$lib/components/nodes/recycleu';
 import { EncodebNode } from '$lib/components/nodes/encodeb';
 import { KavvkaNode } from '$lib/components/nodes/kavvka';
 import { LinedupNode } from '$lib/components/nodes/linedup';
+import { MoveaNode } from '$lib/components/nodes/movea';
 
 /** 节点注册项 - 包含定义和组件 */
 export interface NodeRegistryEntry extends NodeDefinition {
-  component: ComponentType;
+  component: Component<any>;
 }
 
 /** 节点注册表 - 所有节点的唯一定义处 */
@@ -369,6 +370,22 @@ export const NODE_REGISTRY: NodeRegistryEntry[] = [
       filter_lines: { type: 'array', label: '过滤行列表', default: [] }
     }
   },
+  {
+    type: 'movea',
+    category: 'tool',
+    label: 'movea',
+    description: '压缩包分类移动：扫描目录并将压缩包/文件夹移动到对应的二级文件夹',
+    icon: 'Package',
+    inputs: ['path'],
+    outputs: ['path'],
+    component: MoveaNode,
+    configSchema: {
+      root_path: { type: 'path', label: '根目录路径', required: true },
+      regex_patterns: { type: 'array', label: '正则表达式', default: [] },
+      allow_move_to_unnumbered: { type: 'boolean', label: '允许无编号目标', default: false },
+      enable_folder_moving: { type: 'boolean', label: '启用文件夹移动', default: true }
+    }
+  },
 
   // ========== 输出节点 ==========
   {
@@ -399,8 +416,8 @@ export const NODE_REGISTRY: NodeRegistryEntry[] = [
 export const NODE_DEFINITIONS: NodeDefinition[] = NODE_REGISTRY.map(({ component, ...def }) => def);
 
 /** 获取 SvelteFlow 的 nodeTypes 映射 */
-export function getNodeTypes(): Record<string, ComponentType> {
-  const types: Record<string, ComponentType> = {};
+export function getNodeTypes(): Record<string, Component<any>> {
+  const types: Record<string, Component<any>> = {};
   for (const entry of NODE_REGISTRY) {
     types[entry.type] = entry.component;
   }
@@ -418,6 +435,6 @@ export function getNodesByCategory(category: string): NodeDefinition[] {
 }
 
 /** 获取节点组件 */
-export function getNodeComponent(type: string): ComponentType | undefined {
+export function getNodeComponent(type: string): Component<any> | undefined {
   return NODE_REGISTRY.find(e => e.type === type)?.component;
 }

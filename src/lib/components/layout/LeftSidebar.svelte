@@ -1,20 +1,13 @@
 <script lang="ts">
   /**
-   * 左侧边栏 - 统一渲染节点的容器
+   * 左侧边栏 - 节点树面板
    * 支持悬停显示/隐藏、pin 固定、拖拽调整宽度
    */
   import { sidebarStore } from '$lib/stores/sidebar.svelte';
-  import { getNodeTypes } from '$lib/stores/nodeRegistry';
   import { settingsManager } from '$lib/settings/settingsManager';
   import HoverWrapper from './HoverWrapper.svelte';
   import { Pin, PinOff, GripVertical, PanelLeftClose } from '@lucide/svelte';
-  import NodePaletteNode from '$lib/components/nodes/NodePaletteNode.svelte';
-
-  // 获取节点类型组件（加上特殊的 node_palette）
-  const nodeTypes: Record<string, any> = {
-    ...getNodeTypes(),
-    node_palette: NodePaletteNode
-  };
+  import NodeTreePalette from '$lib/components/flow/NodeTreePalette.svelte';
 
   // 面板设置
   let panelSettings = $state(settingsManager.getSettings().panels);
@@ -130,20 +123,9 @@
         </div>
       </div>
 
-      <!-- 节点内容区 -->
+      <!-- 节点树面板 -->
       <div class="flex-1 min-h-0 overflow-hidden">
-        {#if $sidebarStore.leftNodeType && nodeTypes[$sidebarStore.leftNodeType]}
-          {@const NodeComponent = nodeTypes[$sidebarStore.leftNodeType]}
-          <NodeComponent 
-            id={$sidebarStore.leftNodeId || 'sidebar-node'}
-            data={{}}
-            isSidebarRender={true}
-          />
-        {:else}
-          <div class="flex items-center justify-center h-full text-muted-foreground text-sm">
-            未选择节点
-          </div>
-        {/if}
+        <NodeTreePalette />
       </div>
     </div>
 

@@ -384,7 +384,9 @@
   .dashboard-grid {
     width: 100%;
     flex: 1;
-    overflow: hidden;
+    /* 允许垂直滚动，隐藏水平溢出 */
+    overflow-y: auto;
+    overflow-x: hidden;
   }
 
   :global(.grid-stack > .grid-stack-item > .grid-stack-item-content) {

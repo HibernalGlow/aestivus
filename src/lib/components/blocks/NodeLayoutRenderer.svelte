@@ -415,7 +415,8 @@
 </script>
 
 {#if isFullscreen}
-  <div class="h-full overflow-hidden @container">
+  <!-- 全屏模式：允许垂直滚动 -->
+  <div class="h-full overflow-y-auto overflow-x-hidden @container">
     <DashboardGrid
       bind:this={dashboardGrid}
       columns={4}

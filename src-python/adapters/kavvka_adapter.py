@@ -20,9 +20,11 @@ from .base import BaseAdapter, AdapterOutput
 
 class KavvkaInput(BaseModel):
     """kavvka 输入参数"""
-    action: str = Field(default="process", description="操作类型: process, find_artist")
+    action: str = Field(default="process", description="操作类型: process, find_artist, scan")
     paths: List[str] = Field(default_factory=list, description="源路径列表")
     force: bool = Field(default=False, description="强制移动，不询问确认")
+    keywords: List[str] = Field(default_factory=list, description="扫描关键词列表")
+    scan_depth: int = Field(default=3, description="扫描深度")
 
 
 class KavvkaOutput(AdapterOutput):
@@ -151,6 +153,8 @@ class KavvkaAdapter(BaseAdapter):
             return await self._process(input_data, on_progress, on_log)
         elif action == "find_artist":
             return await self._find_artist(input_data, on_progress, on_log)
+        elif action == "scan":
+            return await self._scan_keywords(input_data, on_progress, on_log)
         else:
             return KavvkaOutput(
                 success=False,
@@ -265,3 +269,107 @@ class KavvkaAdapter(BaseAdapter):
             results=results,
             data={"results": results}
         )
+
+    async def _scan_keywords(
+        self,
+        input_data: KavvkaInput,
+        on_progress: Optional[Callable[[int, str], None]] = None,
+        on_log: Optional[Callable[[str], None]] = None
+    ) -> KavvkaOutput:
+        """扫描包含特定关键词的文件夹"""
+        if not input_data.paths:
+            return KavvkaOutput(success=False, message="请提供扫描路径")
+        
+        if not input_data.keywords:
+            return KavvkaOutput(success=False, message="请提供关键词")
+        
+        results: List[Dict] = []
+        matched_paths: List[str] = []
+        
+        keywords = input_data.keywords
+        max_depth = input_data.scan_depth
+        
+        if on_log:
+            on_log(f"🔍 扫描关键词: {', '.join(keywords)}")
+            on_log(f"📂 扫描深度: {max_depth}")
+        
+        total = len(input_data.paths)
+        
+        for i, path_str in enumerate(input_data.paths):
+            root_path = Path(path_str)
+            
+            if on_progress:
+                on_progress(int((i / total) * 50), f"扫描 {root_path.name}")
+            
+            if not root_path.exists() or not root_path.is_dir():
+                if on_log:
+                    on_log(f"❌ 路径无效: {path_str}")
+                continue
+            
+            if on_log:
+                on_log(f"📁 扫描目录: {root_path}")
+            
+            # 递归扫描
+            found_in_path = []
+            self._scan_directory(root_path, keywords, max_depth, 0, found_in_path, on_log)
+            
+            for folder_path in found_in_path:
+                matched_paths.append(str(folder_path))
+                results.append({
+                    "path": str(folder_path),
+                    "name": folder_path.name,
+                    "root": str(root_path)
+                })
+        
+        if on_progress:
+            on_progress(100, "扫描完成")
+        
+        if on_log:
+            on_log(f"✅ 找到 {len(matched_paths)} 个匹配文件夹")
+        
+        return KavvkaOutput(
+            success=len(matched_paths) > 0,
+            message=f"扫描完成，找到 {len(matched_paths)} 个匹配文件夹",
+            all_combined_paths=matched_paths,
+            results=results,
+            data={"matched_paths": matched_paths, "results": results}
+        )
+    
+    def _scan_directory(
+        self,
+        path: Path,
+        keywords: List[str],
+        max_depth: int,
+        current_depth: int,
+        found: List[Path],
+        on_log: Optional[Callable[[str], None]] = None
+    ) -> None:
+        """递归扫描目录查找关键词"""
+        if current_depth > max_depth:
+            return
+        
+        try:
+            for entry in path.iterdir():
+                if not entry.is_dir():
+                    continue
+                
+                # 跳过隐藏文件夹和特殊文件夹
+                if entry.name.startswith('.') or entry.name.startswith('#'):
+                    continue
+                
+                # 检查是否匹配关键词
+                folder_name = entry.name.lower()
+                for keyword in keywords:
+                    if keyword.lower() in folder_name:
+                        found.append(entry)
+                        if on_log:
+                            on_log(f"  🎯 匹配: {entry.name} (关键词: {keyword})")
+                        break
+                
+                # 继续递归
+                self._scan_directory(entry, keywords, max_depth, current_depth + 1, found, on_log)
+        except PermissionError:
+            pass  # 忽略权限错误
+        except Exception as e:
+            if on_log:
+                on_log(f"  ⚠️ 扫描错误: {e}")

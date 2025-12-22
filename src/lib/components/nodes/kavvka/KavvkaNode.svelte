@@ -262,7 +262,7 @@
         oninput={(e) => updateSourcePaths(e.currentTarget.value)}
         placeholder="每行一个根目录路径..."
         disabled={isRunning}
-        class="flex-1 cq-input font-mono text-xs resize-none min-h-[40px] nodrag"
+        class="flex-1 cq-input font-mono text-xs resize-none min-h-[40px]"
       />
       <span class="cq-text-sm text-muted-foreground mt-1">{sourcePaths.length} 个路径</span>
     {/if}
@@ -284,7 +284,7 @@
         oninput={(e) => updateKeywords(e.currentTarget.value)}
         placeholder="画集, CG, 图集..."
         disabled={isRunning}
-        class="cq-input text-xs mt-1 nodrag"
+        class="cq-input text-xs mt-1"
       />
       <span class="cq-text-sm text-muted-foreground">逗号分隔</span>
     </div>
@@ -297,7 +297,7 @@
         min={1}
         max={10}
         disabled={isRunning}
-        class="cq-input w-20 mt-1 nodrag"
+        class="cq-input w-20 mt-1"
       />
     </div>
     

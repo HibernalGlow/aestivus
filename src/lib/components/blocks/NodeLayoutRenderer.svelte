@@ -81,17 +81,42 @@
   function generateNormalLayout(): GridItem[] {
     const layout = getNodeBlockLayout(nodeType);
     if (!layout) return [];
-    return layout.blocks
-      .filter((b) => b.visibleInNormal !== false && !b.isTabContainer)
-      .map((b, idx) => ({
+    
+    const blocks = layout.blocks.filter((b) => b.visibleInNormal !== false && !b.isTabContainer);
+    const result: GridItem[] = [];
+    
+    let currentY = 0;
+    let currentX = 0;
+    
+    for (const b of blocks) {
+      const w = b.colSpan ?? 1;
+      
+      // 如果当前行放不下，换行
+      if (currentX + w > 2) {
+        currentY++;
+        currentX = 0;
+      }
+      
+      result.push({
         id: b.id,
-        x: idx % 2,
-        y: Math.floor(idx / 2),
-        w: b.colSpan ?? 1,
+        x: currentX,
+        y: currentY,
+        w: Math.min(w, 2), // 节点模式最大宽度为 2
         h: 1,
         minW: 1,
         minH: 1,
-      }));
+      });
+      
+      currentX += w;
+      
+      // 如果当前行已满，换行
+      if (currentX >= 2) {
+        currentY++;
+        currentX = 0;
+      }
+    }
+    
+    return result;
   }
 
   function hasSavedLayout(modeState: { gridLayout: GridItem[] }): boolean {

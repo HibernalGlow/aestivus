@@ -32,6 +32,7 @@ _ADAPTER_REGISTRY: Dict[str, str] = {
     "kavvka": "adapters.kavvka_adapter.KavvkaAdapter",
     "linedup": "adapters.linedup_adapter.LinedupAdapter",
     "movea": "adapters.movea_adapter.MoveaAdapter",
+    "seriex": "adapters.seriex_adapter.SeriexAdapter",
 }
 
 # 适配器实例缓存

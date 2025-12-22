@@ -20,3 +20,4 @@ export { EncodebNode } from './encodeb';
 export { KavvkaNode } from './kavvka';
 export { LinedupNode } from './linedup';
 export { MoveaNode } from './movea';
+export { SeriexNode } from './seriex';

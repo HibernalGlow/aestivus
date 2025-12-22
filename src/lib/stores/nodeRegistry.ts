@@ -33,6 +33,7 @@ import { EncodebNode } from '$lib/components/nodes/encodeb';
 import { KavvkaNode } from '$lib/components/nodes/kavvka';
 import { LinedupNode } from '$lib/components/nodes/linedup';
 import { MoveaNode } from '$lib/components/nodes/movea';
+import { SeriexNode } from '$lib/components/nodes/seriex';
 
 /** 节点注册项 - 包含定义和组件 */
 export interface NodeRegistryEntry extends NodeDefinition {
@@ -384,6 +385,22 @@ export const NODE_REGISTRY: NodeRegistryEntry[] = [
       regex_patterns: { type: 'array', label: '正则表达式', default: [] },
       allow_move_to_unnumbered: { type: 'boolean', label: '允许无编号目标', default: false },
       enable_folder_moving: { type: 'boolean', label: '启用文件夹移动', default: true }
+    }
+  },
+  {
+    type: 'seriex',
+    category: 'tool',
+    label: 'seriex',
+    description: '系列提取：自动识别并整理同一系列的漫画压缩包',
+    icon: 'BookOpen',
+    inputs: ['path'],
+    outputs: ['path'],
+    component: SeriexNode,
+    configSchema: {
+      directory_path: { type: 'path', label: '目录路径', required: true },
+      threshold: { type: 'number', label: '相似度阈值', default: 75 },
+      add_prefix: { type: 'boolean', label: '添加前缀', default: true },
+      prefix: { type: 'string', label: '系列前缀', default: '[#s]' }
     }
   },
 

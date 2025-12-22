@@ -33,6 +33,7 @@
     "@xyflow/svelte": "^1.5.0",
     "ansi-to-html": "^0.7.2",
     "cobe": "^0.6.5",
+    "diff": "^8.0.2",
     "gridstack": "^12.4.1",
     "svelte-dnd-action": "^0.9.68",
     "svelte-motion": "^0.12.2",

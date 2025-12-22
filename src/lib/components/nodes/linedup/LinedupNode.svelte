@@ -3,12 +3,13 @@
    * LinedupNode - 行去重工具节点
    * 
    * 功能：过滤包含特定内容的行
-   * 如果源行包含过滤行中的任何内容，则移除该行
+   * 支持 diff 红绿显示和下载功能
    */
   import { Handle, Position, NodeResizer } from '@xyflow/svelte';
   import { Button } from '$lib/components/ui/button';
   import { Textarea } from '$lib/components/ui/textarea';
   import { Label } from '$lib/components/ui/label';
+  import * as Diff from 'diff';
 
   import { NodeLayoutRenderer } from '$lib/components/blocks';
   import { LINEDUP_DEFAULT_GRID_LAYOUT } from './blocks';
@@ -16,8 +17,8 @@
   import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
   import NodeWrapper from '../NodeWrapper.svelte';
   import { 
-    LoaderCircle, Filter, FolderOpen, Clipboard,
-    Copy, Check, RotateCcw, Zap, FileText
+    LoaderCircle, Filter, Clipboard,
+    Copy, Check, RotateCcw, Zap, Download
   } from '@lucide/svelte';
 
   interface Props {
@@ -40,6 +41,12 @@
     filterText: string;
   }
 
+  interface DiffPart {
+    value: string;
+    added?: boolean;
+    removed?: boolean;
+  }
+
   const nodeId = $derived(id);
   const savedState = $derived(getNodeState<LinedupState>(nodeId));
   const dataLogs = $derived(data?.logs ?? []);
@@ -48,13 +55,13 @@
   // 状态变量
   let sourceText = $state('');
   let filterText = $state('');
-  let resultText = $state('');
+  let keptLines = $state<string[]>([]);
+  let removedLines = $state<string[]>([]);
+  let diffParts = $state<DiffPart[]>([]);
   
   let phase = $state<Phase>('idle');
   let logs = $state<string[]>([]);
   let copied = $state(false);
-  let removedCount = $state(0);
-  let keptCount = $state(0);
   let hasInputConnection = $state(false);
   let layoutRenderer = $state<any>(undefined);
 
@@ -117,9 +124,9 @@
     if (!canExecute) return;
     
     phase = 'running';
-    resultText = '';
-    removedCount = 0;
-    keptCount = 0;
+    keptLines = [];
+    removedLines = [];
+    diffParts = [];
     log(`🔍 开始过滤，源: ${sourceLines.length} 行，过滤条件: ${filterLines.length} 行`);
     
     try {
@@ -133,10 +140,17 @@
       
       if (response.success) {
         phase = 'completed';
-        const filtered = response.data?.filtered_lines ?? [];
-        resultText = filtered.join('\n');
-        removedCount = response.data?.removed_count ?? 0;
-        keptCount = response.data?.kept_count ?? 0;
+        keptLines = response.data?.filtered_lines ?? [];
+        
+        // 计算被移除的行
+        const keptSet = new Set(keptLines.map(l => l.trim().toLowerCase()));
+        removedLines = sourceLines.filter(l => !keptSet.has(l.trim().toLowerCase()));
+        
+        // 生成 diff
+        const originalText = sourceLines.join('\n');
+        const filteredText = keptLines.join('\n');
+        diffParts = Diff.diffLines(originalText, filteredText);
+        
         log(`✅ ${response.message}`);
       } else {
         phase = 'error';
@@ -150,23 +164,54 @@
 
   function handleReset() {
     phase = 'idle';
-    resultText = '';
-    removedCount = 0;
-    keptCount = 0;
+    keptLines = [];
+    removedLines = [];
+    diffParts = [];
     logs = [];
   }
 
-  async function copyResult() {
-    if (!resultText) return;
+  async function copyKept() {
+    if (keptLines.length === 0) return;
     try {
-      await navigator.clipboard.writeText(resultText);
+      await navigator.clipboard.writeText(keptLines.join('\n'));
       copied = true;
       setTimeout(() => { copied = false; }, 2000);
-      log('✅ 结果已复制到剪贴板');
-    } catch (e) { 
-      console.error('复制失败:', e); 
-      log(`❌ 复制失败: ${e}`);
-    }
+      log('✅ 保留内容已复制');
+    } catch (e) { log(`❌ 复制失败: ${e}`); }
+  }
+
+  async function copyRemoved() {
+    if (removedLines.length === 0) return;
+    try {
+      await navigator.clipboard.writeText(removedLines.join('\n'));
+      copied = true;
+      setTimeout(() => { copied = false; }, 2000);
+      log('✅ 移除内容已复制');
+    } catch (e) { log(`❌ 复制失败: ${e}`); }
+  }
+
+  // 下载文件
+  function downloadFile(content: string, filename: string) {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    log(`✅ 已下载: ${filename}`);
+  }
+
+  function downloadKept() {
+    if (keptLines.length === 0) return;
+    downloadFile(keptLines.join('\n'), 'kept_lines.txt');
+  }
+
+  function downloadRemoved() {
+    if (removedLines.length === 0) return;
+    downloadFile(removedLines.join('\n'), 'removed_lines.txt');
   }
 
   async function copyLogs() {
@@ -219,9 +264,9 @@
     <div class="p-2 rounded cq-text-sm bg-muted/50">
       <div class="text-muted-foreground">源: {sourceLines.length} 行</div>
       <div class="text-muted-foreground">过滤: {filterLines.length} 条件</div>
-      {#if keptCount > 0 || removedCount > 0}
-        <div class="text-green-600 mt-1">保留: {keptCount}</div>
-        <div class="text-red-500">移除: {removedCount}</div>
+      {#if keptLines.length > 0 || removedLines.length > 0}
+        <div class="text-green-600 mt-1">保留: {keptLines.length}</div>
+        <div class="text-red-500">移除: {removedLines.length}</div>
       {/if}
     </div>
     
@@ -234,15 +279,49 @@
       <span>过滤</span>
     </Button>
     
-    <Button 
-      variant="outline" 
-      class="w-full cq-button flex-1" 
-      onclick={copyResult}
-      disabled={!resultText}
-    >
-      {#if copied}<Check class="cq-icon mr-1 text-green-500" />{:else}<Copy class="cq-icon mr-1" />{/if}
-      <span>复制结果</span>
-    </Button>
+    <!-- 保留内容操作 -->
+    <div class="flex cq-gap">
+      <Button 
+        variant="outline" 
+        size="sm"
+        class="flex-1 cq-button-sm" 
+        onclick={copyKept}
+        disabled={keptLines.length === 0}
+      >
+        <Copy class="w-3 h-3 mr-1" />保留
+      </Button>
+      <Button 
+        variant="outline" 
+        size="sm"
+        class="flex-1 cq-button-sm" 
+        onclick={downloadKept}
+        disabled={keptLines.length === 0}
+      >
+        <Download class="w-3 h-3 mr-1" />下载
+      </Button>
+    </div>
+    
+    <!-- 移除内容操作 -->
+    <div class="flex cq-gap">
+      <Button 
+        variant="outline" 
+        size="sm"
+        class="flex-1 cq-button-sm text-red-500 hover:text-red-600" 
+        onclick={copyRemoved}
+        disabled={removedLines.length === 0}
+      >
+        <Copy class="w-3 h-3 mr-1" />移除
+      </Button>
+      <Button 
+        variant="outline" 
+        size="sm"
+        class="flex-1 cq-button-sm text-red-500 hover:text-red-600" 
+        onclick={downloadRemoved}
+        disabled={removedLines.length === 0}
+      >
+        <Download class="w-3 h-3 mr-1" />下载
+      </Button>
+    </div>
     
     <Button variant="ghost" class="w-full cq-button-sm" onclick={handleReset}>
       <RotateCcw class="cq-icon mr-1" />重置
@@ -253,17 +332,33 @@
 {#snippet resultBlock()}
   <div class="h-full flex flex-col overflow-hidden">
     <div class="flex items-center justify-between cq-padding border-b bg-muted/30 shrink-0">
-      <span class="font-semibold cq-text">过滤结果</span>
-      {#if keptCount > 0}
-        <span class="cq-text-sm text-muted-foreground">{keptCount} 行</span>
+      <span class="font-semibold cq-text">Diff 结果</span>
+      {#if keptLines.length > 0 || removedLines.length > 0}
+        <span class="cq-text-sm">
+          <span class="text-green-600">+{keptLines.length}</span>
+          <span class="text-muted-foreground mx-1">/</span>
+          <span class="text-red-500">-{removedLines.length}</span>
+        </span>
       {/if}
     </div>
-    <Textarea 
-      bind:value={resultText}
-      readonly
-      placeholder="过滤后的结果将显示在这里..."
-      class="flex-1 cq-input font-mono text-xs resize-none border-0"
-    />
+    <div class="flex-1 overflow-y-auto cq-padding font-mono text-xs">
+      {#if diffParts.length > 0}
+        {#each diffParts as part}
+          {#each part.value.split('\n').filter((_, i, arr) => i < arr.length - 1 || part.value.slice(-1) !== '\n') as line}
+            <div class="py-0.5 px-1 rounded {part.removed ? 'bg-red-500/20 text-red-600 line-through' : part.added ? 'bg-green-500/20 text-green-600' : 'text-muted-foreground'}">
+              <span class="inline-block w-4 text-center opacity-60">{part.removed ? '-' : part.added ? '+' : ' '}</span>
+              {line || ' '}
+            </div>
+          {/each}
+        {/each}
+      {:else}
+        <div class="text-center text-muted-foreground py-4">
+          过滤后将显示 diff 对比<br/>
+          <span class="text-green-600">绿色</span> = 保留，
+          <span class="text-red-500">红色</span> = 移除
+        </div>
+      {/if}
+    </div>
   </div>
 {/snippet}
 

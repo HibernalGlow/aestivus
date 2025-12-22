@@ -16,3 +16,4 @@ export { FormatVNode } from './formatv';
 export { FindzNode } from './findz';
 export { BandiaNode } from './bandia';
 export { RecycleuNode } from './recycleu';
+export { EncodebNode } from './encodeb';

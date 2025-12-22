@@ -29,6 +29,7 @@ import { LinkuNode } from '$lib/components/nodes/linku';
 import { ScoolpNode } from '$lib/components/nodes/scoolp';
 import { ReinstallpNode } from '$lib/components/nodes/reinstallp';
 import { RecycleuNode } from '$lib/components/nodes/recycleu';
+import { EncodebNode } from '$lib/components/nodes/encodeb';
 
 /** 节点注册项 - 包含定义和组件 */
 export interface NodeRegistryEntry extends NodeDefinition {
@@ -320,6 +321,22 @@ export const NODE_REGISTRY: NodeRegistryEntry[] = [
     configSchema: {
       interval: { type: 'number', label: '清理间隔(秒)', default: 10 },
       auto_start: { type: 'boolean', label: '自动启动', default: false }
+    }
+  },
+  {
+    type: 'encodeb',
+    category: 'tool',
+    label: 'encodeb',
+    description: '编码修复：修复乱码文件名，支持多种编码预设',
+    icon: 'FileText',
+    inputs: ['path'],
+    outputs: ['path'],
+    component: EncodebNode,
+    configSchema: {
+      paths: { type: 'array', label: '路径列表', default: [] },
+      src_encoding: { type: 'string', label: '源编码', default: 'cp437' },
+      dst_encoding: { type: 'string', label: '目标编码', default: 'cp936' },
+      strategy: { type: 'select', label: '策略', default: 'replace' }
     }
   },
 

@@ -28,6 +28,7 @@ _ADAPTER_REGISTRY: Dict[str, str] = {
     "scoolp": "adapters.scoolp_adapter.ScoolpAdapter",
     "reinstallp": "adapters.reinstallp_adapter.ReinstallpAdapter",
     "recycleu": "adapters.recycleu_adapter.RecycleuAdapter",
+    "encodeb": "adapters.encodeb_adapter.EncodebAdapter",
 }
 
 # 适配器实例缓存

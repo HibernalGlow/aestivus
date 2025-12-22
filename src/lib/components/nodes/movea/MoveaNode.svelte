@@ -529,7 +529,7 @@
                     <Select.Trigger class="h-6 w-[120px] text-xs">
                       {target ?? '选择目标'}
                     </Select.Trigger>
-                    <Select.Content>
+                    <Select.Content class="z-[55]">
                       {#each data.subfolders as folder}
                         <Select.Item value={folder} label={folder}>{folder}</Select.Item>
                       {/each}
@@ -560,7 +560,7 @@
                       <Select.Trigger class="h-6 w-[120px] text-xs">
                         {target ?? '选择目标'}
                       </Select.Trigger>
-                      <Select.Content>
+                      <Select.Content class="z-[9999]">
                         {#each data.subfolders as subfolder}
                           <Select.Item value={subfolder} label={subfolder}>{subfolder}</Select.Item>
                         {/each}

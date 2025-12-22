@@ -255,7 +255,7 @@
         min={5} 
         max={300} 
         disabled={isRunning} 
-        class="cq-text flex-1" 
+        class="cq-text flex-1 nodrag" 
       />
     </div>
     <div class="grid grid-cols-4 cq-gap">

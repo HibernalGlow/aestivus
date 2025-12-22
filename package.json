@@ -37,8 +37,7 @@
     "gridstack": "^12.4.1",
     "svelte-dnd-action": "^0.9.68",
     "svelte-motion": "^0.12.2",
-    "tailwindcss": "^4.1.11",
-    "wunderbaum": "^0.13.0"
+    "tailwindcss": "^4.1.11"
   },
   "devDependencies": {
     "@internationalized/date": "^3.10.0",

@@ -187,12 +187,22 @@
         needsUpdate = true;
       }
     } else {
-      // 先过滤无效项，再检查是否有缺失的区块
+      // 先过滤无效项
       const validNormal = fixLayoutIds(config.normal.gridLayout);
-      const updatedNormal = ensureAllBlocksInLayout(validNormal, 'normal');
-      if (updatedNormal.length > validNormal.length || validNormal.length < config.normal.gridLayout.length) {
-        updateGridLayout(nodeType, "normal", updatedNormal);
-        needsUpdate = true;
+      // 如果过滤后为空，直接使用默认布局
+      if (validNormal.length === 0) {
+        const normalLayout = defaultNormalLayout.length > 0 ? defaultNormalLayout : generateNormalLayout();
+        if (normalLayout.length > 0) {
+          updateGridLayout(nodeType, "normal", normalLayout);
+          needsUpdate = true;
+        }
+      } else {
+        // 检查是否有缺失的区块
+        const updatedNormal = ensureAllBlocksInLayout(validNormal, 'normal');
+        if (updatedNormal.length > validNormal.length) {
+          updateGridLayout(nodeType, "normal", updatedNormal);
+          needsUpdate = true;
+        }
       }
     }
     
@@ -201,12 +211,21 @@
       updateGridLayout(nodeType, "fullscreen", defaultFullscreenLayout);
       needsUpdate = true;
     } else if (hasSavedLayout(config.fullscreen)) {
-      // 先过滤无效项，再检查是否有缺失的区块
+      // 先过滤无效项
       const validFullscreen = fixLayoutIds(config.fullscreen.gridLayout);
-      const updatedFullscreen = ensureAllBlocksInLayout(validFullscreen, 'fullscreen');
-      if (updatedFullscreen.length > validFullscreen.length || validFullscreen.length < config.fullscreen.gridLayout.length) {
-        updateGridLayout(nodeType, "fullscreen", updatedFullscreen);
-        needsUpdate = true;
+      // 如果过滤后为空，直接使用默认布局
+      if (validFullscreen.length === 0) {
+        if (defaultFullscreenLayout.length > 0) {
+          updateGridLayout(nodeType, "fullscreen", defaultFullscreenLayout);
+          needsUpdate = true;
+        }
+      } else {
+        // 检查是否有缺失的区块
+        const updatedFullscreen = ensureAllBlocksInLayout(validFullscreen, 'fullscreen');
+        if (updatedFullscreen.length > validFullscreen.length) {
+          updateGridLayout(nodeType, "fullscreen", updatedFullscreen);
+          needsUpdate = true;
+        }
       }
     }
     

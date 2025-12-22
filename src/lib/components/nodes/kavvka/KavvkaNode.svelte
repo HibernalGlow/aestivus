@@ -3,7 +3,7 @@
    * KavvkaNode - Czkawka 辅助工具节点
    * 
    * 功能：处理图片文件夹，查找画师文件夹，移动文件到比较文件夹
-   * 支持关键词扫描（如"画集"）
+   * 支持关键词扫描（如"画集"）- 扫描结果填充到源路径
    * 生成 Czkawka 路径字符串
    */
   import { Handle, Position, NodeResizer } from '@xyflow/svelte';
@@ -40,6 +40,7 @@
 
   interface KavvkaState {
     sourcePaths: string[];
+    scanRoots: string[];
     forceMove: boolean;
     keywords: string[];
     scanDepth: number;
@@ -54,13 +55,14 @@
   const DEFAULT_KEYWORDS = ['画集', 'CG', '图集', '作品集'];
 
   // 状态变量
-  let sourcePaths = $state<string[]>([]);
+  let sourcePaths = $state<string[]>([]);      // 处理用的源路径
   let sourcePathsText = $state('');
+  let scanRoots = $state<string[]>([]);        // 扫描用的根目录
+  let scanRootsText = $state('');
   let forceMove = $state(false);
   let keywords = $state<string[]>(DEFAULT_KEYWORDS);
   let keywordsText = $state('');
   let scanDepth = $state(3);
-  let scannedPaths = $state<string[]>([]);
   
   let phase = $state<Phase>('idle');
   let logs = $state<string[]>([]);
@@ -76,11 +78,13 @@
     
     if (savedState) {
       sourcePaths = savedState.sourcePaths ?? [];
+      scanRoots = savedState.scanRoots ?? [];
       forceMove = savedState.forceMove ?? false;
       keywords = savedState.keywords ?? DEFAULT_KEYWORDS;
       scanDepth = savedState.scanDepth ?? 3;
     }
     sourcePathsText = sourcePaths.join('\n');
+    scanRootsText = scanRoots.join('\n');
     keywordsText = keywords.join(', ');
     initialized = true;
   });
@@ -92,12 +96,12 @@
 
   function saveState() {
     if (!initialized) return;
-    setNodeState<KavvkaState>(nodeId, { sourcePaths, forceMove, keywords, scanDepth });
+    setNodeState<KavvkaState>(nodeId, { sourcePaths, scanRoots, forceMove, keywords, scanDepth });
   }
 
   let isRunning = $derived(phase === 'running' || phase === 'scanning');
-  let canExecute = $derived((sourcePaths.length > 0 || scannedPaths.length > 0 || hasInputConnection) && !isRunning);
-  let canScan = $derived(sourcePaths.length > 0 && !isRunning);
+  let canExecute = $derived((sourcePaths.length > 0 || hasInputConnection) && !isRunning);
+  let canScan = $derived(scanRoots.length > 0 && !isRunning);
   let borderClass = $derived({
     idle: 'border-border',
     scanning: 'border-orange-500 shadow-sm',
@@ -113,6 +117,13 @@
   function updateSourcePaths(text: string) {
     sourcePathsText = text;
     sourcePaths = text.split('\n').map(s => s.trim()).filter(s => s);
+    saveState();
+  }
+
+  function updateScanRoots(text: string) {
+    scanRootsText = text;
+    scanRoots = text.split('\n').map(s => s.trim()).filter(s => s);
+    saveState();
   }
 
   function updateKeywords(text: string) {
@@ -120,6 +131,7 @@
     keywords = text.split(',').map(s => s.trim()).filter(s => s);
   }
 
+  // 选择源路径文件夹
   async function selectSourceFolder() {
     try {
       const { platform } = await import('$lib/api/platform');
@@ -127,10 +139,12 @@
       if (selected) {
         sourcePaths = [...sourcePaths, selected];
         sourcePathsText = sourcePaths.join('\n');
+        saveState();
       }
     } catch (e) { log(`选择文件夹失败: ${e}`); }
   }
 
+  // 粘贴源路径
   async function pasteSourcePaths() {
     try {
       const { platform } = await import('$lib/api/platform');
@@ -139,23 +153,50 @@
         const paths = text.split('\n').map(s => s.trim()).filter(s => s);
         sourcePaths = [...sourcePaths, ...paths];
         sourcePathsText = sourcePaths.join('\n');
+        saveState();
       }
     } catch (e) { log(`读取剪贴板失败: ${e}`); }
   }
 
-  // 扫描关键词
+  // 选择扫描根目录
+  async function selectScanRoot() {
+    try {
+      const { platform } = await import('$lib/api/platform');
+      const selected = await platform.openFolderDialog('选择扫描根目录');
+      if (selected) {
+        scanRoots = [...scanRoots, selected];
+        scanRootsText = scanRoots.join('\n');
+        saveState();
+      }
+    } catch (e) { log(`选择文件夹失败: ${e}`); }
+  }
+
+  // 粘贴扫描根目录
+  async function pasteScanRoots() {
+    try {
+      const { platform } = await import('$lib/api/platform');
+      const text = await platform.readClipboard();
+      if (text) {
+        const paths = text.split('\n').map(s => s.trim()).filter(s => s);
+        scanRoots = [...scanRoots, ...paths];
+        scanRootsText = scanRoots.join('\n');
+        saveState();
+      }
+    } catch (e) { log(`读取剪贴板失败: ${e}`); }
+  }
+
+  // 扫描关键词 - 结果填充到源路径
   async function handleScan() {
     if (!canScan) return;
     
     phase = 'scanning';
-    scannedPaths = [];
     log(`🔍 扫描关键词: ${keywords.join(', ')}`);
     log(`📁 扫描深度: ${scanDepth}`);
     
     try {
       const response = await api.executeNode('kavvka', {
         action: 'scan',
-        paths: sourcePaths,
+        paths: scanRoots,
         keywords: keywords,
         scan_depth: scanDepth
       }) as any;
@@ -164,8 +205,12 @@
       
       if (response.success) {
         phase = 'idle';
-        scannedPaths = response.data?.matched_paths ?? [];
-        log(`✅ 找到 ${scannedPaths.length} 个匹配文件夹`);
+        const matchedPaths = response.data?.matched_paths ?? [];
+        // 扫描结果填充到源路径
+        sourcePaths = matchedPaths;
+        sourcePathsText = sourcePaths.join('\n');
+        saveState();
+        log(`✅ 找到 ${matchedPaths.length} 个匹配文件夹，已填充到源路径`);
       } else {
         phase = 'error';
         log(`❌ 扫描失败: ${response.message}`);
@@ -176,21 +221,18 @@
     }
   }
 
-  // 执行处理
+  // 执行处理 - 统一使用源路径
   async function handleExecute() {
     if (!canExecute) return;
     
-    // 优先使用扫描结果，否则使用源路径
-    const pathsToProcess = scannedPaths.length > 0 ? scannedPaths : sourcePaths;
-    
     phase = 'running';
     resultPaths = [];
-    log(`🚀 开始处理 ${pathsToProcess.length} 个路径`);
+    log(`🚀 开始处理 ${sourcePaths.length} 个路径`);
     
     try {
       const response = await api.executeNode('kavvka', {
         action: 'process',
-        paths: pathsToProcess,
+        paths: sourcePaths,
         force: forceMove
       }) as any;
       
@@ -213,8 +255,13 @@
   function handleReset() {
     phase = 'idle';
     resultPaths = [];
-    scannedPaths = [];
     logs = [];
+  }
+
+  function clearSourcePaths() {
+    sourcePaths = [];
+    sourcePathsText = '';
+    saveState();
   }
 
   async function copyResults() {
@@ -242,8 +289,11 @@
 {#snippet sourceBlock()}
   <div class="h-full flex flex-col">
     <div class="flex items-center justify-between cq-mb shrink-0">
-      <Label class="cq-text font-medium">扫描根目录</Label>
+      <Label class="cq-text font-medium">源路径（处理用）</Label>
       <div class="flex cq-gap">
+        <Button variant="ghost" size="icon" class="cq-button-icon" onclick={clearSourcePaths} disabled={isRunning || sourcePaths.length === 0} title="清空">
+          <RotateCcw class="cq-icon" />
+        </Button>
         <Button variant="outline" size="icon" class="cq-button-icon" onclick={selectSourceFolder} disabled={isRunning}>
           <FolderOpen class="cq-icon" />
         </Button>
@@ -260,7 +310,7 @@
       <Textarea 
         value={sourcePathsText}
         oninput={(e) => updateSourcePaths(e.currentTarget.value)}
-        placeholder="每行一个根目录路径..."
+        placeholder="每行一个路径（可手动输入或由扫描填充）..."
         disabled={isRunning}
         class="flex-1 cq-input font-mono text-xs resize-none min-h-[40px]"
       />
@@ -271,8 +321,31 @@
 
 {#snippet scanBlock()}
   <div class="h-full flex flex-col cq-gap">
+    <!-- 扫描根目录输入 -->
+    <div class="flex-1 flex flex-col">
+      <div class="flex items-center justify-between cq-mb shrink-0">
+        <Label class="cq-text font-medium">扫描根目录</Label>
+        <div class="flex cq-gap">
+          <Button variant="outline" size="icon" class="cq-button-icon" onclick={selectScanRoot} disabled={isRunning}>
+            <FolderOpen class="cq-icon" />
+          </Button>
+          <Button variant="outline" size="icon" class="cq-button-icon" onclick={pasteScanRoots} disabled={isRunning}>
+            <Clipboard class="cq-icon" />
+          </Button>
+        </div>
+      </div>
+      <Textarea 
+        value={scanRootsText}
+        oninput={(e) => updateScanRoots(e.currentTarget.value)}
+        placeholder="每行一个根目录..."
+        disabled={isRunning}
+        class="flex-1 cq-input font-mono text-xs resize-none min-h-[30px]"
+      />
+      <span class="cq-text-sm text-muted-foreground">{scanRoots.length} 个根目录</span>
+    </div>
+    
     <div>
-      <Label class="cq-text font-medium">扫描关键词</Label>
+      <Label class="cq-text font-medium">关键词</Label>
       <Input 
         value={keywordsText}
         oninput={(e) => updateKeywords(e.currentTarget.value)}
@@ -280,69 +353,55 @@
         disabled={isRunning}
         class="cq-input text-xs mt-1"
       />
-      <span class="cq-text-sm text-muted-foreground">逗号分隔</span>
     </div>
     
-    <div>
-      <Label class="cq-text font-medium">扫描深度</Label>
-      <Input 
-        type="number"
-        bind:value={scanDepth}
-        min={1}
-        max={10}
-        disabled={isRunning}
-        class="cq-input w-20 mt-1"
-      />
+    <div class="flex items-center cq-gap">
+      <div>
+        <Label class="cq-text font-medium">深度</Label>
+        <Input 
+          type="number"
+          bind:value={scanDepth}
+          min={1}
+          max={10}
+          disabled={isRunning}
+          class="cq-input w-16 mt-1"
+        />
+      </div>
+      <label class="flex items-center cq-gap cursor-pointer mt-4">
+        <Checkbox bind:checked={forceMove} disabled={isRunning} />
+        <span class="cq-text">强制移动</span>
+      </label>
     </div>
-    
-    <label class="flex items-center cq-gap cursor-pointer">
-      <Checkbox bind:checked={forceMove} disabled={isRunning} />
-      <span class="cq-text">强制移动</span>
-    </label>
     
     <Button 
       variant="outline" 
-      class="w-full cq-button mt-auto" 
+      class="w-full cq-button" 
       onclick={handleScan}
       disabled={!canScan}
     >
       {#if phase === 'scanning'}<LoaderCircle class="cq-icon mr-1 animate-spin" />{:else}<Search class="cq-icon mr-1" />{/if}
-      <span>扫描</span>
+      <span>扫描 → 填充源路径</span>
     </Button>
   </div>
 {/snippet}
 
 {#snippet operationBlock()}
   <div class="flex flex-col cq-gap h-full">
-    <!-- 显示当前操作路径来源 -->
-    <div class="p-2 rounded cq-text-sm {scannedPaths.length > 0 ? 'bg-green-500/10 border border-green-500/30' : 'bg-muted/50'}">
-      {#if scannedPaths.length > 0}
-        <div class="flex items-center gap-1 text-green-600 font-medium">
-          <Search class="w-3 h-3" />
-          <span>使用扫描结果</span>
-        </div>
-        <div class="text-muted-foreground mt-1">{scannedPaths.length} 个匹配文件夹</div>
-      {:else if hasInputConnection}
-        <div class="flex items-center gap-1 text-blue-600 font-medium">
-          <span>←</span>
-          <span>使用上游输入</span>
-        </div>
-      {:else}
-        <div class="flex items-center gap-1 text-muted-foreground">
-          <FolderOpen class="w-3 h-3" />
-          <span>使用输入路径</span>
-        </div>
-        <div class="text-muted-foreground mt-1">{sourcePaths.length} 个路径</div>
-      {/if}
+    <div class="p-2 rounded cq-text-sm bg-muted/50">
+      <div class="flex items-center gap-1 text-muted-foreground">
+        <FolderOpen class="w-3 h-3" />
+        <span>处理源路径</span>
+      </div>
+      <div class="text-muted-foreground mt-1">{sourcePaths.length} 个路径</div>
     </div>
     
     <Button 
-      class="w-full cq-button flex-1 {scannedPaths.length > 0 ? 'bg-green-600 hover:bg-green-700' : ''}" 
+      class="w-full cq-button flex-1" 
       onclick={handleExecute}
       disabled={!canExecute}
     >
-      {#if isRunning}<LoaderCircle class="cq-icon mr-1 animate-spin" />{:else}<Zap class="cq-icon mr-1" />{/if}
-      <span>处理 {scannedPaths.length > 0 ? `(${scannedPaths.length})` : ''}</span>
+      {#if phase === 'running'}<LoaderCircle class="cq-icon mr-1 animate-spin" />{:else}<Zap class="cq-icon mr-1" />{/if}
+      <span>处理 ({sourcePaths.length})</span>
     </Button>
     
     <Button 

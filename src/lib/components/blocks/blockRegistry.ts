@@ -93,6 +93,7 @@ import { SCOOLP_BLOCKS, SCOOLP_DEFAULT_GRID_LAYOUT } from '$lib/components/nodes
 import { REINSTALLP_BLOCKS, REINSTALLP_DEFAULT_GRID_LAYOUT } from '$lib/components/nodes/reinstallp/blocks';
 import { RECYCLEU_BLOCKS, RECYCLEU_DEFAULT_GRID_LAYOUT } from '$lib/components/nodes/recycleu/blocks';
 import { ENCODEB_BLOCKS, ENCODEB_DEFAULT_GRID_LAYOUT } from '$lib/components/nodes/encodeb/blocks';
+import { KAVVKA_BLOCKS, KAVVKA_DEFAULT_GRID_LAYOUT } from '$lib/components/nodes/kavvka/blocks';
 
 // 重新导出供外部使用
 export { FINDZ_BLOCKS, FINDZ_DEFAULT_GRID_LAYOUT };
@@ -112,6 +113,7 @@ export { SCOOLP_BLOCKS, SCOOLP_DEFAULT_GRID_LAYOUT };
 export { REINSTALLP_BLOCKS, REINSTALLP_DEFAULT_GRID_LAYOUT };
 export { RECYCLEU_BLOCKS, RECYCLEU_DEFAULT_GRID_LAYOUT };
 export { ENCODEB_BLOCKS, ENCODEB_DEFAULT_GRID_LAYOUT };
+export { KAVVKA_BLOCKS, KAVVKA_DEFAULT_GRID_LAYOUT };
 
 // ============ 注册表 ============
 export const nodeBlockRegistry: Record<string, NodeBlockLayout> = {
@@ -131,7 +133,8 @@ export const nodeBlockRegistry: Record<string, NodeBlockLayout> = {
   scoolp: { nodeType: 'scoolp', blocks: SCOOLP_BLOCKS, defaultGridLayout: SCOOLP_DEFAULT_GRID_LAYOUT },
   reinstallp: { nodeType: 'reinstallp', blocks: REINSTALLP_BLOCKS, defaultGridLayout: REINSTALLP_DEFAULT_GRID_LAYOUT },
   recycleu: { nodeType: 'recycleu', blocks: RECYCLEU_BLOCKS, defaultGridLayout: RECYCLEU_DEFAULT_GRID_LAYOUT },
-  encodeb: { nodeType: 'encodeb', blocks: ENCODEB_BLOCKS, defaultGridLayout: ENCODEB_DEFAULT_GRID_LAYOUT }
+  encodeb: { nodeType: 'encodeb', blocks: ENCODEB_BLOCKS, defaultGridLayout: ENCODEB_DEFAULT_GRID_LAYOUT },
+  kavvka: { nodeType: 'kavvka', blocks: KAVVKA_BLOCKS, defaultGridLayout: KAVVKA_DEFAULT_GRID_LAYOUT }
 };
 
 // ============ 工具函数 ============

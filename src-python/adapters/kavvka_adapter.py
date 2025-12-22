@@ -1,0 +1,267 @@
+"""
+kavvka 适配器
+Czkawka 辅助工具 - 处理图片文件夹并生成路径
+
+功能：
+- 查找画师文件夹（包含[]标记的文件夹）
+- 移动同级文件夹到 #compare 文件夹
+- 生成 Czkawka 路径字符串
+"""
+
+import shutil
+from datetime import datetime
+from pathlib import Path
+from typing import Callable, Dict, List, Optional, Tuple
+
+from pydantic import BaseModel, Field
+
+from .base import BaseAdapter, AdapterOutput
+
+
+class KavvkaInput(BaseModel):
+    """kavvka 输入参数"""
+    action: str = Field(default="process", description="操作类型: process, find_artist")
+    paths: List[str] = Field(default_factory=list, description="源路径列表")
+    force: bool = Field(default=False, description="强制移动，不询问确认")
+
+
+class KavvkaOutput(AdapterOutput):
+    """kavvka 输出结果"""
+    all_combined_paths: List[str] = Field(default_factory=list, description="所有合并路径")
+    results: List[Dict] = Field(default_factory=list, description="处理结果列表")
+
+
+class KavvkaAdapter(BaseAdapter):
+    """
+    kavvka 适配器
+    
+    功能：Czkawka 辅助工具
+    """
+    
+    name = "kavvka"
+    display_name = "Kavvka"
+    description = "Czkawka 辅助工具，处理图片文件夹并生成路径"
+    category = "image"
+    icon = "🖼️"
+    required_packages = []
+    input_schema = KavvkaInput
+    output_schema = KavvkaOutput
+    
+    def _import_module(self) -> Dict:
+        """无需导入外部模块"""
+        return {}
+    
+    def _is_artist_folder(self, path: Path) -> bool:
+        """判断是否为画师文件夹（包含[]标记）"""
+        return '[' in path.name and ']' in path.name
+    
+    def _find_artist_folder(self, path: Path) -> Optional[Path]:
+        """从给定路径查找画师文件夹"""
+        # 如果是压缩包，使用其所在目录
+        if path.is_file() and path.suffix.lower() in ['.zip', '.7z', '.rar']:
+            base_path = path.parent
+        else:
+            base_path = path
+        
+        # 向上查找画师文件夹
+        current = base_path
+        while current != current.parent:
+            if self._is_artist_folder(current) and current.exists():
+                return current
+            current = current.parent
+        
+        # 搜索当前目录下的画师文件夹
+        if base_path.is_dir():
+            for entry in base_path.iterdir():
+                if entry.is_dir() and self._is_artist_folder(entry):
+                    return entry
+        
+        return None
+    
+    def _get_siblings_to_move(self, path: Path, artist_folder: Path) -> List[Path]:
+        """获取需要移动的同级文件夹"""
+        siblings = []
+        parent_dir = path.parent if path.is_file() else path
+        
+        if not parent_dir.is_dir():
+            return siblings
+        
+        for entry in parent_dir.iterdir():
+            if (entry.is_dir() and 
+                entry.resolve() != path.resolve() and 
+                entry.name != "#compare" and 
+                not self._is_artist_folder(entry)):
+                siblings.append(entry)
+        
+        return siblings
+    
+    def _create_compare_folder(self, artist_folder: Path) -> Path:
+        """创建比较文件夹"""
+        compare_folder = artist_folder / "#compare"
+        compare_folder.mkdir(exist_ok=True)
+        return compare_folder
+    
+    def _move_folders(
+        self, 
+        folders: List[Path], 
+        compare_folder: Path,
+        on_log: Optional[Callable[[str], None]] = None
+    ) -> List[Dict]:
+        """移动文件夹到比较文件夹"""
+        moved = []
+        
+        for folder in folders:
+            try:
+                target = compare_folder / folder.name
+                
+                # 如果目标已存在，添加时间戳
+                if target.exists():
+                    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+                    target = compare_folder / f"{folder.name}_{timestamp}"
+                
+                shutil.move(str(folder), str(target))
+                moved.append({
+                    "source": str(folder),
+                    "target": str(target),
+                    "success": True
+                })
+                if on_log:
+                    on_log(f"✅ 移动: {folder.name} -> #compare")
+            except Exception as e:
+                moved.append({
+                    "source": str(folder),
+                    "error": str(e),
+                    "success": False
+                })
+                if on_log:
+                    on_log(f"❌ 移动失败 {folder.name}: {e}")
+        
+        return moved
+    
+    async def execute(
+        self,
+        input_data: KavvkaInput,
+        on_progress: Optional[Callable[[int, str], None]] = None,
+        on_log: Optional[Callable[[str], None]] = None
+    ) -> KavvkaOutput:
+        """执行 kavvka 操作"""
+        action = input_data.action
+        
+        if action == "process":
+            return await self._process(input_data, on_progress, on_log)
+        elif action == "find_artist":
+            return await self._find_artist(input_data, on_progress, on_log)
+        else:
+            return KavvkaOutput(
+                success=False,
+                message=f"未知操作: {action}"
+            )
+    
+    async def _process(
+        self,
+        input_data: KavvkaInput,
+        on_progress: Optional[Callable[[int, str], None]] = None,
+        on_log: Optional[Callable[[str], None]] = None
+    ) -> KavvkaOutput:
+        """处理路径，移动文件夹并生成 Czkawka 路径"""
+        if not input_data.paths:
+            return KavvkaOutput(success=False, message="请提供路径")
+        
+        all_combined_paths: List[str] = []
+        results: List[Dict] = []
+        success_count = 0
+        total = len(input_data.paths)
+        
+        for i, path_str in enumerate(input_data.paths):
+            path = Path(path_str)
+            
+            if on_progress:
+                on_progress(int((i / total) * 100), f"处理 {path.name}")
+            
+            if not path.exists():
+                if on_log:
+                    on_log(f"❌ 路径不存在: {path}")
+                continue
+            
+            # 查找画师文件夹
+            artist_folder = self._find_artist_folder(path)
+            if not artist_folder:
+                if on_log:
+                    on_log(f"❌ 未找到画师文件夹: {path}")
+                continue
+            
+            if on_log:
+                on_log(f"📁 画师文件夹: {artist_folder.name}")
+            
+            # 创建比较文件夹
+            compare_folder = self._create_compare_folder(artist_folder)
+            
+            # 获取并移动同级文件夹
+            siblings = self._get_siblings_to_move(path, artist_folder)
+            moved = []
+            if siblings:
+                if on_log:
+                    on_log(f"📦 发现 {len(siblings)} 个同级文件夹")
+                moved = self._move_folders(siblings, compare_folder, on_log)
+            
+            # 生成 Czkawka 路径
+            input_path = str(path).replace('\\', '/')
+            compare_path = str(compare_folder).replace('\\', '/')
+            combined_path = f"{input_path};{compare_path}"
+            all_combined_paths.append(combined_path)
+            
+            results.append({
+                "path": str(path),
+                "artist_folder": str(artist_folder),
+                "compare_folder": str(compare_folder),
+                "moved_folders": moved,
+                "combined_path": combined_path
+            })
+            
+            success_count += 1
+            if on_log:
+                on_log(f"✅ 路径: {combined_path}")
+        
+        if on_progress:
+            on_progress(100, "处理完成")
+        
+        return KavvkaOutput(
+            success=success_count > 0,
+            message=f"处理完成，成功 {success_count}/{total}",
+            all_combined_paths=all_combined_paths,
+            results=results,
+            data={"all_combined_paths": all_combined_paths, "results": results}
+        )
+    
+    async def _find_artist(
+        self,
+        input_data: KavvkaInput,
+        on_progress: Optional[Callable[[int, str], None]] = None,
+        on_log: Optional[Callable[[str], None]] = None
+    ) -> KavvkaOutput:
+        """仅查找画师文件夹，不移动"""
+        if not input_data.paths:
+            return KavvkaOutput(success=False, message="请提供路径")
+        
+        results: List[Dict] = []
+        
+        for path_str in input_data.paths:
+            path = Path(path_str)
+            if not path.exists():
+                continue
+            
+            artist_folder = self._find_artist_folder(path)
+            if artist_folder:
+                results.append({
+                    "path": str(path),
+                    "artist_folder": str(artist_folder)
+                })
+                if on_log:
+                    on_log(f"✅ {path.name} -> {artist_folder.name}")
+        
+        return KavvkaOutput(
+            success=len(results) > 0,
+            message=f"找到 {len(results)} 个画师文件夹",
+            results=results,
+            data={"results": results}
+        )

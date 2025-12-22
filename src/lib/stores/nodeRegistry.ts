@@ -30,6 +30,7 @@ import { ScoolpNode } from '$lib/components/nodes/scoolp';
 import { ReinstallpNode } from '$lib/components/nodes/reinstallp';
 import { RecycleuNode } from '$lib/components/nodes/recycleu';
 import { EncodebNode } from '$lib/components/nodes/encodeb';
+import { KavvkaNode } from '$lib/components/nodes/kavvka';
 
 /** 节点注册项 - 包含定义和组件 */
 export interface NodeRegistryEntry extends NodeDefinition {
@@ -337,6 +338,20 @@ export const NODE_REGISTRY: NodeRegistryEntry[] = [
       src_encoding: { type: 'string', label: '源编码', default: 'cp437' },
       dst_encoding: { type: 'string', label: '目标编码', default: 'cp936' },
       strategy: { type: 'select', label: '策略', default: 'replace' }
+    }
+  },
+  {
+    type: 'kavvka',
+    category: 'tool',
+    label: 'kavvka',
+    description: 'Czkawka 辅助：处理图片文件夹，生成比较路径',
+    icon: 'Image',
+    inputs: ['path'],
+    outputs: ['path'],
+    component: KavvkaNode,
+    configSchema: {
+      paths: { type: 'array', label: '路径列表', default: [] },
+      force: { type: 'boolean', label: '强制移动', default: false }
     }
   },
 

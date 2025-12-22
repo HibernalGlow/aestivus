@@ -29,6 +29,7 @@ _ADAPTER_REGISTRY: Dict[str, str] = {
     "reinstallp": "adapters.reinstallp_adapter.ReinstallpAdapter",
     "recycleu": "adapters.recycleu_adapter.RecycleuAdapter",
     "encodeb": "adapters.encodeb_adapter.EncodebAdapter",
+    "kavvka": "adapters.kavvka_adapter.KavvkaAdapter",
 }
 
 # 适配器实例缓存

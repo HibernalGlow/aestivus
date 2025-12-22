@@ -9,6 +9,9 @@ import { Store } from '@tanstack/store';
 // localStorage key
 const STORAGE_KEY = 'aestival-node-states';
 
+// 最大存储大小（字节）- 限制为 2MB
+const MAX_STORAGE_SIZE = 2 * 1024 * 1024;
+
 // 节点状态 Map 类型
 type NodeStatesMap = Map<string, unknown>;
 
@@ -28,15 +31,68 @@ function loadFromStorage(): NodeStatesMap {
 }
 
 /**
+ * 清理大型数据字段，只保留必要的状态
+ */
+function cleanStateForStorage(state: unknown): unknown {
+  if (state === null || state === undefined) return state;
+  if (typeof state !== 'object') return state;
+  if (Array.isArray(state)) {
+    // 限制数组长度
+    if (state.length > 100) {
+      return state.slice(0, 100);
+    }
+    return state.map(cleanStateForStorage);
+  }
+  
+  const cleaned: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(state as Record<string, unknown>)) {
+    // 跳过大型数据字段
+    if (key === 'scanResult' || key === 'previewData' || key === 'logs' || 
+        key === 'output' || key === 'result' || key === 'items' ||
+        key === 'fileList' || key === 'archives' || key === 'folders') {
+      continue;
+    }
+    // 跳过过长的字符串
+    if (typeof value === 'string' && value.length > 1000) {
+      cleaned[key] = value.slice(0, 1000);
+      continue;
+    }
+    cleaned[key] = cleanStateForStorage(value);
+  }
+  return cleaned;
+}
+
+/**
  * 保存状态到 localStorage
  */
 function saveToStorage(states: NodeStatesMap): void {
   if (typeof window === 'undefined') return;
   try {
-    const obj = Object.fromEntries(states);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(obj));
+    // 清理每个节点的状态
+    const cleanedStates: Record<string, unknown> = {};
+    for (const [nodeId, state] of states) {
+      cleanedStates[nodeId] = cleanStateForStorage(state);
+    }
+    
+    const json = JSON.stringify(cleanedStates);
+    
+    // 检查大小
+    if (json.length > MAX_STORAGE_SIZE) {
+      console.warn('[nodeStateStore] 状态过大，清理旧数据');
+      // 只保留最近的 20 个节点
+      const entries = Object.entries(cleanedStates);
+      const trimmed = Object.fromEntries(entries.slice(-20));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
+      return;
+    }
+    
+    localStorage.setItem(STORAGE_KEY, json);
   } catch (e) {
-    console.warn('[nodeStateStore] Failed to save to localStorage:', e);
+    console.warn('[nodeStateStore] 保存失败，清理存储:', e);
+    // 清理存储
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {}
   }
 }
 

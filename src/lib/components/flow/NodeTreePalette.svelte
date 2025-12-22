@@ -1,16 +1,17 @@
 <script lang="ts">
   /**
    * NodeTreePalette - 节点树面板
-   * 支持分类展示、搜索过滤、拖拽添加到画布、收藏、全屏打开、JSON 导入导出
+   * 支持分类展示、搜索过滤、分类内拖拽排序、拖拽添加到画布、全屏打开、JSON 导入导出
    */
   import { NODE_DEFINITIONS } from '$lib/stores/nodeRegistry';
   import { flowStore } from '$lib/stores';
   import { fullscreenNodeStore } from '$lib/stores/fullscreenNode.svelte';
+  import { dndzone, TRIGGERS } from 'svelte-dnd-action';
   import {
     Clipboard, Folder, FileInput, Package, Search,
     FolderSync, FileText, Video, Terminal, GripVertical, Download, Upload,
     ChevronRight, ChevronDown, Trash2, Image, MousePointer, FolderInput,
-    Clock, Link, BookOpen, TriangleAlert, Star, Maximize2
+    Clock, Link, BookOpen, TriangleAlert, Maximize2
   } from '@lucide/svelte';
 
   // 图标映射
@@ -22,6 +23,7 @@
   };
 
   const STORAGE_KEY = 'node-tree-layout';
+  const flipDurationMs = 150;
 
   let searchQuery = $state('');
   let nodeIdCounter = 1;
@@ -150,11 +152,18 @@
           localStorage.removeItem(STORAGE_KEY);
           return getDefaultTreeData();
         }
-        // 确保每个文件夹都有 items 数组
+        // 确保每个文件夹都有 items 数组，并去重
         function ensureItems(folders: TreeFolder[]) {
+          const seenIds = new Set<string>();
           for (const folder of folders) {
             if (!folder.items) folder.items = [];
             if (!folder.children) folder.children = [];
+            // 去重：只保留第一次出现的 id
+            folder.items = folder.items.filter(item => {
+              if (seenIds.has(item.id)) return false;
+              seenIds.add(item.id);
+              return true;
+            });
             ensureItems(folder.children);
           }
         }
@@ -197,8 +206,40 @@
   function onDragStart(event: DragEvent, type: string, label: string) {
     if (event.dataTransfer) {
       event.dataTransfer.setData('application/json', JSON.stringify({ type, label }));
-      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.effectAllowed = 'copy';
     }
+  }
+
+  // dnd-action: 分类内排序
+  function handleDndConsider(folderId: string, e: CustomEvent<{ items: NodeItem[]; info: { trigger: string } }>) {
+    updateFolderItems(folderId, e.detail.items);
+  }
+
+  function handleDndFinalize(folderId: string, e: CustomEvent<{ items: NodeItem[]; info: { trigger: string } }>) {
+    const { items, info } = e.detail;
+    // 如果拖出了所有 dnd-zone，恢复原来的 items（不删除节点）
+    if (info.trigger === TRIGGERS.DROPPED_OUTSIDE_OF_ANY) {
+      // 不做任何处理，让原生拖拽接管
+      return;
+    }
+    updateFolderItems(folderId, items);
+    saveTreeData();
+  }
+
+  // 更新文件夹的 items
+  function updateFolderItems(folderId: string, items: NodeItem[]) {
+    function update(folders: TreeFolder[]): boolean {
+      for (const folder of folders) {
+        if (folder.id === folderId) {
+          folder.items = items;
+          return true;
+        }
+        if (update(folder.children)) return true;
+      }
+      return false;
+    }
+    update(treeData);
+    treeData = [...treeData];
   }
 
   // 导出 JSON
@@ -335,22 +376,34 @@
           </button>
 
           {#if folder.expanded}
-            <!-- 节点列表 -->
+            <!-- 节点列表 - 支持分类内拖拽排序 -->
             {#if folder.items.length > 0}
-              <div class="space-y-1 ml-1">
+              <div 
+                class="space-y-1 ml-1 min-h-[8px]"
+                use:dndzone={{ 
+                  items: folder.items, 
+                  flipDurationMs,
+                  dropTargetStyle: { outline: '2px dashed hsl(var(--primary))', outlineOffset: '-2px' }
+                }}
+                onconsider={(e) => handleDndConsider(folder.id, e)}
+                onfinalize={(e) => handleDndFinalize(folder.id, e)}
+              >
                 {#each folder.items.filter(item => nodeMatches(item, searchQuery)) as item (item.id)}
                   {@const Icon = icons[item.icon] || Terminal}
                   <div class="flex items-center gap-1 group">
-                    <button
+                    <div
                       class="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:border-{color}-400 hover:bg-{color}-50 dark:hover:bg-{color}-950/30 transition-colors cursor-grab active:cursor-grabbing bg-card"
                       draggable="true"
                       ondragstart={(e) => onDragStart(e, item.type, item.label)}
                       onclick={() => addNode(item.type, item.label)}
+                      onkeydown={(e) => e.key === 'Enter' && addNode(item.type, item.label)}
+                      role="button"
+                      tabindex="0"
                     >
                       <GripVertical class="w-3 h-3 text-muted-foreground" />
                       <Icon class="w-4 h-4 text-{color}-600 dark:text-{color}-400" />
                       <span class="text-sm text-left flex-1">{item.label}</span>
-                    </button>
+                    </div>
                     <!-- 全屏打开按钮 -->
                     <button
                       class="p-1.5 rounded opacity-0 group-hover:opacity-100 hover:bg-muted transition-all"
@@ -384,20 +437,32 @@
                   </button>
 
                   {#if subFolder.expanded}
-                    <div class="space-y-1 ml-3">
+                    <div 
+                      class="space-y-1 ml-3 min-h-[8px]"
+                      use:dndzone={{ 
+                        items: subFolder.items, 
+                        flipDurationMs,
+                        dropTargetStyle: { outline: '2px dashed hsl(var(--primary))', outlineOffset: '-2px' }
+                      }}
+                      onconsider={(e) => handleDndConsider(subFolder.id, e)}
+                      onfinalize={(e) => handleDndFinalize(subFolder.id, e)}
+                    >
                       {#each subFolder.items.filter(item => nodeMatches(item, searchQuery)) as item (item.id)}
                         {@const Icon = icons[item.icon] || Terminal}
                         <div class="flex items-center gap-1 group">
-                          <button
+                          <div
                             class="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:border-{color}-400 hover:bg-{color}-50 dark:hover:bg-{color}-950/30 transition-colors cursor-grab active:cursor-grabbing bg-card"
                             draggable="true"
                             ondragstart={(e) => onDragStart(e, item.type, item.label)}
                             onclick={() => addNode(item.type, item.label)}
+                            onkeydown={(e) => e.key === 'Enter' && addNode(item.type, item.label)}
+                            role="button"
+                            tabindex="0"
                           >
                             <GripVertical class="w-3 h-3 text-muted-foreground" />
                             <Icon class="w-4 h-4 text-{color}-600 dark:text-{color}-400" />
                             <span class="text-sm text-left flex-1">{item.label}</span>
-                          </button>
+                          </div>
                           <!-- 全屏打开按钮 -->
                           <button
                             class="p-1.5 rounded opacity-0 group-hover:opacity-100 hover:bg-muted transition-all"

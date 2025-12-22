@@ -157,68 +157,6 @@
     return [...layout, ...newItems];
   }
 
-  /** 
-   * 自动修复节点模式的布局
-   * 重新计算 x, y 坐标，确保 w=1 的区块能合并到同一行
-   */
-  function autoFixNormalLayout(layout: GridItem[]): GridItem[] {
-    if (layout.length === 0) return layout;
-    
-    // 按原有顺序保持，但重新计算位置
-    const result: GridItem[] = [];
-    let currentY = 0;
-    let currentX = 0;
-    
-    for (const item of layout) {
-      const w = Math.min(item.w, 2); // 节点模式最大宽度为 2
-      
-      // 如果当前行放不下，换行
-      if (currentX + w > 2) {
-        currentY++;
-        currentX = 0;
-      }
-      
-      result.push({
-        ...item,
-        x: currentX,
-        y: currentY,
-        w: w,
-      });
-      
-      currentX += w;
-      
-      // 如果当前行已满，换行
-      if (currentX >= 2) {
-        currentY++;
-        currentX = 0;
-      }
-    }
-    
-    return result;
-  }
-
-  /** 检查节点模式布局是否需要修复 */
-  function needsLayoutFix(layout: GridItem[]): boolean {
-    if (layout.length === 0) return false;
-    
-    // 检查是否有两个连续的 w=1 区块不在同一行
-    for (let i = 0; i < layout.length - 1; i++) {
-      const current = layout[i];
-      const next = layout[i + 1];
-      
-      // 如果当前是 w=1 且下一个也是 w=1，它们应该在同一行
-      if (current.w === 1 && next.w === 1) {
-        // 检查它们是否在同一行（y 相同，x 不同）
-        if (current.y !== next.y || current.x === next.x) {
-          // 不在同一行，或者 x 相同（重叠），需要修复
-          return true;
-        }
-      }
-    }
-    
-    return false;
-  }
-
   function initNodeConfig(): NodeConfig {
     const config = getOrCreateNodeConfig(
       nodeId,
@@ -240,15 +178,8 @@
       }
     } else {
       // 检查是否有缺失的区块
-      let updatedNormal = ensureAllBlocksInLayout(config.normal.gridLayout, 'normal');
-      
-      // 自动修复节点模式布局（确保 w=1 的区块合并到同一行）
-      if (needsLayoutFix(updatedNormal)) {
-        updatedNormal = autoFixNormalLayout(updatedNormal);
-        console.log(`[NodeLayoutRenderer] 自动修复 ${nodeType} 节点模式布局`);
-      }
-      
-      if (updatedNormal.length > config.normal.gridLayout.length || needsLayoutFix(config.normal.gridLayout)) {
+      const updatedNormal = ensureAllBlocksInLayout(config.normal.gridLayout, 'normal');
+      if (updatedNormal.length > config.normal.gridLayout.length) {
         updateGridLayout(nodeType, "normal", updatedNormal);
         needsUpdate = true;
       }
@@ -298,14 +229,8 @@
         updateGridLayout(nodeType, currentMode, defaultLayout);
     } else {
       // 检查是否有缺失的区块并添加
-      let updatedLayout = ensureAllBlocksInLayout(config[currentMode].gridLayout, currentMode);
-      
-      // 节点模式下自动修复布局
-      if (currentMode === 'normal' && needsLayoutFix(updatedLayout)) {
-        updatedLayout = autoFixNormalLayout(updatedLayout);
-        console.log(`[NodeLayoutRenderer] $effect 自动修复 ${nodeType} 节点模式布局`);
-        updateGridLayout(nodeType, currentMode, updatedLayout);
-      } else if (updatedLayout.length > config[currentMode].gridLayout.length) {
+      const updatedLayout = ensureAllBlocksInLayout(config[currentMode].gridLayout, currentMode);
+      if (updatedLayout.length > config[currentMode].gridLayout.length) {
         updateGridLayout(nodeType, currentMode, updatedLayout);
       }
     }

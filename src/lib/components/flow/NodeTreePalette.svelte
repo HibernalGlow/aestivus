@@ -1,32 +1,30 @@
 <script lang="ts">
   /**
    * NodeTreePalette - 节点树面板
-   * 支持分类展示、搜索过滤、拖拽添加到画布、拖拽移动分类、JSON 导入导出
+   * 支持分类展示、搜索过滤、拖拽添加到画布、JSON 导入导出
    */
   import { NODE_DEFINITIONS } from '$lib/stores/nodeRegistry';
   import { flowStore } from '$lib/stores';
-  import { dndzone, SOURCES, TRIGGERS } from 'svelte-dnd-action';
   import {
-    Clipboard, Folder, FileInput, Package, Search, AlertTriangle,
+    Clipboard, Folder, FileInput, Package, Search,
     FolderSync, FileText, Video, Terminal, GripVertical, Download, Upload,
-    ChevronRight, ChevronDown, Star, Archive, Monitor, Type,
-    Clock, Link, Trash2, Filter, BookOpen, Image, MousePointer, FolderInput
+    ChevronRight, ChevronDown, Trash2, Image, MousePointer, FolderInput,
+    Clock, Link, BookOpen, TriangleAlert
   } from '@lucide/svelte';
 
   // 图标映射
   const icons: Record<string, any> = {
-    Clipboard, Folder, FileInput, Package, Search, AlertTriangle,
+    Clipboard, Folder, FileInput, Package, Search, TriangleAlert,
     FolderSync, FileText, Video, Terminal, Image, Clock, Link,
-    Trash2, Filter, BookOpen, MousePointer, FolderInput, Download
+    Trash2, BookOpen, MousePointer, FolderInput, Download,
+    AlertTriangle: TriangleAlert, Filter: Search
   };
 
   const STORAGE_KEY = 'node-tree-layout';
-  const flipDurationMs = 200;
 
   let searchQuery = $state('');
   let nodeIdCounter = 1;
   let fileInput: HTMLInputElement;
-  let dragDisabled = $state(true);  // 默认禁用拖拽，按住手柄才启用
 
   // 节点项类型
   interface NodeItem {
@@ -59,7 +57,7 @@
       {
         id: 'favorites',
         name: '收藏',
-        icon: 'Star',
+        icon: 'Folder',
         expanded: true,
         items: [],
         children: [],
@@ -92,7 +90,7 @@
           {
             id: 'tool-archive',
             name: '压缩包',
-            icon: 'Archive',
+            icon: 'Package',
             expanded: false,
             items: ['bandia', 'rawfilter', 'findz', 'encodeb']
               .map(t => buildNodeItem(t)!).filter(Boolean),
@@ -110,7 +108,7 @@
           {
             id: 'tool-system',
             name: '系统',
-            icon: 'Monitor',
+            icon: 'Terminal',
             expanded: false,
             items: ['sleept', 'scoolp', 'reinstallp', 'recycleu', 'owithu']
               .map(t => buildNodeItem(t)!).filter(Boolean),
@@ -119,7 +117,7 @@
           {
             id: 'tool-text',
             name: '文本',
-            icon: 'Type',
+            icon: 'FileText',
             expanded: false,
             items: ['linedup', 'crashu', 'seriex']
               .map(t => buildNodeItem(t)!).filter(Boolean),
@@ -145,10 +143,9 @@
     if (saved) {
       try {
         const data = JSON.parse(saved);
-        // 检查是否是旧格式（有 nodeTypes 而没有 items）
+        // 检查是否是旧格式
         const isOldFormat = data.some((f: any) => f.nodeTypes !== undefined && f.items === undefined);
         if (isOldFormat) {
-          console.warn('检测到旧格式数据，使用默认布局');
           localStorage.removeItem(STORAGE_KEY);
           return getDefaultTreeData();
         }
@@ -163,7 +160,6 @@
         ensureItems(data);
         return data;
       } catch (e) {
-        console.warn('加载节点树布局失败，使用默认布局:', e);
         localStorage.removeItem(STORAGE_KEY);
       }
     }
@@ -189,37 +185,11 @@
   }
 
   // 拖拽到画布
-  function onDragStartToCanvas(event: DragEvent, type: string, label: string) {
+  function onDragStart(event: DragEvent, type: string, label: string) {
     if (event.dataTransfer) {
       event.dataTransfer.setData('application/json', JSON.stringify({ type, label }));
-      event.dataTransfer.effectAllowed = 'copy';
+      event.dataTransfer.effectAllowed = 'move';
     }
-  }
-
-  // 处理 dnd 拖拽（分类内排序）
-  function handleDndConsider(folderId: string, e: CustomEvent<{ items: NodeItem[] }>) {
-    updateFolderItems(folderId, e.detail.items);
-  }
-
-  function handleDndFinalize(folderId: string, e: CustomEvent<{ items: NodeItem[] }>) {
-    updateFolderItems(folderId, e.detail.items);
-    saveTreeData();
-  }
-
-  // 更新文件夹的 items
-  function updateFolderItems(folderId: string, items: NodeItem[]) {
-    function update(folders: TreeFolder[]): boolean {
-      for (const folder of folders) {
-        if (folder.id === folderId) {
-          folder.items = items;
-          return true;
-        }
-        if (update(folder.children)) return true;
-      }
-      return false;
-    }
-    update(treeData);
-    treeData = [...treeData];  // 触发响应式更新
   }
 
   // 导出 JSON
@@ -247,7 +217,6 @@
         treeData = data;
         saveTreeData();
       } catch (err) {
-        console.error('导入 JSON 失败:', err);
         alert('导入失败：JSON 格式错误');
       }
     };
@@ -287,17 +256,6 @@
     if (folderId === 'output' || folderId.startsWith('output')) return 'amber';
     if (folderId === 'favorites') return 'yellow';
     return 'blue';
-  }
-
-  // 启用拖拽（按住手柄时）
-  function startDrag(e: Event) {
-    e.preventDefault();
-    dragDisabled = false;
-  }
-
-  // 拖拽结束后禁用
-  function handleDragEnd() {
-    dragDisabled = true;
   }
 </script>
 
@@ -362,47 +320,28 @@
             {/if}
             <FolderIcon class="w-3.5 h-3.5" />
             <span>{folder.name}</span>
-            <span class="text-[10px] opacity-50">({folder.items.length})</span>
+            {#if folder.items.length > 0}
+              <span class="text-[10px] opacity-50">({folder.items.length})</span>
+            {/if}
           </button>
 
           {#if folder.expanded}
-            <!-- 节点列表 - 支持拖拽排序（仅当有节点时显示） -->
+            <!-- 节点列表 -->
             {#if folder.items.length > 0}
-              <div
-                class="space-y-1 ml-1"
-                use:dndzone={{
-                  items: folder.items,
-                  flipDurationMs,
-                  dragDisabled: dragDisabled || !!searchQuery,
-                  dropTargetStyle: { outline: '2px dashed hsl(var(--primary))', outlineOffset: '-2px' }
-                }}
-                onconsider={(e) => handleDndConsider(folder.id, e)}
-                onfinalize={(e) => { handleDndFinalize(folder.id, e); handleDragEnd(); }}
-              >
-              {#each folder.items.filter(item => nodeMatches(item, searchQuery)) as item (item.id)}
-                {@const Icon = icons[item.icon] || Terminal}
-                <div
-                  class="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:border-{color}-400 hover:bg-{color}-50 dark:hover:bg-{color}-950/30 transition-colors bg-card"
-                  draggable="true"
-                  ondragstart={(e) => onDragStartToCanvas(e, item.type, item.label)}
-                >
-                  <!-- svelte-ignore a11y_no_static_element_interactions -->
-                  <div
-                    class="cursor-grab active:cursor-grabbing touch-none"
-                    onmousedown={startDrag}
-                    ontouchstart={startDrag}
-                  >
-                    <GripVertical class="w-3 h-3 text-muted-foreground" />
-                  </div>
+              <div class="space-y-1 ml-1">
+                {#each folder.items.filter(item => nodeMatches(item, searchQuery)) as item (item.id)}
+                  {@const Icon = icons[item.icon] || Terminal}
                   <button
-                    class="flex-1 flex items-center gap-2 text-left"
+                    class="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:border-{color}-400 hover:bg-{color}-50 dark:hover:bg-{color}-950/30 transition-colors cursor-grab active:cursor-grabbing bg-card"
+                    draggable="true"
+                    ondragstart={(e) => onDragStart(e, item.type, item.label)}
                     onclick={() => addNode(item.type, item.label)}
                   >
+                    <GripVertical class="w-3 h-3 text-muted-foreground" />
                     <Icon class="w-4 h-4 text-{color}-600 dark:text-{color}-400" />
-                    <span class="text-sm">{item.label}</span>
+                    <span class="text-sm text-left flex-1">{item.label}</span>
                   </button>
-                </div>
-              {/each}
+                {/each}
               </div>
             {/if}
 
@@ -426,40 +365,19 @@
                   </button>
 
                   {#if subFolder.expanded}
-                    <div
-                      class="space-y-1 ml-3 min-h-[20px]"
-                      use:dndzone={{
-                        items: subFolder.items,
-                        flipDurationMs,
-                        dragDisabled: dragDisabled || !!searchQuery,
-                        dropTargetStyle: { outline: '2px dashed hsl(var(--primary))', outlineOffset: '-2px' }
-                      }}
-                      onconsider={(e) => handleDndConsider(subFolder.id, e)}
-                      onfinalize={(e) => { handleDndFinalize(subFolder.id, e); handleDragEnd(); }}
-                    >
+                    <div class="space-y-1 ml-3">
                       {#each subFolder.items.filter(item => nodeMatches(item, searchQuery)) as item (item.id)}
                         {@const Icon = icons[item.icon] || Terminal}
-                        <div
-                          class="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:border-{color}-400 hover:bg-{color}-50 dark:hover:bg-{color}-950/30 transition-colors bg-card"
+                        <button
+                          class="w-full flex items-center gap-2 px-3 py-2 rounded-lg border border-border hover:border-{color}-400 hover:bg-{color}-50 dark:hover:bg-{color}-950/30 transition-colors cursor-grab active:cursor-grabbing bg-card"
                           draggable="true"
-                          ondragstart={(e) => onDragStartToCanvas(e, item.type, item.label)}
+                          ondragstart={(e) => onDragStart(e, item.type, item.label)}
+                          onclick={() => addNode(item.type, item.label)}
                         >
-                          <!-- svelte-ignore a11y_no_static_element_interactions -->
-                          <div
-                            class="cursor-grab active:cursor-grabbing touch-none"
-                            onmousedown={startDrag}
-                            ontouchstart={startDrag}
-                          >
-                            <GripVertical class="w-3 h-3 text-muted-foreground" />
-                          </div>
-                          <button
-                            class="flex-1 flex items-center gap-2 text-left"
-                            onclick={() => addNode(item.type, item.label)}
-                          >
-                            <Icon class="w-4 h-4 text-{color}-600 dark:text-{color}-400" />
-                            <span class="text-sm">{item.label}</span>
-                          </button>
-                        </div>
+                          <GripVertical class="w-3 h-3 text-muted-foreground" />
+                          <Icon class="w-4 h-4 text-{color}-600 dark:text-{color}-400" />
+                          <span class="text-sm text-left flex-1">{item.label}</span>
+                        </button>
                       {/each}
                     </div>
                   {/if}
@@ -474,6 +392,6 @@
 
   <!-- 提示 -->
   <div class="p-2 border-t text-xs text-muted-foreground text-center">
-    拖拽到画布添加 · 拖拽手柄排序
+    拖拽或点击添加节点 · 导出 JSON 自定义分类
   </div>
 </div>

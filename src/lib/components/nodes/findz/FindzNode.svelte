@@ -253,21 +253,36 @@
 
       if (response.logs) for (const m of response.logs) log(m);
 
+      // 调试：打印完整响应
+      console.log('FindzNode response:', JSON.stringify(response, null, 2).slice(0, 2000));
+
       if (response.success) {
         phase = 'completed'; progress = 100;
+        
+        // 兼容多种响应结构：
+        // 1. response.data.xxx (标准结构)
+        // 2. response.xxx (扁平结构)
+        const data = response.data || response;
+        
+        // 获取文件列表 - 尝试多个位置
+        const returnedFiles = data.files || response.files || [];
+        
         searchResult = {
-          total_count: response.data?.total_count ?? 0,
-          file_count: response.data?.file_count ?? 0,
-          dir_count: response.data?.dir_count ?? 0,
-          archive_count: response.data?.archive_count ?? 0,
-          nested_count: response.data?.nested_count ?? 0,
+          total_count: data.total_count ?? response.total_count ?? 0,
+          file_count: data.file_count ?? response.file_count ?? 0,
+          dir_count: data.dir_count ?? response.dir_count ?? 0,
+          archive_count: data.archive_count ?? response.archive_count ?? 0,
+          nested_count: data.nested_count ?? response.nested_count ?? 0,
         };
-        files = response.data?.files ?? [];
-        byExtension = response.data?.by_extension ?? {};
+        
+        log(`📊 返回文件数: ${returnedFiles.length}, 总计: ${searchResult.total_count}`);
+        
+        files = returnedFiles;
+        byExtension = data.by_extension ?? response.by_extension ?? {};
         
         // 更新统计
-        scannedCount = response.data?.scanned_files ?? scannedCount;
-        elapsedTime = response.data?.elapsed_time ?? elapsedTime;
+        scannedCount = data.scanned_files ?? response.scanned_files ?? scannedCount;
+        elapsedTime = data.elapsed_time ?? response.elapsed_time ?? elapsedTime;
         
         log(`✅ ${response.message}`);
       } else {
@@ -471,7 +486,7 @@
     <div class="flex-1 overflow-y-auto cq-padding">
       {#if files.length > 0}
         <div class="space-y-0.5">
-          {#each displayFiles as file (file.path)}
+          {#each displayFiles as file, idx (file.container ? `${file.container}//${file.path}//${idx}` : `${file.path}//${idx}`)}
             <div class="flex items-center gap-1 cq-text truncate py-0.5 hover:bg-muted/50 rounded px-1">
               {#if file.container}
                 <Package class="w-3 h-3 text-purple-500 shrink-0" />

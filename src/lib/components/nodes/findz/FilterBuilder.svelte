@@ -70,7 +70,7 @@
     onAdvancedChange
   }: Props = $props();
 
-  // 默认配置
+  // 默认配置（默认排除目录，只搜索文件）
   const defaultConfig: FilterConfig = {
     fileTypes: [],
     sizeEnabled: false,
@@ -85,7 +85,7 @@
     nameMode: 'contains',
     locationEnabled: false,
     inArchive: 'any',
-    itemType: 'any',
+    itemType: 'file',  // 默认只搜索文件，排除目录
     customExts: [],
     excludeExts: [],
   };
@@ -103,8 +103,17 @@
     isBuiltin?: boolean;
   }
 
-  // 内置预设
+  // 内置预设（都默认排除目录）
   const BUILTIN_PRESETS: Preset[] = [
+    {
+      id: 'all-files',
+      name: '所有文件',
+      isBuiltin: true,
+      config: {
+        ...defaultConfig,
+        itemType: 'file',
+      }
+    },
     {
       id: 'jxl-in-archive',
       name: '压缩包内JXL',
@@ -114,17 +123,19 @@
         customExts: ['jxl'],
         locationEnabled: true,
         inArchive: 'yes',
+        itemType: 'file',
       }
     },
     {
       id: 'archive-no-avif',
-      name: '压缩包不含AVIF',
+      name: '压缩包内(无AVIF/WEBP)',
       isBuiltin: true,
       config: {
         ...defaultConfig,
-        excludeExts: ['avif'],
+        excludeExts: ['avif', 'webp'],
         locationEnabled: true,
         inArchive: 'yes',
+        itemType: 'file',
       }
     },
     {
@@ -136,6 +147,7 @@
         sizeEnabled: true,
         sizeMin: '100M',
         sizeMax: '',
+        itemType: 'file',
       }
     },
     {
@@ -147,6 +159,7 @@
         fileTypes: ['images'],
         dateEnabled: true,
         datePreset: 'week',
+        itemType: 'file',
       }
     },
     {
@@ -158,6 +171,16 @@
         fileTypes: ['archives'],
         locationEnabled: true,
         inArchive: 'yes',
+        itemType: 'file',
+      }
+    },
+    {
+      id: 'dirs-only',
+      name: '仅目录',
+      isBuiltin: true,
+      config: {
+        ...defaultConfig,
+        itemType: 'dir',
       }
     },
   ];
@@ -923,7 +946,7 @@
         </select>
       </div>
       
-      <!-- 类型 -->
+      <!-- 类型（默认排除目录） -->
       <div class="flex items-center gap-2">
         <span class="text-muted-foreground">类型:</span>
         <select 
@@ -932,8 +955,8 @@
           {disabled}
           class="h-6 px-1 rounded border bg-background text-xs"
         >
-          <option value="any">全部</option>
           <option value="file">仅文件</option>
+          <option value="any">全部(含目录)</option>
           <option value="dir">仅目录</option>
         </select>
       </div>

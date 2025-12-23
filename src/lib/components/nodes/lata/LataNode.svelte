@@ -2,20 +2,23 @@
   /**
    * LataNode - Taskfile 任务启动器节点组件
    * 使用 lata 包列出和执行 Taskfile 中定义的任务
+   * 支持 xterm.js 终端显示实时输出
    */
   import { Handle, Position, NodeResizer } from '@xyflow/svelte';
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
   import { Progress } from '$lib/components/ui/progress';
+  import { onDestroy } from 'svelte';
 
   import { NodeLayoutRenderer } from '$lib/components/blocks';
   import { LATA_DEFAULT_GRID_LAYOUT } from './blocks';
   import { api } from '$lib/services/api';
   import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
+  import { getWsBaseUrl } from '$lib/stores/backend';
   import NodeWrapper from '../NodeWrapper.svelte';
   import { 
-    Play, LoaderCircle, Rocket, ListTodo,
-    CircleCheck, CircleX, Copy, Check, RotateCcw, FolderOpen, RefreshCw
+    Play, LoaderCircle, Rocket, ListTodo, Terminal,
+    CircleCheck, CircleX, Copy, Check, RotateCcw, FolderOpen, RefreshCw, Trash2, Wifi, WifiOff
   } from '@lucide/svelte';
 
   interface Props {
@@ -69,6 +72,13 @@
   let selectedTask = $state<string | null>(null);
   let taskArgs = $state('');
   let layoutRenderer = $state<any>(undefined);
+
+  // xterm 终端相关
+  let terminalContainer: HTMLDivElement | null = $state(null);
+  let term: any = null;
+  let fitAddon: any = null;
+  let terminalWs: WebSocket | null = null;
+  let terminalConnected = $state(false);
 
   let initialized = $state(false);
   
@@ -195,13 +205,18 @@
     progressText = `正在执行任务: ${selectedTask}`;
     log(`🚀 执行任务: ${selectedTask}`);
     
+    // 生成任务 ID 并连接 WebSocket
+    const taskId = `lata-${nodeId}-${Date.now()}`;
+    writeToTerminal(`\x1b[36m[lata]\x1b[0m 执行任务: ${selectedTask}`);
+    connectTerminalWs(taskId);
+    
     try {
       const response = await api.executeNode('lata', {
         action: 'execute',
         taskfile_path: taskfilePath,
         task_name: selectedTask,
         task_args: taskArgs
-      }) as any;
+      }, { taskId, nodeId }) as any;
       
       if (response.success) {
         phase = 'completed';
@@ -232,6 +247,111 @@
       setTimeout(() => { copied = false; }, 2000);
     } catch (e) { console.error('复制失败:', e); }
   }
+
+  // xterm 终端初始化
+  async function initTerminal() {
+    if (!terminalContainer || term) return;
+    
+    try {
+      const { Terminal } = await import('@xterm/xterm');
+      const { FitAddon } = await import('@xterm/addon-fit');
+      await import('@xterm/xterm/css/xterm.css');
+      
+      term = new Terminal({
+        cursorBlink: true,
+        fontSize: 12,
+        fontFamily: 'Consolas, Monaco, "Courier New", monospace',
+        theme: {
+          background: '#18181b',
+          foreground: '#d4d4d4',
+          cursor: '#d4d4d4',
+          selectionBackground: '#3b82f680',
+        },
+        scrollback: 1000,
+      });
+      
+      fitAddon = new FitAddon();
+      term.loadAddon(fitAddon);
+      term.open(terminalContainer);
+      fitAddon.fit();
+      
+      term.writeln('\x1b[36m[lata]\x1b[0m 终端已就绪，等待任务执行...');
+      
+      // 监听窗口大小变化
+      const resizeObserver = new ResizeObserver(() => {
+        if (fitAddon) fitAddon.fit();
+      });
+      resizeObserver.observe(terminalContainer);
+      
+    } catch (e) {
+      console.error('初始化终端失败:', e);
+    }
+  }
+
+  function clearTerminal() {
+    if (term) {
+      term.clear();
+      term.writeln('\x1b[36m[lata]\x1b[0m 终端已清空');
+    }
+  }
+
+  function writeToTerminal(text: string) {
+    if (term) {
+      term.writeln(text);
+    }
+  }
+
+  // 连接 WebSocket 获取实时输出
+  function connectTerminalWs(taskId: string) {
+    if (terminalWs) {
+      terminalWs.close();
+    }
+    
+    const wsUrl = `${getWsBaseUrl()}/v1/ws/tasks/${taskId}`;
+    terminalWs = new WebSocket(wsUrl);
+    
+    terminalWs.onopen = () => {
+      terminalConnected = true;
+      writeToTerminal('\x1b[32m[ws]\x1b[0m 已连接');
+    };
+    
+    terminalWs.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'log') {
+          writeToTerminal(msg.message);
+        } else if (msg.type === 'progress') {
+          writeToTerminal(`\x1b[33m[进度]\x1b[0m ${msg.progress}% - ${msg.message}`);
+        } else if (msg.type === 'status') {
+          const color = msg.status === 'completed' ? '32' : msg.status === 'error' ? '31' : '36';
+          writeToTerminal(`\x1b[${color}m[${msg.status}]\x1b[0m ${msg.message}`);
+        }
+      } catch {
+        writeToTerminal(event.data);
+      }
+    };
+    
+    terminalWs.onclose = () => {
+      terminalConnected = false;
+      writeToTerminal('\x1b[90m[ws]\x1b[0m 连接已关闭');
+    };
+    
+    terminalWs.onerror = () => {
+      writeToTerminal('\x1b[31m[ws]\x1b[0m 连接错误');
+    };
+  }
+
+  // 初始化终端
+  $effect(() => {
+    if (terminalContainer && !term) {
+      initTerminal();
+    }
+  });
+
+  onDestroy(() => {
+    if (terminalWs) terminalWs.close();
+    if (term) term.dispose();
+  });
 </script>
 
 
@@ -402,10 +522,37 @@
   </div>
 {/snippet}
 
+{#snippet terminalBlock()}
+  <div class="h-full flex flex-col">
+    <!-- 终端工具栏 -->
+    <div class="flex items-center justify-between mb-1 shrink-0">
+      <span class="cq-text font-semibold flex items-center gap-1">
+        <Terminal class="cq-icon text-green-400" />终端
+      </span>
+      <div class="flex items-center gap-1">
+        {#if terminalConnected}
+          <Wifi class="w-3 h-3 text-green-500" />
+        {:else}
+          <WifiOff class="w-3 h-3 text-muted-foreground" />
+        {/if}
+        <Button variant="ghost" size="icon" class="h-5 w-5" onclick={clearTerminal} title="清空终端">
+          <Trash2 class="w-3 h-3" />
+        </Button>
+      </div>
+    </div>
+    <!-- xterm 容器 -->
+    <div 
+      bind:this={terminalContainer}
+      class="flex-1 min-h-[120px] bg-zinc-900 rounded overflow-hidden"
+    ></div>
+  </div>
+{/snippet}
+
 {#snippet renderBlockContent(blockId: string)}
   {#if blockId === 'taskfile'}{@render taskfileBlock()}
   {:else if blockId === 'operation'}{@render operationBlock()}
   {:else if blockId === 'tasks'}{@render tasksBlock()}
+  {:else if blockId === 'terminal'}{@render terminalBlock()}
   {:else if blockId === 'log'}{@render logBlock()}
   {/if}
 {/snippet}

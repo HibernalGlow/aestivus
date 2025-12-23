@@ -11,7 +11,7 @@
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
   import { Progress } from '$lib/components/ui/progress';
-  import { onMount, onDestroy } from 'svelte';
+  import { onDestroy } from 'svelte';
 
   import { NodeLayoutRenderer } from '$lib/components/blocks';
   import type { GridItem } from '$lib/components/ui/dashboard-grid';
@@ -86,7 +86,6 @@
   
   // WebSocket 连接
   let ws: WebSocket | null = null;
-  let taskId = $state<string | null>(null);
   let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
   
   // 复制状态
@@ -236,7 +235,6 @@
     
     // 生成任务 ID 并连接 WebSocket
     const newTaskId = `findz-${nodeId}-${Date.now()}`;
-    taskId = newTaskId;
     connectWebSocket(newTaskId);
     
     log(`🔍 开始搜索: ${targetPath}`);
@@ -447,13 +445,22 @@
 
 <!-- 文件列表 -->
 {#snippet treeBlock()}
+  {@const displayLimit = 200}
+  {@const displayFiles = files.slice(0, displayLimit)}
+  {@const totalCount = searchResult?.total_count ?? files.length}
   <div class="h-full flex flex-col overflow-hidden">
     <div class="flex items-center justify-between cq-padding border-b bg-muted/30 shrink-0">
       <span class="cq-text font-semibold flex items-center gap-1">
         <Folder class="cq-icon text-yellow-500" />文件列表
       </span>
       <div class="flex items-center gap-1">
-        <span class="cq-text-sm text-muted-foreground">{files.length}</span>
+        <span class="cq-text-sm text-muted-foreground">
+          {#if totalCount > files.length}
+            {files.length.toLocaleString()}/{totalCount.toLocaleString()}
+          {:else}
+            {files.length.toLocaleString()}
+          {/if}
+        </span>
         {#if files.length > 0}
           <Button variant="ghost" size="icon" class="h-5 w-5" onclick={() => copyToClipboard(files.map(f => f.container ? `${f.container}//${f.path}` : f.path).join('\n'), v => copiedPath = v)}>
             {#if copiedPath}<Check class="w-3 h-3 text-green-500" />{:else}<Copy class="w-3 h-3" />{/if}
@@ -464,7 +471,7 @@
     <div class="flex-1 overflow-y-auto cq-padding">
       {#if files.length > 0}
         <div class="space-y-0.5">
-          {#each files.slice(0, 50) as file}
+          {#each displayFiles as file (file.path)}
             <div class="flex items-center gap-1 cq-text truncate py-0.5 hover:bg-muted/50 rounded px-1">
               {#if file.container}
                 <Package class="w-3 h-3 text-purple-500 shrink-0" />
@@ -475,8 +482,13 @@
               <span class="cq-text-sm text-muted-foreground shrink-0">{file.size_formatted}</span>
             </div>
           {/each}
-          {#if files.length > 50}
-            <div class="cq-text-sm text-muted-foreground text-center py-1">+{files.length - 50} 更多</div>
+          {#if files.length > displayLimit}
+            <div class="cq-text-sm text-muted-foreground text-center py-2 border-t mt-1">
+              显示前 {displayLimit} 条，共 {files.length.toLocaleString()} 条
+              {#if totalCount > files.length}
+                <br/><span class="text-orange-500">（总计 {totalCount.toLocaleString()} 条，已截断）</span>
+              {/if}
+            </div>
           {/if}
         </div>
       {:else}

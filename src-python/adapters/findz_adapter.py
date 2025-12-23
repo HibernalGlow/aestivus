@@ -56,6 +56,7 @@ class FindzInput(AdapterInput):
     follow_symlinks: bool = Field(default=False, description="跟随符号链接")
     no_archive: bool = Field(default=False, description="禁用压缩包搜索")
     max_results: int = Field(default=0, description="最大结果数量，0表示无限制")
+    max_return_files: int = Field(default=5000, description="最大返回文件数（用于前端显示），0表示全部返回")
     continue_on_error: bool = Field(default=True, description="遇到错误继续搜索")
 
 
@@ -365,6 +366,14 @@ class FindzAdapter(BaseAdapter):
                 if errors:
                     on_log(f"⚠️ {len(errors)} 个错误")
             
+            # 限制返回的文件数量（避免前端卡顿）
+            max_return = input_data.max_return_files
+            return_files = all_results[:max_return] if max_return > 0 else all_results
+            truncated = len(all_results) > len(return_files)
+            
+            if truncated and on_log:
+                on_log(f"📋 返回前 {len(return_files)} 条记录（共 {len(all_results)} 条）")
+            
             return FindzOutput(
                 success=True,
                 message=f"找到 {len(all_results)} 个文件 ({total_time:.1f}s)",
@@ -372,16 +381,16 @@ class FindzAdapter(BaseAdapter):
                 file_count=file_count,
                 dir_count=dir_count,
                 archive_count=archive_count,
-                files=all_results,
+                files=return_files,  # 只返回部分文件
                 by_extension=by_extension,
                 by_archive=by_archive,
-                errors=errors[:20],  # 只返回前20个错误
+                errors=errors[:20],
                 data={
                     'total_count': len(all_results),
                     'file_count': file_count,
                     'dir_count': dir_count,
                     'archive_count': archive_count,
-                    'files': all_results,
+                    'files': return_files,  # 只返回部分文件
                     'by_extension': by_extension,
                     'by_archive': by_archive,
                     'errors': errors[:20],
@@ -389,6 +398,8 @@ class FindzAdapter(BaseAdapter):
                     'where': where,
                     'scanned_files': scanned_files,
                     'elapsed_time': total_time,
+                    'truncated': truncated,
+                    'returned_count': len(return_files),
                 }
             )
             

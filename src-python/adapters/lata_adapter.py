@@ -69,9 +69,21 @@ class LataAdapter(BaseAdapter):
         taskfile_path = None
         if input_data.taskfile_path:
             taskfile_path = Path(input_data.taskfile_path)
+            # 检查文件是否存在
+            if not taskfile_path.exists():
+                return LataOutput(
+                    success=False,
+                    message=f"Taskfile 不存在: {taskfile_path}"
+                )
         
         try:
             launcher = TaskfileLauncher(taskfile_path)
+        except SystemExit:
+            # lata 在加载失败时会调用 sys.exit(1)
+            return LataOutput(
+                success=False,
+                message=f"加载 Taskfile 失败: 文件不存在或格式错误"
+            )
         except Exception as e:
             return LataOutput(
                 success=False,

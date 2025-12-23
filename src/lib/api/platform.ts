@@ -133,6 +133,7 @@ class TauriPlatformAPI implements PlatformAPI {
 
 /**
  * 浏览器平台 API 实现
+ * 使用原生 input 元素实现文件选择
  */
 class BrowserPlatformAPI implements PlatformAPI {
   isTauri(): boolean {
@@ -140,38 +141,68 @@ class BrowserPlatformAPI implements PlatformAPI {
   }
 
   async openFolderDialog(title?: string): Promise<string | null> {
-    // 浏览器环境通过后端 API 实现
-    try {
-      const response = await fetch(`${getApiBaseUrl()}/api/v1/system/folder-dialog`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: title || '选择文件夹' })
-      });
-      if (response.ok) {
-        const data = await response.json();
-        return data.path || null;
-      }
-    } catch (error) {
-      console.error('[BrowserPlatformAPI] openFolderDialog error:', error);
-    }
-    return null;
+    // 浏览器原生文件夹选择（需要 webkitdirectory 支持）
+    return new Promise((resolve) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.webkitdirectory = true;
+      input.style.display = 'none';
+      
+      input.onchange = () => {
+        const files = input.files;
+        if (files && files.length > 0) {
+          // 返回第一个文件的相对路径的目录部分
+          const path = files[0].webkitRelativePath;
+          const folderName = path.split('/')[0];
+          resolve(folderName);
+        } else {
+          resolve(null);
+        }
+        document.body.removeChild(input);
+      };
+      
+      input.oncancel = () => {
+        resolve(null);
+        document.body.removeChild(input);
+      };
+      
+      document.body.appendChild(input);
+      input.click();
+    });
   }
 
   async openFileDialog(title?: string, filters?: FileFilter[]): Promise<string | null> {
-    try {
-      const response = await fetch(`${getApiBaseUrl()}/api/v1/system/file-dialog`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: title || '选择文件', filters })
-      });
-      if (response.ok) {
-        const data = await response.json();
-        return data.path || null;
+    return new Promise((resolve) => {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.style.display = 'none';
+      
+      // 转换 filters 为 accept 属性
+      if (filters && filters.length > 0) {
+        const accept = filters
+          .flatMap(f => f.extensions.map(ext => `.${ext}`))
+          .join(',');
+        input.accept = accept;
       }
-    } catch (error) {
-      console.error('[BrowserPlatformAPI] openFileDialog error:', error);
-    }
-    return null;
+      
+      input.onchange = () => {
+        const file = input.files?.[0];
+        if (file) {
+          resolve(file.name);
+        } else {
+          resolve(null);
+        }
+        document.body.removeChild(input);
+      };
+      
+      input.oncancel = () => {
+        resolve(null);
+        document.body.removeChild(input);
+      };
+      
+      document.body.appendChild(input);
+      input.click();
+    });
   }
 
   async readClipboard(): Promise<string> {

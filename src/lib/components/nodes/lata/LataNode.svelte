@@ -66,6 +66,24 @@
   let layoutRenderer = $state<any>(undefined);
 
   let initialized = $state(false);
+  
+  // 默认 Taskfile 路径存储 key
+  const DEFAULT_TASKFILE_KEY = 'lata-default-taskfile';
+  
+  // 获取默认路径
+  function getDefaultTaskfilePath(): string {
+    try {
+      return localStorage.getItem(DEFAULT_TASKFILE_KEY) || '';
+    } catch { return ''; }
+  }
+  
+  // 保存为默认路径
+  function saveAsDefaultPath() {
+    if (taskfilePath) {
+      localStorage.setItem(DEFAULT_TASKFILE_KEY, taskfilePath);
+      log(`💾 已保存为默认路径`);
+    }
+  }
 
   // 初始化
   $effect(() => {
@@ -75,12 +93,12 @@
       phase = savedState.phase ?? 'idle';
       progress = savedState.progress ?? 0;
       progressText = savedState.progressText ?? '';
-      taskfilePath = savedState.taskfilePath ?? configTaskfilePath;
+      taskfilePath = savedState.taskfilePath ?? configTaskfilePath ?? getDefaultTaskfilePath();
       tasks = savedState.tasks ?? [];
       selectedTask = savedState.selectedTask ?? null;
       taskArgs = savedState.taskArgs ?? '';
     } else {
-      taskfilePath = configTaskfilePath;
+      taskfilePath = configTaskfilePath || getDefaultTaskfilePath();
     }
     
     initialized = true;
@@ -128,6 +146,12 @@
       return;
     }
     
+    // 清理路径中的引号
+    const cleanPath = taskfilePath.trim().replace(/^["']|["']$/g, '');
+    if (cleanPath !== taskfilePath) {
+      taskfilePath = cleanPath;
+    }
+    
     phase = 'loading';
     progress = 0;
     progressText = '正在加载任务列表...';
@@ -140,7 +164,7 @@
       }) as any;
       
       if (response.success) {
-        tasks = response.tasks || [];
+        tasks = response.data?.tasks || response.tasks || [];
         phase = 'idle';
         progress = 100;
         progressText = '';
@@ -222,11 +246,18 @@
       disabled={isRunning} 
       class="cq-text font-mono"
     />
-    <div class="cq-text-sm text-muted-foreground">
+    <div class="flex items-center justify-between cq-text-sm text-muted-foreground">
+      <span>
+        {#if taskfilePath}
+          {taskfilePath.split(/[/\\\\]/).pop()}
+        {:else}
+          未选择 Taskfile
+        {/if}
+      </span>
       {#if taskfilePath}
-        {taskfilePath.split(/[/\\\\]/).pop()}
-      {:else}
-        未选择 Taskfile
+        <Button variant="ghost" size="sm" class="h-5 px-1 text-xs" onclick={saveAsDefaultPath}>
+          设为默认
+        </Button>
       {/if}
     </div>
   </div>

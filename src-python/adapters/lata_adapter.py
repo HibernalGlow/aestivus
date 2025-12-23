@@ -65,10 +65,12 @@ class LataAdapter(BaseAdapter):
         module = self.get_module()
         TaskfileLauncher = module["TaskfileLauncher"]
         
-        # 解析 Taskfile 路径
+        # 解析 Taskfile 路径，清理引号
         taskfile_path = None
         if input_data.taskfile_path:
-            taskfile_path = Path(input_data.taskfile_path)
+            # 去除首尾引号和空白
+            clean_path = input_data.taskfile_path.strip().strip('"\'')
+            taskfile_path = Path(clean_path)
             # 检查文件是否存在
             if not taskfile_path.exists():
                 return LataOutput(
@@ -108,7 +110,10 @@ class LataAdapter(BaseAdapter):
                 success=True,
                 message=f"找到 {len(tasks)} 个任务",
                 tasks=tasks,
-                data={'taskfile': str(launcher.taskfile_path)}
+                data={
+                    'taskfile': str(launcher.taskfile_path),
+                    'tasks': tasks  # 也放到 data 中，确保前端能获取
+                }
             )
         
         elif input_data.action == "execute":

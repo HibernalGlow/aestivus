@@ -93,14 +93,25 @@ class LataAdapter(BaseAdapter):
             )
         
         if input_data.action == "list":
-            # 列出所有任务
+            # 列出所有任务，解析完整信息
             tasks = []
             for name, info in launcher.tasks.items():
                 if name != 'default':
+                    # 解析命令列表
+                    cmds = info.get('cmds', [])
+                    cmd_count = len(cmds) if isinstance(cmds, list) else 0
+                    
                     tasks.append({
                         'name': name,
                         'desc': info.get('desc', ''),
-                        'prompt': info.get('prompt', None)
+                        'prompt': info.get('prompt', None),
+                        'cmds': cmds,
+                        'cmd_count': cmd_count,
+                        'silent': info.get('silent', False),
+                        'vars': info.get('vars', {}),
+                        'deps': info.get('deps', []),
+                        'sources': info.get('sources', []),
+                        'generates': info.get('generates', []),
                     })
             
             if on_log:
@@ -112,7 +123,7 @@ class LataAdapter(BaseAdapter):
                 tasks=tasks,
                 data={
                     'taskfile': str(launcher.taskfile_path),
-                    'tasks': tasks  # 也放到 data 中，确保前端能获取
+                    'tasks': tasks
                 }
             )
         

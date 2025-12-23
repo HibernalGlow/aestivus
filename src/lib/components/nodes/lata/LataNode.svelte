@@ -37,6 +37,11 @@
     name: string;
     desc: string;
     prompt: string | null;
+    cmds: string[];
+    cmd_count: number;
+    silent: boolean;
+    vars: Record<string, any>;
+    deps: string[];
   }
 
   interface LataState {
@@ -316,32 +321,62 @@
 
 {#snippet tasksBlock()}
   <div class="h-full flex flex-col overflow-hidden">
-    <div class="flex items-center justify-between mb-1 shrink-0">
+    <div class="flex items-center justify-between mb-2 shrink-0">
       <span class="cq-text font-semibold flex items-center gap-1">
         <ListTodo class="cq-icon text-blue-500" />任务列表
       </span>
       <span class="cq-text-sm text-muted-foreground">{tasks.length} 个</span>
     </div>
-    <div class="flex-1 overflow-y-auto cq-padding bg-muted/30 cq-rounded">
+    <div class="flex-1 overflow-y-auto space-y-1">
       {#if tasks.length > 0}
         {#each tasks as task}
           <button
-            class="w-full text-left cq-text-sm py-1 px-2 rounded flex items-center gap-2 transition-colors {selectedTask === task.name ? 'bg-primary/10 text-primary' : 'hover:bg-muted'}"
+            class="w-full text-left p-2 rounded-md border transition-all {selectedTask === task.name ? 'bg-primary/10 border-primary/50 shadow-sm' : 'bg-muted/30 border-transparent hover:bg-muted/50 hover:border-muted'}"
             onclick={() => { selectedTask = task.name; }}
             disabled={isRunning}
           >
-            <span class="font-medium truncate">{task.name}</span>
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-medium text-sm truncate">{task.name}</span>
+              <div class="flex items-center gap-1 shrink-0">
+                {#if task.cmd_count > 0}
+                  <span class="text-xs px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-600">{task.cmd_count} 步</span>
+                {/if}
+                {#if task.prompt}
+                  <span class="text-xs px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-600">需输入</span>
+                {/if}
+                {#if task.deps && task.deps.length > 0}
+                  <span class="text-xs px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-600">依赖</span>
+                {/if}
+              </div>
+            </div>
             {#if task.desc}
-              <span class="text-muted-foreground truncate text-xs">- {task.desc}</span>
+              <div class="text-xs text-muted-foreground mt-1 truncate">{task.desc}</div>
+            {/if}
+            {#if selectedTask === task.name && task.cmds && task.cmds.length > 0}
+              <div class="mt-2 pt-2 border-t border-border/50">
+                <div class="text-xs text-muted-foreground mb-1">命令:</div>
+                <div class="space-y-0.5 max-h-20 overflow-y-auto">
+                  {#each task.cmds.slice(0, 5) as cmd, i}
+                    <div class="text-xs font-mono bg-background/50 px-1.5 py-0.5 rounded truncate" title={cmd}>
+                      <span class="text-muted-foreground">{i + 1}.</span> {cmd}
+                    </div>
+                  {/each}
+                  {#if task.cmds.length > 5}
+                    <div class="text-xs text-muted-foreground">... 还有 {task.cmds.length - 5} 条</div>
+                  {/if}
+                </div>
+              </div>
             {/if}
           </button>
         {/each}
       {:else}
-        <div class="cq-text text-muted-foreground text-center py-3">
+        <div class="cq-text text-muted-foreground text-center py-6 bg-muted/20 rounded-md">
           {#if taskfilePath}
-            点击刷新加载任务
+            <RefreshCw class="w-8 h-8 mx-auto mb-2 opacity-30" />
+            <div>点击刷新加载任务</div>
           {:else}
-            请先选择 Taskfile
+            <FolderOpen class="w-8 h-8 mx-auto mb-2 opacity-30" />
+            <div>请先选择 Taskfile</div>
           {/if}
         </div>
       {/if}

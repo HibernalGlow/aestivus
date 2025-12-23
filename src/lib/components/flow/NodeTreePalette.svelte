@@ -31,7 +31,8 @@
     folderId: string | null;
     itemId: string | null;
     overItemId: string | null;
-  }>({ folderId: null, itemId: null, overItemId: null });
+    overFolderId: string | null;
+  }>({ folderId: null, itemId: null, overItemId: null, overFolderId: null });
 
   interface NodeItem {
     id: string;
@@ -157,11 +158,12 @@
     dragState = { folderId, itemId: item.id, overItemId: null };
   }
 
-  // 原生拖拽：经过
+  // 原生拖拽：经过（支持跨文件夹）
   function handleDragOver(e: DragEvent, folderId: string, itemId: string) {
     e.preventDefault();
-    if (dragState.folderId === folderId && dragState.itemId !== itemId) {
+    if (dragState.itemId && dragState.itemId !== itemId) {
       dragState.overItemId = itemId;
+      dragState.overFolderId = folderId;
     }
   }
 
@@ -169,39 +171,79 @@
   function handleDragLeave(e: DragEvent, itemId: string) {
     if (dragState.overItemId === itemId) {
       dragState.overItemId = null;
+      dragState.overFolderId = null;
     }
   }
 
-  // 原生拖拽：放置（排序）
-  function handleDrop(e: DragEvent, folderId: string, targetItemId: string) {
+  // 原生拖拽：放置（支持跨文件夹排序）
+  function handleDrop(e: DragEvent, targetFolderId: string, targetItemId: string) {
     e.preventDefault();
     const sortData = e.dataTransfer?.getData('text/plain');
     if (!sortData?.startsWith('sort:')) return;
 
     const [, srcFolderId, srcItemId] = sortData.split(':');
-    if (srcFolderId !== folderId || srcItemId === targetItemId) {
-      dragState = { folderId: null, itemId: null, overItemId: null };
+    if (srcItemId === targetItemId) {
+      resetDragState();
       return;
     }
 
-    const folder = findFolder(folderId);
-    if (!folder) return;
+    const srcFolder = findFolder(srcFolderId);
+    const tgtFolder = findFolder(targetFolderId);
+    if (!srcFolder || !tgtFolder) return;
 
-    const srcIdx = folder.items.findIndex(i => i.id === srcItemId);
-    const tgtIdx = folder.items.findIndex(i => i.id === targetItemId);
-    if (srcIdx === -1 || tgtIdx === -1) return;
+    const srcIdx = srcFolder.items.findIndex(i => i.id === srcItemId);
+    if (srcIdx === -1) return;
 
-    // 移动元素
-    const [item] = folder.items.splice(srcIdx, 1);
-    folder.items.splice(tgtIdx, 0, item);
+    // 从源文件夹移除
+    const [item] = srcFolder.items.splice(srcIdx, 1);
+
+    // 插入到目标文件夹
+    const tgtIdx = tgtFolder.items.findIndex(i => i.id === targetItemId);
+    if (tgtIdx === -1) {
+      tgtFolder.items.push(item);
+    } else {
+      tgtFolder.items.splice(tgtIdx, 0, item);
+    }
+
     treeData = [...treeData];
     saveTreeData();
-    dragState = { folderId: null, itemId: null, overItemId: null };
+    resetDragState();
+  }
+
+  // 拖拽到空文件夹区域
+  function handleDropOnFolder(e: DragEvent, folderId: string) {
+    e.preventDefault();
+    const sortData = e.dataTransfer?.getData('text/plain');
+    if (!sortData?.startsWith('sort:')) return;
+
+    const [, srcFolderId, srcItemId] = sortData.split(':');
+    if (srcFolderId === folderId) {
+      resetDragState();
+      return;
+    }
+
+    const srcFolder = findFolder(srcFolderId);
+    const tgtFolder = findFolder(folderId);
+    if (!srcFolder || !tgtFolder) return;
+
+    const srcIdx = srcFolder.items.findIndex(i => i.id === srcItemId);
+    if (srcIdx === -1) return;
+
+    const [item] = srcFolder.items.splice(srcIdx, 1);
+    tgtFolder.items.push(item);
+
+    treeData = [...treeData];
+    saveTreeData();
+    resetDragState();
+  }
+
+  function resetDragState() {
+    dragState = { folderId: null, itemId: null, overItemId: null, overFolderId: null };
   }
 
   // 拖拽结束
   function handleDragEnd() {
-    dragState = { folderId: null, itemId: null, overItemId: null };
+    resetDragState();
   }
 
   function exportJson() {
@@ -283,10 +325,14 @@
 
           {#if folder.expanded}
             {#if folder.items.length > 0}
-              <div class="space-y-1 ml-1">
+              <div 
+                class="space-y-1 ml-1"
+                ondragover={(e) => e.preventDefault()}
+                ondrop={(e) => handleDropOnFolder(e, folder.id)}
+              >
                 {#each folder.items.filter(item => nodeMatches(item, searchQuery)) as item (item.id)}
                   {@const Icon = icons[item.icon] || Terminal}
-                  {@const isOver = dragState.overItemId === item.id && dragState.folderId === folder.id}
+                  {@const isOver = dragState.overItemId === item.id && dragState.overFolderId === folder.id}
                   <div class="flex items-center gap-1 group">
                     <div
                       class="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors cursor-grab active:cursor-grabbing bg-card
@@ -326,10 +372,14 @@
                   </button>
 
                   {#if subFolder.expanded}
-                    <div class="space-y-1 ml-3">
+                    <div 
+                      class="space-y-1 ml-3"
+                      ondragover={(e) => e.preventDefault()}
+                      ondrop={(e) => handleDropOnFolder(e, subFolder.id)}
+                    >
                       {#each subFolder.items.filter(item => nodeMatches(item, searchQuery)) as item (item.id)}
                         {@const Icon = icons[item.icon] || Terminal}
-                        {@const isOver = dragState.overItemId === item.id && dragState.folderId === subFolder.id}
+                        {@const isOver = dragState.overItemId === item.id && dragState.overFolderId === subFolder.id}
                         <div class="flex items-center gap-1 group">
                           <div
                             class="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors cursor-grab active:cursor-grabbing bg-card

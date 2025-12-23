@@ -34,6 +34,7 @@ import { KavvkaNode } from '$lib/components/nodes/kavvka';
 import { LinedupNode } from '$lib/components/nodes/linedup';
 import { MoveaNode } from '$lib/components/nodes/movea';
 import { SeriexNode } from '$lib/components/nodes/seriex';
+import { LataNode } from '$lib/components/nodes/lata';
 
 /** 节点注册项 - 包含定义和组件 */
 export interface NodeRegistryEntry extends NodeDefinition {
@@ -401,6 +402,21 @@ export const NODE_REGISTRY: NodeRegistryEntry[] = [
       threshold: { type: 'number', label: '相似度阈值', default: 75 },
       add_prefix: { type: 'boolean', label: '添加前缀', default: true },
       prefix: { type: 'string', label: '系列前缀', default: '[#s]' }
+    }
+  },
+  {
+    type: 'lata',
+    category: 'tool',
+    label: 'lata',
+    description: '任务启动器：列出和执行 Taskfile 中定义的任务',
+    icon: 'Rocket',
+    inputs: ['any'],
+    outputs: ['any'],
+    component: LataNode,
+    configSchema: {
+      taskfile_path: { type: 'path', label: 'Taskfile 路径', required: false },
+      task_name: { type: 'string', label: '任务名称', required: false },
+      task_args: { type: 'string', label: '任务参数', default: '' }
     }
   },
 

@@ -33,6 +33,8 @@ _ADAPTER_REGISTRY: Dict[str, str] = {
     "linedup": "adapters.linedup_adapter.LinedupAdapter",
     "movea": "adapters.movea_adapter.MoveaAdapter",
     "seriex": "adapters.seriex_adapter.SeriexAdapter",
+    # Taskfile 任务启动器
+    "lata": "adapters.lata_adapter.LataAdapter",
 }
 
 # 适配器实例缓存

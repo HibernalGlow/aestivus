@@ -76,7 +76,7 @@
           { id: 'tool-media', name: '媒体', icon: 'Video', expanded: false,
             items: ['enginev', 'formatv', 'kavvka'].map(t => buildNodeItem(t)!).filter(Boolean), children: [] },
           { id: 'tool-system', name: '系统', icon: 'Terminal', expanded: false,
-            items: ['sleept', 'scoolp', 'reinstallp', 'recycleu', 'owithu'].map(t => buildNodeItem(t)!).filter(Boolean), children: [] },
+            items: ['sleept', 'scoolp', 'reinstallp', 'recycleu', 'owithu', 'lata'].map(t => buildNodeItem(t)!).filter(Boolean), children: [] },
           { id: 'tool-text', name: '文本', icon: 'FileText', expanded: false,
             items: ['linedup', 'crashu', 'seriex'].map(t => buildNodeItem(t)!).filter(Boolean), children: [] },
         ],

@@ -57,6 +57,24 @@
   }
 
   function getDefaultTreeData(): TreeFolder[] {
+    // 预定义的工具节点分类
+    const toolCategories = {
+      'tool-file': ['repacku', 'movea', 'dissolvef', 'trename', 'migratef', 'linku'],
+      'tool-archive': ['bandia', 'rawfilter', 'findz', 'encodeb'],
+      'tool-media': ['enginev', 'formatv', 'kavvka'],
+      'tool-system': ['sleept', 'scoolp', 'reinstallp', 'recycleu', 'owithu'],
+      'tool-text': ['linedup', 'crashu', 'seriex'],
+    };
+    
+    // 收集所有已分类的工具节点
+    const categorizedTools = new Set(Object.values(toolCategories).flat());
+    
+    // 找出未分类的工具节点，添加到工具根目录
+    const uncategorizedTools = NODE_DEFINITIONS
+      .filter(n => n.category === 'tool' && !categorizedTools.has(n.type))
+      .map(n => buildNodeItem(n.type)!)
+      .filter(Boolean);
+    
     return [
       {
         id: 'favorites', name: '收藏', icon: 'Folder', expanded: true, items: [], children: [],
@@ -67,18 +85,19 @@
         children: [],
       },
       {
-        id: 'tool', name: '工具', icon: 'Package', expanded: true, items: [],
+        id: 'tool', name: '工具', icon: 'Package', expanded: true, 
+        items: uncategorizedTools, // 未分类的工具节点放在根目录
         children: [
           { id: 'tool-file', name: '文件操作', icon: 'Folder', expanded: false,
-            items: ['repacku', 'movea', 'dissolvef', 'trename', 'migratef', 'linku'].map(t => buildNodeItem(t)!).filter(Boolean), children: [] },
+            items: toolCategories['tool-file'].map(t => buildNodeItem(t)!).filter(Boolean), children: [] },
           { id: 'tool-archive', name: '压缩包', icon: 'Package', expanded: false,
-            items: ['bandia', 'rawfilter', 'findz', 'encodeb'].map(t => buildNodeItem(t)!).filter(Boolean), children: [] },
+            items: toolCategories['tool-archive'].map(t => buildNodeItem(t)!).filter(Boolean), children: [] },
           { id: 'tool-media', name: '媒体', icon: 'Video', expanded: false,
-            items: ['enginev', 'formatv', 'kavvka'].map(t => buildNodeItem(t)!).filter(Boolean), children: [] },
+            items: toolCategories['tool-media'].map(t => buildNodeItem(t)!).filter(Boolean), children: [] },
           { id: 'tool-system', name: '系统', icon: 'Terminal', expanded: false,
-            items: ['sleept', 'scoolp', 'reinstallp', 'recycleu', 'owithu', 'lata'].map(t => buildNodeItem(t)!).filter(Boolean), children: [] },
+            items: toolCategories['tool-system'].map(t => buildNodeItem(t)!).filter(Boolean), children: [] },
           { id: 'tool-text', name: '文本', icon: 'FileText', expanded: false,
-            items: ['linedup', 'crashu', 'seriex'].map(t => buildNodeItem(t)!).filter(Boolean), children: [] },
+            items: toolCategories['tool-text'].map(t => buildNodeItem(t)!).filter(Boolean), children: [] },
         ],
       },
       {
@@ -112,6 +131,34 @@
           }
         }
         ensureItems(data);
+        
+        // 收集已存在的节点 ID
+        const existingNodeIds = new Set<string>();
+        function collectNodeIds(folders: TreeFolder[]) {
+          for (const folder of folders) {
+            for (const item of folder.items) {
+              existingNodeIds.add(item.id);
+            }
+            collectNodeIds(folder.children);
+          }
+        }
+        collectNodeIds(data);
+        
+        // 检测新增的工具节点，添加到工具根目录
+        const newToolNodes = NODE_DEFINITIONS
+          .filter(n => n.category === 'tool' && !existingNodeIds.has(n.type))
+          .map(n => buildNodeItem(n.type)!)
+          .filter(Boolean);
+        
+        if (newToolNodes.length > 0) {
+          const toolFolder = data.find((f: TreeFolder) => f.id === 'tool');
+          if (toolFolder) {
+            toolFolder.items = [...toolFolder.items, ...newToolNodes];
+            // 保存更新后的数据
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+          }
+        }
+        
         return data;
       } catch { localStorage.removeItem(STORAGE_KEY); }
     }

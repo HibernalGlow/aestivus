@@ -81,7 +81,7 @@
       scanRoots = savedState.scanRoots ?? [];
       forceMove = savedState.forceMove ?? false;
       keywords = savedState.keywords ?? DEFAULT_KEYWORDS;
-      scanDepth = savedState.scanDepth ?? 3;
+      scanDepth = savedState.scanDepth ?? 1;
     }
     sourcePathsText = sourcePaths.join('\n');
     scanRootsText = scanRoots.join('\n');
@@ -284,6 +284,44 @@
       setTimeout(() => { copied = false; }, 2000);
     } catch (e) { console.error('复制失败:', e); }
   }
+
+  // 复制单行路径
+  async function copySinglePath(pathStr: string, index: number) {
+    try {
+      await navigator.clipboard.writeText(pathStr);
+      // 临时显示复制成功状态
+      const tempCopied = { ...copiedStates };
+      tempCopied[index] = true;
+      copiedStates = tempCopied;
+      setTimeout(() => {
+        const updated = { ...copiedStates };
+        delete updated[index];
+        copiedStates = updated;
+      }, 1500);
+      log(`✅ 第 ${index + 1} 行已复制`);
+    } catch (e) { 
+      console.error('复制失败:', e);
+      log(`❌ 复制失败: ${e}`);
+    }
+  }
+
+  // 追踪每行的复制状态
+  let copiedStates = $state<Record<number, boolean>>({});
+  let copiedAll = $state(false);
+
+  // 复制全部路径
+  async function copyAllPaths() {
+    if (resultPaths.length === 0) return;
+    try {
+      await navigator.clipboard.writeText(resultPaths.join('\n'));
+      copiedAll = true;
+      setTimeout(() => { copiedAll = false; }, 1500);
+      log(`✅ 已复制全部 ${resultPaths.length} 行路径`);
+    } catch (e) { 
+      console.error('复制失败:', e);
+      log(`❌ 复制失败: ${e}`);
+    }
+  }
 </script>
 
 {#snippet sourceBlock()}
@@ -424,15 +462,41 @@
   <div class="h-full flex flex-col overflow-hidden">
     <div class="flex items-center justify-between cq-padding border-b bg-muted/30 shrink-0">
       <span class="font-semibold cq-text">Czkawka 路径</span>
-      {#if resultPaths.length > 0}
-        <span class="cq-text-sm text-muted-foreground">{resultPaths.length} 组</span>
-      {/if}
+      <div class="flex items-center cq-gap">
+        {#if resultPaths.length > 0}
+          <span class="cq-text-sm text-muted-foreground">{resultPaths.length} 组</span>
+          <button
+            onclick={copyAllPaths}
+            class="p-1 rounded hover:bg-muted transition-colors"
+            title="复制全部"
+          >
+            {#if copiedAll}
+              <Check class="w-3 h-3 text-green-500" />
+            {:else}
+              <Copy class="w-3 h-3 text-muted-foreground" />
+            {/if}
+          </button>
+        {/if}
+      </div>
     </div>
     <div class="flex-1 overflow-y-auto cq-padding font-mono cq-text-sm">
       {#if resultPaths.length > 0}
         {#each resultPaths as pathStr, i}
-          <div class="mb-2 p-2 bg-muted/30 rounded break-all">
-            <span class="text-muted-foreground">{i + 1}.</span> {pathStr}
+          <div class="mb-2 p-2 bg-muted/30 rounded break-all flex items-start justify-between gap-2 group">
+            <div class="flex-1">
+              <span class="text-muted-foreground">{i + 1}.</span> {pathStr}
+            </div>
+            <button
+              onclick={() => copySinglePath(pathStr, i)}
+              class="shrink-0 p-1 rounded opacity-0 group-hover:opacity-100 transition-opacity hover:bg-muted"
+              title="复制此行"
+            >
+              {#if copiedStates[i]}
+                <Check class="w-3 h-3 text-green-500" />
+              {:else}
+                <Copy class="w-3 h-3 text-muted-foreground" />
+              {/if}
+            </button>
           </div>
         {/each}
       {:else}

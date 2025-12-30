@@ -310,8 +310,8 @@
         })
   );
   
-  // 每种模式使用自己的 tabGroups
-  let tabGroups = $derived(nodeConfig[mode].tabGroups);
+  // 两种模式共享 fullscreen 的 tabGroups 配置（设计决策：Tab 分组只存储在 fullscreen）
+  let tabGroups = $derived(nodeConfig.fullscreen.tabGroups);
   
   // 计算被 Tab 分组隐藏的区块 ID（用于全屏模式的 CSS 隐藏）
   let hiddenBlockIds = $derived(new Set(tabGroups.flatMap(g => g.blockIds.slice(1))));
@@ -328,23 +328,27 @@
 
   /** 解散 Tab 分组 - 使用 CSS 显示，无需刷新 GridStack */
   function handleDissolveTabGroup(groupId: string) {
-    console.log("[NodeLayoutRenderer] handleDissolveTabGroup:", { groupId, mode });
-    dissolveTabGroup(nodeType, groupId, mode);
+    console.log("[NodeLayoutRenderer] handleDissolveTabGroup:", { groupId });
+    // Tab 分组始终存储在 fullscreen 模式
+    dissolveTabGroup(nodeType, groupId, 'fullscreen');
   }
 
   /** 切换 Tab 分组活动区块 */
   function handleSwitchTab(groupId: string, index: number) {
-    switchTabGroupActive(nodeType, groupId, index, mode);
+    // Tab 分组始终存储在 fullscreen 模式
+    switchTabGroupActive(nodeType, groupId, index, 'fullscreen');
   }
 
   /** 从 Tab 分组移除区块 */
   function handleRemoveBlockFromGroup(groupId: string, blockId: string) {
-    removeBlockFromTabGroup(nodeType, groupId, blockId, mode);
+    // Tab 分组始终存储在 fullscreen 模式
+    removeBlockFromTabGroup(nodeType, groupId, blockId, 'fullscreen');
   }
 
   /** 重排序 Tab 分组区块 */
   function handleReorderTabGroup(groupId: string, newOrder: string[]) {
-    reorderTabGroupBlocks(nodeType, groupId, newOrder, mode);
+    // Tab 分组始终存储在 fullscreen 模式
+    reorderTabGroupBlocks(nodeType, groupId, newOrder, 'fullscreen');
   }
 
   function applyGridItemOverride(item: GridItem): GridItem {
@@ -360,13 +364,15 @@
 
   /** 创建 Tab 分组 - 使用 CSS 隐藏，无需刷新 GridStack */
   export async function createTab(blockIds: string[]): Promise<string | null> {
-    console.log("[NodeLayoutRenderer] createTab:", { blockIds, mode });
-    const groupId = createTabGroup(nodeType, blockIds, mode);
+    console.log("[NodeLayoutRenderer] createTab:", { blockIds });
+    // Tab 分组始终存储在 fullscreen 模式
+    const groupId = createTabGroup(nodeType, blockIds, 'fullscreen');
     return groupId;
   }
 
   export function getUsedBlockIdsForTab(): string[] {
-    return getUsedBlockIds(nodeType, mode);
+    // Tab 分组始终存储在 fullscreen 模式
+    return getUsedBlockIds(nodeType, 'fullscreen');
   }
   
   /** 获取当前模式 */
@@ -382,8 +388,8 @@
   export async function resetLayout() {
     console.log("[NodeLayoutRenderer] resetLayout:", { mode, isFullscreen });
 
-    // 清除当前模式的所有 Tab 分组
-    clearTabGroups(nodeType, mode);
+    // Tab 分组始终存储在 fullscreen 模式，清除它
+    clearTabGroups(nodeType, 'fullscreen');
 
     // 重置当前模式的布局
     const defaultLayout = isFullscreen
@@ -424,17 +430,17 @@
     
     updateGridLayout(nodeType, mode, adjustedLayout);
     
-    // 应用 Tab 分组：
+    // 应用 Tab 分组（Tab 分组始终存储在 fullscreen 模式）：
     // - 如果 newTabGroups 是数组（包括空数组），则清除现有分组并应用新分组
     // - 如果 newTabGroups 是 undefined/null，则保留现有 Tab 分组（旧预设兼容）
     if (Array.isArray(newTabGroups)) {
-      clearTabGroups(nodeType, mode);
+      clearTabGroups(nodeType, 'fullscreen');
       for (const group of newTabGroups) {
         if (group.blockIds.length >= 2) {
-          createTabGroup(nodeType, group.blockIds, mode);
+          createTabGroup(nodeType, group.blockIds, 'fullscreen');
           // 设置活动索引
           if (group.activeIndex > 0) {
-            switchTabGroupActive(nodeType, group.blockIds[0], group.activeIndex, mode);
+            switchTabGroupActive(nodeType, group.blockIds[0], group.activeIndex, 'fullscreen');
           }
         }
       }

@@ -198,7 +198,7 @@
     try {
       const { platform } = await import('$lib/api/platform');
       const selected = await platform.openFolderDialog('选择目录');
-      if (selected) targetPath = selected;
+      if (selected) ns.targetPath = selected;
     } catch (e) { log(`选择文件夹失败: ${e}`); }
   }
 
@@ -206,7 +206,7 @@
     try {
       const { platform } = await import('$lib/api/platform');
       const text = await platform.readClipboard();
-      if (text) targetPath = text.trim();
+      if (text) ns.targetPath = text.trim();
     } catch (e) { log(`读取剪贴板失败: ${e}`); }
   }
 

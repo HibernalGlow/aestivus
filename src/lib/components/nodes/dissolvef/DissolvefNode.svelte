@@ -77,6 +77,8 @@
     result: DissolveResult | null;
     operationHistory: OperationRecord[];
     lastOperationId: string;
+    logs: string[];
+    hasInputConnection: boolean;
   }
 
   interface DissolveResult {
@@ -534,7 +536,7 @@
     nodeId={nodeId} 
     title="dissolvef" 
     icon={FolderInput} 
-    status={phase} 
+    status={ns.phase} 
     {borderClass} 
     isFullscreenRender={isFullscreenRender}
     onCompact={() => layoutRenderer?.compact()}

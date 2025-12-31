@@ -74,6 +74,8 @@
     similarityThreshold: number;
     autoMove: boolean;
     expandedItems: string[];
+    logs: string[];
+    hasInputConnection: boolean;
   }
 
   const nodeId = $derived(id);
@@ -458,8 +460,8 @@
       </Button>
     </div>
     <div class="flex-1 overflow-y-auto bg-muted/30 cq-rounded cq-padding font-mono cq-text-sm space-y-0.5">
-      {#if logs.length > 0}
-        {#each logs.slice(-15) as logItem}
+      {#if ns.logs.length > 0}
+        {#each ns.logs.slice(-15) as logItem}
           <div class="text-muted-foreground break-all">{logItem}</div>
         {/each}
       {:else}
@@ -492,7 +494,7 @@
     nodeId={nodeId} 
     title="crashu" 
     icon={Zap} 
-    status={phase} 
+    status={ns.phase} 
     {borderClass} 
     isFullscreenRender={isFullscreenRender}
     onCompact={() => layoutRenderer?.compact()}

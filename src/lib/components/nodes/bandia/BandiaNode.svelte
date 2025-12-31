@@ -45,6 +45,8 @@
     deleteAfter: boolean;
     useTrash: boolean;
     extractResult: ExtractResult | null;
+    logs: string[];
+    hasInputConnection: boolean;
   }
 
   interface ExtractResult {
@@ -331,23 +333,23 @@
       <span class="cq-text font-semibold flex items-center gap-1"><FileArchive class="cq-icon text-blue-500" />待解压文件</span>
       <span class="cq-text-sm text-muted-foreground">
         {#if isRunning && currentFileIndex >= 0}
-          {currentFileIndex + 1}/{archivePaths.length}
+          {currentFileIndex + 1}/{ns.archivePaths.length}
         {:else}
-          {archivePaths.length || parsePaths(pathsText).length} 个
+          {ns.archivePaths.length || parsePaths(pathsText).length} 个
         {/if}
       </span>
     </div>
     <div class="flex-1 overflow-y-auto cq-padding bg-muted/30 cq-rounded">
-      {#if archivePaths.length > 0 || parsePaths(pathsText).length > 0}
-        {#each (archivePaths.length > 0 ? archivePaths : parsePaths(pathsText)) as filePath, idx}
+      {#if ns.archivePaths.length > 0 || parsePaths(pathsText).length > 0}
+        {#each (ns.archivePaths.length > 0 ? ns.archivePaths : parsePaths(pathsText)) as filePath, idx}
           <div 
             class="cq-text-sm truncate py-0.5 flex items-center gap-1"
             class:text-muted-foreground={!isRunning || idx > currentFileIndex}
             class:text-primary={isRunning && idx === currentFileIndex}
-            class:text-green-600={phase === 'completed' || (isRunning && idx < currentFileIndex)}
+            class:text-green-600={ns.phase === 'completed' || (isRunning && idx < currentFileIndex)}
             title={filePath}
           >
-            {#if phase === 'completed' || (isRunning && idx < currentFileIndex)}
+            {#if ns.phase === 'completed' || (isRunning && idx < currentFileIndex)}
               <CircleCheck class="w-3 h-3 text-green-500 shrink-0" />
             {:else if isRunning && idx === currentFileIndex}
               <LoaderCircle class="w-3 h-3 text-primary animate-spin shrink-0" />
@@ -373,8 +375,8 @@
       </Button>
     </div>
     <div class="flex-1 overflow-y-auto bg-muted/30 cq-rounded cq-padding font-mono cq-text-sm space-y-0.5">
-      {#if logs.length > 0}
-        {#each logs.slice(-10) as logItem}<div class="text-muted-foreground break-all">{logItem}</div>{/each}
+      {#if ns.logs.length > 0}
+        {#each ns.logs.slice(-10) as logItem}<div class="text-muted-foreground break-all">{logItem}</div>{/each}
       {:else}
         <div class="text-muted-foreground text-center py-2">暂无日志</div>
       {/if}
@@ -401,7 +403,7 @@
     nodeId={nodeId} 
     title="bandia" 
     icon={FileArchive} 
-    status={phase} 
+    status={ns.phase} 
     {borderClass} 
     isFullscreenRender={isFullscreenRender}
     onCompact={() => layoutRenderer?.compact()}

@@ -50,6 +50,7 @@
     regexPatterns: string;
     allowMoveToUnnumbered: boolean;
     enableFolderMoving: boolean;
+    logs: string[];
   }
 
   const nodeId = $derived(id);
@@ -298,11 +299,12 @@
   // 打开文件夹
   async function openFolder(path: string) {
     try {
-      const { platform } = await import('$lib/api/platform');
-      await platform.openPath(path);
-      log(`📂 已打开: ${path}`);
+      // TODO: 需要在 platform API 中添加 openPath 方法
+      log(`📂 路径: ${path}`);
+      await navigator.clipboard.writeText(path);
+      log(`📋 已复制到剪贴板`);
     } catch (e) {
-      log(`❌ 打开失败: ${e}`);
+      log(`❌ 操作失败: ${e}`);
     }
   }
 </script>
@@ -313,7 +315,7 @@
       <Label class="cq-text font-medium">根目录路径</Label>
       <Input 
         bind:value={ns.rootPath}
-        placeholder="E:\1Hub\EH\1EHV"
+        placeholder="E:\\1Hub\\EH\\1EHV"
         disabled={isScanning || isMoving}
         class="cq-input font-mono text-xs"
       />
@@ -334,7 +336,7 @@
         <Checkbox 
           id="allowUnnumbered"
           checked={ns.allowMoveToUnnumbered}
-          onCheckedChange={(v) => ns.allowMoveToUnnumbered = !!v}
+          onchange={() => ns.allowMoveToUnnumbered = !ns.allowMoveToUnnumbered}
           disabled={isScanning || isMoving}
         />
         <Label for="allowUnnumbered" class="cq-text-sm">允许无编号文件夹作为目标</Label>
@@ -344,7 +346,7 @@
         <Checkbox 
           id="enableFolder"
           checked={ns.enableFolderMoving}
-          onCheckedChange={(v) => ns.enableFolderMoving = !!v}
+          onchange={() => ns.enableFolderMoving = !ns.enableFolderMoving}
           disabled={isScanning || isMoving}
         />
         <Label for="enableFolder" class="cq-text-sm">启用文件夹移动</Label>
@@ -484,7 +486,7 @@
             <div class="flex items-center cq-gap mb-2">
               <Checkbox 
                 checked={isSkipped}
-                onCheckedChange={() => toggleSkipAll(level1Name)}
+                onchange={() => toggleSkipAll(level1Name)}
               />
               <span class="cq-text-sm text-muted-foreground">跳过全部</span>
             </div>
@@ -496,14 +498,14 @@
               <div class="flex items-center cq-gap py-1 border-t border-border/50">
                 <Checkbox 
                   checked={enabled}
-                  onCheckedChange={() => toggleItemEnabled(level1Name, archive)}
+                  onchange={() => toggleItemEnabled(level1Name, archive)}
                 />
                 <span class="cq-text-sm truncate flex-1" title={archive}>📦 {archive}</span>
                 {#if enabled && data.subfolders.length > 0}
                   <Select.Root 
                     type="single"
-                    value={{ value: target ?? '', label: target ?? '' }}
-                    onValueChange={(v) => updateTarget(level1Name, archive, v?.value ?? null)}
+                    value={target ?? ''}
+                    onValueChange={(v) => updateTarget(level1Name, archive, v ?? null)}
                   >
                     <Select.Trigger class="h-6 w-[120px] text-xs">
                       {target ?? '选择目标'}
@@ -519,7 +521,7 @@
             {/each}
             
             <!-- 可移动文件夹列表 -->
-            {#if enableFolderMoving && data.movable_folders.length > 0}
+            {#if ns.enableFolderMoving && data.movable_folders.length > 0}
               {#each data.movable_folders as folder (folder)}
                 {@const itemKey = `folder_${folder}`}
                 {@const target = plan[itemKey]}
@@ -527,14 +529,14 @@
                 <div class="flex items-center cq-gap py-1 border-t border-border/50">
                   <Checkbox 
                     checked={enabled}
-                    onCheckedChange={() => toggleItemEnabled(level1Name, itemKey)}
+                    onchange={() => toggleItemEnabled(level1Name, itemKey)}
                   />
                   <span class="cq-text-sm truncate flex-1" title={folder}>📂 {folder}</span>
                   {#if enabled && data.subfolders.length > 0}
                     <Select.Root 
                       type="single"
-                      value={{ value: target ?? '', label: target ?? '' }}
-                      onValueChange={(v) => updateTarget(level1Name, itemKey, v?.value ?? null)}
+                      value={target ?? ''}
+                      onValueChange={(v) => updateTarget(level1Name, itemKey, v ?? null)}
                     >
                       <Select.Trigger class="h-6 w-[120px] text-xs">
                         {target ?? '选择目标'}
@@ -565,8 +567,8 @@
       </Button>
     </div>
     <div class="flex-1 overflow-y-auto bg-muted/30 cq-rounded cq-padding font-mono cq-text-sm space-y-0.5">
-      {#if logs.length > 0}
-        {#each logs.slice(-30) as logItem}<div class="text-muted-foreground break-all">{logItem}</div>{/each}
+      {#if ns.logs.length > 0}
+        {#each ns.logs.slice(-30) as logItem}<div class="text-muted-foreground break-all">{logItem}</div>{/each}
       {:else}
         <div class="text-muted-foreground text-center py-2">暂无日志</div>
       {/if}

@@ -422,7 +422,22 @@
 
   <!-- 内容区 -->
   {#if !collapsed || isFullscreenRender}
-    <div class="nodrag flex-1 min-h-0 overflow-hidden">
+    <div class="nodrag flex-1 min-h-0 overflow-hidden relative">
+      <!-- 编辑模式提示浮层 -->
+      {#if blockEditModeInternal && !isFullscreenRender && nodeType}
+        <div class="absolute top-3 left-3 z-40 bg-primary/90 text-primary-foreground px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2 shadow-lg backdrop-blur-sm">
+          <div class="w-2 h-2 bg-primary-foreground rounded-full animate-pulse"></div>
+          <span>编辑模式：点击区块中的控制面板调整大小</span>
+          <button
+            class="ml-auto text-primary-foreground hover:opacity-70 transition-opacity cursor-pointer flex-shrink-0"
+            onclick={() => blockEditModeStore.update(v => !v)}
+            title="退出编辑"
+          >
+            <X class="w-3.5 h-3.5" />
+          </button>
+        </div>
+      {/if}
+      
       {@render children()}
     </div>
   {/if}

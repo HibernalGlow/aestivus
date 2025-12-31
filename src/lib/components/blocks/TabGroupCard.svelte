@@ -8,7 +8,7 @@
   import type { Snippet, Component } from 'svelte';
   import type { TabGroup } from '$lib/stores/nodeLayoutStore';
   import { getBlockDefinition } from './blockRegistry';
-  import { X, GripVertical, Ungroup, ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from '@lucide/svelte';
+  import { X, GripVertical, Ungroup, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Plus, Minus } from '@lucide/svelte';
   import { flip } from 'svelte/animate';
   import { dndzone } from 'svelte-dnd-action';
   import { settingsManager } from '$lib/settings/settingsManager';
@@ -198,55 +198,7 @@
         </button>
       </div>
       
-      <!-- 尺寸编辑按钮（节点模式下） -->
-      {#if sizeEditMode && !isFullscreen}
-        <div class="w-px h-5 bg-border/60 mx-1"></div>
-        <div class="flex items-center gap-0.5">
-          <!-- 宽度控制 -->
-          <button
-            type="button"
-            class="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 disabled:opacity-30 disabled:cursor-not-allowed"
-            onclick={() => onWidthChange?.(-1)}
-            disabled={currentW <= 1}
-            title="减小宽度"
-          >
-            <ChevronLeft class="w-3.5 h-3.5" />
-          </button>
-          <span class="text-xs text-muted-foreground min-w-[2ch] text-center">{currentW}</span>
-          <button
-            type="button"
-            class="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 disabled:opacity-30 disabled:cursor-not-allowed"
-            onclick={() => onWidthChange?.(1)}
-            disabled={currentW >= 2}
-            title="增大宽度"
-          >
-            <ChevronRight class="w-3.5 h-3.5" />
-          </button>
-          
-          <div class="w-px h-4 bg-border/40 mx-0.5"></div>
-          
-          <!-- 高度控制 -->
-          <button
-            type="button"
-            class="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 disabled:opacity-30 disabled:cursor-not-allowed"
-            onclick={() => onHeightChange?.(-1)}
-            disabled={currentH <= 1}
-            title="减小高度"
-          >
-            <ChevronUp class="w-3.5 h-3.5" />
-          </button>
-          <span class="text-xs text-muted-foreground min-w-[2ch] text-center">{currentH}</span>
-          <button
-            type="button"
-            class="p-1 rounded text-muted-foreground hover:text-foreground hover:bg-muted/50 disabled:opacity-30 disabled:cursor-not-allowed"
-            onclick={() => onHeightChange?.(1)}
-            disabled={currentH >= 4}
-            title="增大高度"
-          >
-            <ChevronDown class="w-3.5 h-3.5" />
-          </button>
-        </div>
-      {/if}
+      <!-- 尺寸编辑按钮移除 - 改用覆盖层 -->
     </div>
   </div>
 
@@ -262,6 +214,79 @@
       {/if}
     </div>
   </div>
+  
+  <!-- 编辑模式：尺寸调整控制器覆盖层 -->
+  {#if sizeEditMode && !isFullscreen && onWidthChange}
+    <div class="absolute inset-0 z-50 pointer-events-none flex flex-col items-center justify-center p-2">
+      <!-- 半透明背景 -->
+      <div class="absolute inset-0 bg-primary/5 backdrop-blur-[2px] pointer-events-auto rounded-lg"></div>
+      
+      <!-- 调整控制面板 - 竖排显示，自适应宽度 -->
+      <div class="relative pointer-events-auto bg-card/95 backdrop-blur-sm border-2 border-primary rounded-lg shadow-xl p-2 max-w-full">
+        <div class="flex flex-col items-center gap-2">
+          <!-- 宽度调整 -->
+          <div class="flex flex-col items-center gap-1 w-full">
+            <span class="text-xs font-medium text-muted-foreground">宽度</span>
+            <div class="flex items-center gap-1">
+              <button
+                type="button"
+                class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center flex-shrink-0"
+                onclick={() => onWidthChange(-1)}
+                disabled={currentW <= 1}
+                title="减小宽度"
+              >
+                <ChevronLeft class="w-3 h-3" />
+              </button>
+              <span class="text-sm font-semibold min-w-[1.25rem] text-center">{currentW}</span>
+              <button
+                type="button"
+                class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center flex-shrink-0"
+                onclick={() => onWidthChange(1)}
+                disabled={currentW >= 2}
+                title="增大宽度"
+              >
+                <ChevronRight class="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+          
+          <!-- 高度调整 -->
+          {#if onHeightChange}
+            <div class="flex flex-col items-center gap-1 w-full">
+              <span class="text-xs font-medium text-muted-foreground">高度</span>
+              <div class="flex items-center gap-1">
+                <button
+                  type="button"
+                  class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center flex-shrink-0"
+                  onclick={() => onHeightChange(-1)}
+                  disabled={currentH <= 1}
+                  title="减小高度"
+                >
+                  <ChevronUp class="w-3 h-3" />
+                </button>
+                <span class="text-sm font-semibold min-w-[1.25rem] text-center">{currentH}</span>
+                <button
+                  type="button"
+                  class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center flex-shrink-0"
+                  onclick={() => onHeightChange(1)}
+                  disabled={currentH >= 4}
+                  title="增大高度"
+                >
+                  <ChevronDown class="w-3 h-3" />
+                </button>
+              </div>
+            </div>
+          {/if}
+        </div>
+      </div>
+      
+      <!-- 四角调整指示器 -->
+      <div class="absolute top-0 left-0 w-2.5 h-2.5 border-t-2 border-l-2 border-primary rounded-tl pointer-events-none"></div>
+      <div class="absolute top-0 right-0 w-2.5 h-2.5 border-t-2 border-r-2 border-primary rounded-tr pointer-events-none"></div>
+      <div class="absolute bottom-0 left-0 w-2.5 h-2.5 border-b-2 border-l-2 border-primary rounded-bl pointer-events-none"></div>
+      <div class="absolute bottom-0 right-0 w-2.5 h-2.5 border-b-2 border-r-2 border-primary rounded-br pointer-events-none"></div>
+    </div>
+  {/if}
 </div>
 
 <style>

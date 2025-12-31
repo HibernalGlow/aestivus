@@ -562,7 +562,7 @@
   </div>
 {:else}
   <div class="flex-1 flex flex-col overflow-hidden p-2 min-w-0 @container">
-    <!-- 上部区块：使用 grid 布局，不拉伸 -->
+    <!-- 上部区块：使用 grid 布局，行高自适应内容 -->
     <div
       class="grid grid-cols-2 gap-2 min-w-0 shrink-0"
       style="grid-auto-rows: minmax(auto, max-content);"
@@ -573,7 +573,7 @@
         {@const isHiddenByTab = hiddenBlockIds.has(gridItem.id)}
         {#if tabGroup}
           <div 
-            class="{colSpan === 2 ? 'col-span-2' : ''}"
+            class="{colSpan === 2 ? 'col-span-2' : ''} h-full"
             style={getHeightStyle(gridItem.h)}
           >
             <TabGroupCard
@@ -599,7 +599,7 @@
           {@const blockDef = getBlockDefinition(nodeType, gridItem.id)}
           {#if blockDef}
             <div 
-              class={colSpan === 2 ? "col-span-2" : ""}
+              class="{colSpan === 2 ? 'col-span-2' : ''} h-full"
               style={getHeightStyle(gridItem.h)}
             >
               <BlockCard
@@ -609,7 +609,7 @@
                 iconClass={blockDef.iconClass}
                 collapsible={blockDef.collapsible}
                 defaultExpanded={blockDef.defaultExpanded ?? true}
-                fullHeight={gridItem.h > 1}
+                fullHeight={true}
                 {editMode}
                 currentW={gridItem.w}
                 currentH={gridItem.h}

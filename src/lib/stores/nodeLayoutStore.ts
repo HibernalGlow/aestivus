@@ -217,38 +217,10 @@ function validateAndFixConfig(config: unknown): NodeConfig {
     return { gridLayout, sizeOverrides, tabGroups };
   };
   
-  const fullscreen = fixModeState(c.fullscreen);
-  const normal = fixModeState(c.normal);
-  
-  // 迁移：将 normal.tabGroups 合并到 fullscreen.tabGroups（如果 fullscreen 为空但 normal 有数据）
-  // 这是为了兼容之前 tabGroups 存储在各自模式的旧数据
-  if (fullscreen.tabGroups.length === 0 && normal.tabGroups.length > 0) {
-    // 只迁移在 fullscreen.gridLayout 中存在的区块
-    const fullscreenBlockIds = new Set(fullscreen.gridLayout.map(i => i.id));
-    for (const group of normal.tabGroups) {
-      const validBlockIds = group.blockIds.filter(id => fullscreenBlockIds.has(id));
-      if (validBlockIds.length >= 2) {
-        fullscreen.tabGroups.push({
-          id: validBlockIds[0],
-          blockIds: validBlockIds,
-          activeIndex: Math.min(group.activeIndex, validBlockIds.length - 1)
-        });
-      }
-    }
-    // 清空 normal.tabGroups，因为现在统一存储在 fullscreen
-    normal.tabGroups = [];
-    console.log('[nodeLayoutStore] 迁移 tabGroups 从 normal 到 fullscreen:', { nodeType });
-  }
-  
-  // 清理：如果 normal.tabGroups 有数据但 fullscreen 也有，优先保留 fullscreen 的，清空 normal
-  if (fullscreen.tabGroups.length > 0 && normal.tabGroups.length > 0) {
-    normal.tabGroups = [];
-  }
-  
   return {
     nodeType,
-    fullscreen,
-    normal,
+    fullscreen: fixModeState(c.fullscreen),
+    normal: fixModeState(c.normal),
     updatedAt: typeof c.updatedAt === 'number' ? c.updatedAt : Date.now()
   };
 }

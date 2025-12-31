@@ -25,10 +25,9 @@
   let { nodeType, mode = 'fullscreen', onCreate, onCancel }: Props = $props();
   
   // 订阅 store 变化，响应式获取已使用的区块 ID
-  // Tab 分组始终存储在 fullscreen 模式，所以始终从 fullscreen 获取已使用的区块
   let nodeConfig = $state<NodeConfig | undefined>(undefined);
   let usedBlockIds = $derived(
-    nodeConfig?.fullscreen.tabGroups.flatMap(g => g.blockIds) ?? []
+    nodeConfig?.[mode].tabGroups.flatMap(g => g.blockIds) ?? []
   );
   
   onMount(() => {
@@ -37,12 +36,11 @@
     });
   });
 
-  // 获取所有可用区块（基于 fullscreen 模式的可见性，因为 Tab 分组存储在 fullscreen）
+  // 获取所有可用区块
   let allBlocks = $derived(() => {
     const layout = getNodeBlockLayout(nodeType);
     if (!layout) return [];
-    // 只显示在 fullscreen 模式下可见的区块
-    return layout.blocks.filter(b => !b.isTabContainer && b.visibleInFullscreen !== false);
+    return layout.blocks.filter(b => !b.isTabContainer);
   });
 
   // 已选择的区块（用于排序）

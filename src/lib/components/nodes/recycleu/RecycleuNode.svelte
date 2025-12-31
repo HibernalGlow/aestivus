@@ -14,7 +14,7 @@
   import { NodeLayoutRenderer } from '$lib/components/blocks';
   import { RECYCLEU_DEFAULT_GRID_LAYOUT } from './blocks';
   import { api } from '$lib/services/api';
-  import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
+  import { getNodeState, saveNodeState } from '$lib/stores/nodeState.svelte';
   import { getWsBaseUrl } from '$lib/stores/backend';
   import NodeWrapper from '../NodeWrapper.svelte';
   import { 
@@ -41,77 +41,76 @@
     interval: number;
     cleanCount: number;
     lastCleanTime: string | null;
+    // 运行时状态
+    phase: Phase;
+    logs: string[];
+    progress: number;
+    progressText: string;
+    remainingSeconds: number;
+    countdownProgress: number;
   }
 
   const nodeId = $derived(id);
-  const savedState = $derived(getNodeState<RecycleuState>(nodeId));
   const dataLogs = $derived(data?.logs ?? []);
 
-  // 状态变量
-  let interval = $state(10);
-  let phase = $state<Phase>('idle');
-  let logs = $state<string[]>([]);
+  // 获取共享的响应式状态（节点模式和全屏模式共用同一个对象）
+  const ns = getNodeState<RecycleuState>(id, {
+    interval: 10,
+    cleanCount: 0,
+    lastCleanTime: null,
+    phase: 'idle',
+    logs: [],
+    progress: 0,
+    progressText: '',
+    remainingSeconds: 0,
+    countdownProgress: 100
+  });
+
+  // 本地 UI 状态（不需要跨实例同步）
   let copied = $state(false);
-  let progress = $state(0);
-  let progressText = $state('');
-  let cleanCount = $state(0);
-  let lastCleanTime = $state<string | null>(null);
-  let remainingSeconds = $state(0);
-  let countdownProgress = $state(100); // 倒计时进度：100 -> 0
   let layoutRenderer = $state<any>(undefined);
   
   // WebSocket 和取消控制
   let ws: WebSocket | null = null;
   let abortController: AbortController | null = null;
 
-  let initialized = $state(false);
-  
-  $effect(() => {
-    if (initialized) return;
-    
-    if (savedState) {
-      interval = savedState.interval ?? 10;
-      cleanCount = savedState.cleanCount ?? 0;
-      lastCleanTime = savedState.lastCleanTime ?? null;
+  // 同步 data.logs
+  $effect(() => { 
+    if (dataLogs.length > 0) {
+      ns.logs = [...dataLogs]; 
     }
-    
-    initialized = true;
   });
-  
-  $effect(() => { logs = [...dataLogs]; });
 
-  function saveState() {
-    if (!initialized) return;
-    setNodeState<RecycleuState>(nodeId, {
-      interval, cleanCount, lastCleanTime
-    });
-  }
-
-  let isRunning = $derived(phase === 'running');
-  let canStart = $derived(phase === 'idle' || phase === 'error' || phase === 'cancelled' || phase === 'completed');
+  // 派生状态
+  let isRunning = $derived(ns.phase === 'running');
+  let canStart = $derived(ns.phase === 'idle' || ns.phase === 'error' || ns.phase === 'cancelled' || ns.phase === 'completed');
   let borderClass = $derived({
     idle: 'border-border', 
     running: 'border-primary shadow-sm',
     completed: 'border-green-500/50', 
     cancelled: 'border-yellow-500/50', 
     error: 'border-destructive/50'
-  }[phase]);
+  }[ns.phase]);
 
-  $effect(() => { if (interval || cleanCount) saveState(); });
+  // 配置变更时自动保存
+  $effect(() => { 
+    ns.interval; ns.cleanCount;
+    saveNodeState(nodeId); 
+  });
 
-  function log(msg: string) { logs = [...logs.slice(-50), msg]; }
+  function log(msg: string) { ns.logs = [...ns.logs.slice(-50), msg]; }
 
   // 启动自动清理
   async function handleStart() {
     if (isRunning) return;
     
-    phase = 'running';
-    progress = 0;
-    progressText = '启动中...';
-    cleanCount = 0;
-    countdownProgress = 100; // 初始化为满圆
-    remainingSeconds = interval;
-    log(`🚀 启动自动清理，间隔 ${interval} 秒`);
+    ns.phase = 'running';
+    ns.progress = 0;
+    ns.progressText = '启动中...';
+    ns.cleanCount = 0;
+    ns.countdownProgress = 100; // 初始化为满圆
+    ns.remainingSeconds = ns.interval;
+    log(`🚀 启动自动清理，间隔 ${ns.interval} 秒`);
     
     const taskId = `recycleu-${nodeId}-${Date.now()}`;
     abortController = new AbortController();
@@ -125,17 +124,17 @@
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === 'progress') {
-            progress = msg.progress;
-            progressText = msg.message;
+            ns.progress = msg.progress;
+            ns.progressText = msg.message;
             // 解析清理次数
             const countMatch = msg.message.match(/已清理 (\d+) 次/);
-            if (countMatch) cleanCount = parseInt(countMatch[1]);
+            if (countMatch) ns.cleanCount = parseInt(countMatch[1]);
             // 解析剩余秒数并计算倒计时进度
             const secMatch = msg.message.match(/(\d+)s 后清理/);
             if (secMatch) {
-              remainingSeconds = parseInt(secMatch[1]);
+              ns.remainingSeconds = parseInt(secMatch[1]);
               // 倒计时进度：从满圆(100%)减少到空(0%)
-              countdownProgress = (remainingSeconds / interval) * 100;
+              ns.countdownProgress = (ns.remainingSeconds / ns.interval) * 100;
             }
           } else if (msg.type === 'log') {
             log(msg.message);
@@ -154,26 +153,26 @@
       
       const response = await api.executeNode('recycleu', {
         action: 'start',
-        interval: interval
+        interval: ns.interval
       }, { taskId, nodeId }) as any;
       
       if (response.success) {
-        phase = 'completed';
-        progress = 100;
-        progressText = '完成';
-        cleanCount = response.clean_count ?? cleanCount;
-        lastCleanTime = response.last_clean_time ?? null;
+        ns.phase = 'completed';
+        ns.progress = 100;
+        ns.progressText = '完成';
+        ns.cleanCount = response.clean_count ?? ns.cleanCount;
+        ns.lastCleanTime = response.last_clean_time ?? null;
         log(`✅ ${response.message}`);
       } else {
-        phase = 'error';
+        ns.phase = 'error';
         log(`❌ ${response.message}`);
       }
     } catch (error: any) {
       if (error.name === 'AbortError') {
-        phase = 'cancelled';
+        ns.phase = 'cancelled';
         log('⏹️ 已停止');
       } else {
-        phase = 'error';
+        ns.phase = 'error';
         log(`❌ 执行失败: ${error}`);
       }
     } finally {
@@ -193,7 +192,7 @@
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.close();
     }
-    phase = 'cancelled';
+    ns.phase = 'cancelled';
     log('⏹️ 已停止');
   }
 
@@ -206,8 +205,8 @@
       }) as any;
       
       if (response.success) {
-        cleanCount = response.clean_count ?? cleanCount + 1;
-        lastCleanTime = response.last_clean_time ?? new Date().toLocaleTimeString();
+        ns.cleanCount = response.clean_count ?? ns.cleanCount + 1;
+        ns.lastCleanTime = response.last_clean_time ?? new Date().toLocaleTimeString();
         log(`✅ ${response.message}`);
       } else { 
         log(`❌ ${response.message}`); 
@@ -222,17 +221,17 @@
     if (isRunning) {
       handleStop();
     }
-    phase = 'idle';
-    progress = 0;
-    progressText = '';
-    cleanCount = 0;
-    lastCleanTime = null;
-    logs = [];
+    ns.phase = 'idle';
+    ns.progress = 0;
+    ns.progressText = '';
+    ns.cleanCount = 0;
+    ns.lastCleanTime = null;
+    ns.logs = [];
   }
 
   async function copyLogs() {
     try {
-      await navigator.clipboard.writeText(logs.join('\n'));
+      await navigator.clipboard.writeText(ns.logs.join('\n'));
       copied = true;
       setTimeout(() => { copied = false; }, 2000);
     } catch (e) {
@@ -241,7 +240,7 @@
   }
 
   function setPreset(sec: number) {
-    interval = sec;
+    ns.interval = sec;
   }
 </script>
 
@@ -251,7 +250,7 @@
     <div class="flex cq-gap items-center">
       <Input 
         type="number" 
-        bind:value={interval} 
+        bind:value={ns.interval} 
         min={5} 
         max={300} 
         disabled={isRunning} 
@@ -285,35 +284,35 @@
           <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="8" class="text-muted/30" />
           <!-- 倒计时圆环：从满圆减少到单点 -->
           <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="8" 
-            class={phase === 'completed' ? 'text-green-500' : phase === 'error' ? 'text-red-500' : 'text-primary'}
-            stroke-dasharray={`${countdownProgress * 2.83} 283`}
+            class={ns.phase === 'completed' ? 'text-green-500' : ns.phase === 'error' ? 'text-red-500' : 'text-primary'}
+            stroke-dasharray={`${ns.countdownProgress * 2.83} 283`}
             stroke-linecap="round" />
         </svg>
         <!-- 中心文字 -->
         <div class="absolute inset-0 flex flex-col items-center justify-center">
           {#if isRunning}
-            <span class="text-lg font-mono font-bold">{remainingSeconds}s</span>
-            <span class="cq-text-sm text-muted-foreground">{cleanCount}次</span>
-          {:else if phase === 'completed'}
+            <span class="text-lg font-mono font-bold">{ns.remainingSeconds}s</span>
+            <span class="cq-text-sm text-muted-foreground">{ns.cleanCount}次</span>
+          {:else if ns.phase === 'completed'}
             <CircleCheck class="w-8 h-8 text-green-500" />
-          {:else if phase === 'error'}
+          {:else if ns.phase === 'error'}
             <CircleX class="w-8 h-8 text-red-500" />
           {:else}
             <Trash2 class="w-8 h-8 text-muted-foreground/50" />
           {/if}
         </div>
       </div>
-      <span class="cq-text text-muted-foreground mt-2">{progressText || '等待启动'}</span>
+      <span class="cq-text text-muted-foreground mt-2">{ns.progressText || '等待启动'}</span>
     </div>
     
     <!-- 统计 -->
     <div class="grid grid-cols-2 cq-gap">
       <div class="bg-muted/30 rounded cq-padding text-center">
-        <div class="cq-stat-value text-primary tabular-nums">{cleanCount}</div>
+        <div class="cq-stat-value text-primary tabular-nums">{ns.cleanCount}</div>
         <div class="cq-text-sm text-muted-foreground">清理次数</div>
       </div>
       <div class="bg-muted/30 rounded cq-padding text-center">
-        <div class="cq-stat-value text-cyan-500 tabular-nums text-xs">{lastCleanTime ?? '-'}</div>
+        <div class="cq-stat-value text-cyan-500 tabular-nums text-xs">{ns.lastCleanTime ?? '-'}</div>
         <div class="cq-text-sm text-muted-foreground">上次清理</div>
       </div>
     </div>
@@ -347,8 +346,8 @@
       </Button>
     </div>
     <div class="flex-1 overflow-y-auto bg-muted/30 cq-rounded cq-padding font-mono cq-text-sm space-y-0.5">
-      {#if logs.length > 0}
-        {#each logs.slice(-15) as logItem}<div class="text-muted-foreground break-all">{logItem}</div>{/each}
+      {#if ns.logs.length > 0}
+        {#each ns.logs.slice(-15) as logItem}<div class="text-muted-foreground break-all">{logItem}</div>{/each}
       {:else}
         <div class="text-muted-foreground text-center py-2">暂无日志</div>
       {/if}
@@ -374,7 +373,7 @@
     nodeId={nodeId} 
     title="recycleu" 
     icon={Trash2} 
-    status={phase} 
+    status={ns.phase} 
     {borderClass} 
     isFullscreenRender={isFullscreenRender}
     onCompact={() => layoutRenderer?.compact()}

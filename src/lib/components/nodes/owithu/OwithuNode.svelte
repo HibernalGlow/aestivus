@@ -11,7 +11,7 @@
   import { NodeLayoutRenderer } from '$lib/components/blocks';
   import { OWITHU_DEFAULT_GRID_LAYOUT } from './blocks';
   import { api } from '$lib/services/api';
-  import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
+  import { getNodeState, saveNodeState } from '$lib/stores/nodeState.svelte';
   import NodeWrapper from '../NodeWrapper.svelte';
   import { 
     Play, LoaderCircle, FileText, FolderOpen, MousePointer, Clipboard, Search,
@@ -48,46 +48,29 @@
   }
 
   const nodeId = $derived(id);
-  const savedState = $derived(getNodeState<OwithuState>(nodeId));
   const dataLogs = $derived(data?.logs ?? []);
 
-  let pathText = $state('');
-  let hive = $state('');
-  let onlyKey = $state('');
+  // 获取共享的响应式状态
+  const ns = getNodeState<OwithuState>(id, {
+    pathText: '',
+    hive: '',
+    onlyKey: '',
+    entries: []
+  });
+
   let phase = $state<Phase>('idle');
   let logs = $state<string[]>([]);
   let copied = $state(false);
-  let entries = $state<Entry[]>([]);
   let layoutRenderer = $state<any>(undefined);
-
-  let initialized = $state(false);
-  
-  $effect(() => {
-    if (initialized) return;
-    if (savedState) {
-      pathText = savedState.pathText ?? '';
-      hive = savedState.hive ?? '';
-      onlyKey = savedState.onlyKey ?? '';
-      entries = savedState.entries ?? [];
-    }
-    initialized = true;
-  });
   
   $effect(() => { logs = [...dataLogs]; });
 
-  function saveState() {
-    if (!initialized) return;
-    setNodeState<OwithuState>(nodeId, { pathText, hive, onlyKey, entries });
-  }
-
-  let canExecute = $derived(phase === 'idle' && pathText.trim() !== '');
+  let canExecute = $derived(phase === 'idle' && ns.pathText.trim() !== '');
   let isRunning = $derived(phase === 'running');
   let borderClass = $derived({
     idle: 'border-border', running: 'border-primary shadow-sm',
     completed: 'border-primary/50', error: 'border-destructive/50'
   }[phase]);
-
-  $effect(() => { if (pathText || hive || onlyKey) saveState(); });
 
   function log(msg: string) { logs = [...logs.slice(-30), msg]; }
 
@@ -96,7 +79,7 @@
       const { platform } = await import('$lib/api/platform');
       const text = await platform.readClipboard();
       if (text) {
-        pathText = text.trim().replace(/^["']|["']$/g, '');
+        ns.pathText = text.trim().replace(/^["']|["']$/g, '');
         log(`📋 从剪贴板读取路径`);
       }
     } catch (e) { log(`❌ 读取剪贴板失败: ${e}`); }
@@ -107,14 +90,14 @@
       const { platform } = await import('$lib/api/platform');
       const selected = await platform.openFileDialog('选择 TOML 配置文件', [{ name: 'TOML', extensions: ['toml'] }]);
       if (selected) {
-        pathText = selected;
+        ns.pathText = selected;
         log(`📄 选择了配置文件: ${selected.split(/[/\\]/).pop()}`);
       }
     } catch (e) { log(`❌ 选择文件失败: ${e}`); }
   }
 
   async function handlePreview() {
-    if (!pathText.trim()) { log('❌ 请选择配置文件'); return; }
+    if (!ns.pathText.trim()) { log('❌ 请选择配置文件'); return; }
     
     phase = 'running';
     log('📋 加载配置...');
@@ -122,13 +105,13 @@
     try {
       const response = await api.executeNode('owithu', {
         action: 'preview',
-        path: pathText.trim()
+        path: ns.pathText.trim()
       }) as any;
       
       if (response.success) {
-        entries = response.data?.entries ?? [];
+        ns.entries = response.data?.entries ?? [];
         phase = 'completed';
-        log(`✅ 找到 ${entries.length} 个菜单项`);
+        log(`✅ 找到 ${ns.entries.length} 个菜单项`);
       } else {
         phase = 'error';
         log(`❌ ${response.message}`);
@@ -140,7 +123,7 @@
   }
 
   async function handleRegister() {
-    if (!pathText.trim()) { log('❌ 请选择配置文件'); return; }
+    if (!ns.pathText.trim()) { log('❌ 请选择配置文件'); return; }
     
     phase = 'running';
     log('📝 注册菜单项...');
@@ -148,9 +131,9 @@
     try {
       const response = await api.executeNode('owithu', {
         action: 'register',
-        path: pathText.trim(),
-        hive: hive || undefined,
-        only_key: onlyKey || undefined
+        path: ns.pathText.trim(),
+        hive: ns.hive || undefined,
+        only_key: ns.onlyKey || undefined
       }) as any;
       
       if (response.success) {
@@ -167,7 +150,7 @@
   }
 
   async function handleUnregister() {
-    if (!pathText.trim()) { log('❌ 请选择配置文件'); return; }
+    if (!ns.pathText.trim()) { log('❌ 请选择配置文件'); return; }
     
     phase = 'running';
     log('🗑️ 注销菜单项...');
@@ -175,9 +158,9 @@
     try {
       const response = await api.executeNode('owithu', {
         action: 'unregister',
-        path: pathText.trim(),
-        hive: hive || undefined,
-        only_key: onlyKey || undefined
+        path: ns.pathText.trim(),
+        hive: ns.hive || undefined,
+        only_key: ns.onlyKey || undefined
       }) as any;
       
       if (response.success) {
@@ -224,16 +207,16 @@
         <FolderOpen class="cq-icon mr-1" />选择
       </Button>
     </div>
-    <Input bind:value={pathText} placeholder="TOML 配置文件路径" disabled={isRunning} class="cq-text font-mono" />
+    <Input bind:value={ns.pathText} placeholder="TOML 配置文件路径" disabled={isRunning} class="cq-text font-mono" />
   </div>
 {/snippet}
 
 {#snippet optionsBlock()}
   <div class="flex flex-col cq-gap">
     <span class="cq-text-sm text-muted-foreground">注册表位置</span>
-    <Select.Root type="single" bind:value={hive}>
+    <Select.Root type="single" bind:value={ns.hive}>
       <Select.Trigger class="cq-button-sm">
-        <span>{hiveOptions.find(o => o.value === hive)?.label ?? '默认'}</span>
+        <span>{hiveOptions.find(o => o.value === ns.hive)?.label ?? '默认'}</span>
       </Select.Trigger>
       <Select.Content>
         {#each hiveOptions as opt}
@@ -242,21 +225,21 @@
       </Select.Content>
     </Select.Root>
     <span class="cq-text-sm text-muted-foreground mt-2">只处理指定 key</span>
-    <Input bind:value={onlyKey} placeholder="留空处理全部" disabled={isRunning} class="cq-text-sm" />
+    <Input bind:value={ns.onlyKey} placeholder="留空处理全部" disabled={isRunning} class="cq-text-sm" />
   </div>
 {/snippet}
 
 {#snippet entriesBlock()}
   <div class="h-full flex flex-col">
     <div class="flex items-center justify-between mb-1 shrink-0">
-      <span class="cq-text font-semibold">菜单项 ({entries.length})</span>
-      <Button variant="ghost" size="sm" class="h-5 px-2" onclick={handlePreview} disabled={isRunning || !pathText}>
+      <span class="cq-text font-semibold">菜单项 ({ns.entries.length})</span>
+      <Button variant="ghost" size="sm" class="h-5 px-2" onclick={handlePreview} disabled={isRunning || !ns.pathText}>
         刷新
       </Button>
     </div>
     <div class="flex-1 overflow-y-auto bg-muted/30 cq-rounded cq-padding space-y-1">
-      {#if entries.length > 0}
-        {#each entries as entry}
+      {#if ns.entries.length > 0}
+        {#each ns.entries as entry}
           <div class="flex items-center justify-between cq-padding bg-background/50 cq-rounded cq-text-sm">
             <div class="flex flex-col min-w-0 flex-1">
               <span class="font-medium truncate">{entry.label}</span>

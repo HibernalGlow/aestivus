@@ -10,7 +10,7 @@
   import { NodeLayoutRenderer } from '$lib/components/blocks';
   import { LINKU_DEFAULT_GRID_LAYOUT } from './blocks';
   import { api } from '$lib/services/api';
-  import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
+  import { getNodeState, saveNodeState } from '$lib/stores/nodeState.svelte';
   import NodeWrapper from '../NodeWrapper.svelte';
   import { 
     Play, LoaderCircle, FolderOpen, Link, Clipboard,
@@ -45,44 +45,28 @@
   }
 
   const nodeId = $derived(id);
-  const savedState = $derived(getNodeState<LinkuState>(nodeId));
   const dataLogs = $derived(data?.logs ?? []);
 
-  let sourcePath = $state('');
-  let targetPath = $state('');
+  // 获取共享的响应式状态
+  const ns = getNodeState<LinkuState>(id, {
+    sourcePath: '',
+    targetPath: '',
+    links: []
+  });
+
   let phase = $state<Phase>('idle');
   let logs = $state<string[]>([]);
   let copied = $state(false);
-  let links = $state<LinkRecord[]>([]);
   let layoutRenderer = $state<any>(undefined);
-
-  let initialized = $state(false);
-  
-  $effect(() => {
-    if (initialized) return;
-    if (savedState) {
-      sourcePath = savedState.sourcePath ?? '';
-      targetPath = savedState.targetPath ?? '';
-      links = savedState.links ?? [];
-    }
-    initialized = true;
-  });
   
   $effect(() => { logs = [...dataLogs]; });
 
-  function saveState() {
-    if (!initialized) return;
-    setNodeState<LinkuState>(nodeId, { sourcePath, targetPath, links });
-  }
-
-  let canExecute = $derived(phase === 'idle' && sourcePath.trim() !== '');
+  let canExecute = $derived(phase === 'idle' && ns.sourcePath.trim() !== '');
   let isRunning = $derived(phase === 'running');
   let borderClass = $derived({
     idle: 'border-border', running: 'border-primary shadow-sm',
     completed: 'border-primary/50', error: 'border-destructive/50'
   }[phase]);
-
-  $effect(() => { if (sourcePath || targetPath) saveState(); });
 
   function log(msg: string) { logs = [...logs.slice(-30), msg]; }
 
@@ -91,8 +75,8 @@
       const { platform } = await import('$lib/api/platform');
       const text = await platform.readClipboard();
       if (text) {
-        sourcePath = text.trim().replace(/^["']|["']$/g, '');
-        log(`📋 源路径: ${sourcePath.split(/[/\\]/).pop()}`);
+        ns.sourcePath = text.trim().replace(/^["']|["']$/g, '');
+        log(`📋 源路径: ${ns.sourcePath.split(/[/\\]/).pop()}`);
       }
     } catch (e) { log(`❌ 读取剪贴板失败: ${e}`); }
   }
@@ -102,7 +86,7 @@
       const { platform } = await import('$lib/api/platform');
       const selected = await platform.openFolderDialog('选择源路径');
       if (selected) {
-        sourcePath = selected;
+        ns.sourcePath = selected;
         log(`📁 选择源路径: ${selected.split(/[/\\]/).pop()}`);
       }
     } catch (e) { log(`❌ 选择失败: ${e}`); }
@@ -113,8 +97,8 @@
       const { platform } = await import('$lib/api/platform');
       const text = await platform.readClipboard();
       if (text) {
-        targetPath = text.trim().replace(/^["']|["']$/g, '');
-        log(`📋 目标路径: ${targetPath.split(/[/\\]/).pop()}`);
+        ns.targetPath = text.trim().replace(/^["']|["']$/g, '');
+        log(`📋 目标路径: ${ns.targetPath.split(/[/\\]/).pop()}`);
       }
     } catch (e) { log(`❌ 读取剪贴板失败: ${e}`); }
   }
@@ -124,14 +108,14 @@
       const { platform } = await import('$lib/api/platform');
       const selected = await platform.openFolderDialog('选择目标路径');
       if (selected) {
-        targetPath = selected;
+        ns.targetPath = selected;
         log(`📁 选择目标路径: ${selected.split(/[/\\]/).pop()}`);
       }
     } catch (e) { log(`❌ 选择失败: ${e}`); }
   }
 
   async function handleCreateLink() {
-    if (!sourcePath.trim() || !targetPath.trim()) { 
+    if (!ns.sourcePath.trim() || !ns.targetPath.trim()) { 
       log('❌ 请输入源路径和目标路径'); 
       return; 
     }
@@ -142,8 +126,8 @@
     try {
       const response = await api.executeNode('linku', {
         action: 'create',
-        path: sourcePath.trim(),
-        target: targetPath.trim()
+        path: ns.sourcePath.trim(),
+        target: ns.targetPath.trim()
       }) as any;
       
       if (response.success) {
@@ -161,7 +145,7 @@
   }
 
   async function handleMoveAndLink() {
-    if (!sourcePath.trim() || !targetPath.trim()) { 
+    if (!ns.sourcePath.trim() || !ns.targetPath.trim()) { 
       log('❌ 请输入源路径和目标路径'); 
       return; 
     }
@@ -172,8 +156,8 @@
     try {
       const response = await api.executeNode('linku', {
         action: 'move_link',
-        path: sourcePath.trim(),
-        target: targetPath.trim()
+        path: ns.sourcePath.trim(),
+        target: ns.targetPath.trim()
       }) as any;
       
       if (response.success) {
@@ -194,8 +178,7 @@
     try {
       const response = await api.executeNode('linku', { action: 'list' }) as any;
       if (response.success) {
-        links = response.data?.links ?? [];
-        saveState();
+        ns.links = response.data?.links ?? [];
       }
     } catch (e) {
       log(`❌ 加载链接列表失败: ${e}`);
@@ -248,7 +231,7 @@
         <FolderOpen class="cq-icon" />
       </Button>
     </div>
-    <Input bind:value={sourcePath} placeholder="源路径" disabled={isRunning} class="cq-text font-mono" />
+    <Input bind:value={ns.sourcePath} placeholder="源路径" disabled={isRunning} class="cq-text font-mono" />
   </div>
 {/snippet}
 
@@ -263,7 +246,7 @@
         <FolderOpen class="cq-icon" />
       </Button>
     </div>
-    <Input bind:value={targetPath} placeholder="目标路径" disabled={isRunning} class="cq-text font-mono" />
+    <Input bind:value={ns.targetPath} placeholder="目标路径" disabled={isRunning} class="cq-text font-mono" />
   </div>
 {/snippet}
 
@@ -284,10 +267,10 @@
         <span class="cq-text-sm text-muted-foreground">等待</span>
       {/if}
     </div>
-    <Button class="w-full cq-button-sm" onclick={handleCreateLink} disabled={!canExecute || !targetPath || isRunning}>
+    <Button class="w-full cq-button-sm" onclick={handleCreateLink} disabled={!canExecute || !ns.targetPath || isRunning}>
       <Link class="cq-icon mr-1" />创建链接
     </Button>
-    <Button variant="secondary" class="w-full cq-button-sm" onclick={handleMoveAndLink} disabled={!canExecute || !targetPath || isRunning}>
+    <Button variant="secondary" class="w-full cq-button-sm" onclick={handleMoveAndLink} disabled={!canExecute || !ns.targetPath || isRunning}>
       <Play class="cq-icon mr-1" />移动并链接
     </Button>
     <Button variant="outline" class="w-full cq-button-sm" onclick={handleRecover} disabled={isRunning}>
@@ -302,14 +285,14 @@
 {#snippet linksBlock()}
   <div class="h-full flex flex-col">
     <div class="flex items-center justify-between mb-1 shrink-0">
-      <span class="cq-text font-semibold">已记录链接 ({links.length})</span>
+      <span class="cq-text font-semibold">已记录链接 ({ns.links.length})</span>
       <Button variant="ghost" size="sm" class="h-5 px-2" onclick={loadLinks}>
         刷新
       </Button>
     </div>
     <div class="flex-1 overflow-y-auto bg-muted/30 cq-rounded cq-padding space-y-1">
-      {#if links.length > 0}
-        {#each links as link}
+      {#if ns.links.length > 0}
+        {#each ns.links as link}
           <div class="cq-padding bg-background/50 cq-rounded cq-text-sm">
             <div class="flex items-center gap-1">
               <Link class="w-3 h-3 text-primary shrink-0" />

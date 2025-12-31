@@ -11,7 +11,7 @@
   import { NodeLayoutRenderer } from '$lib/components/blocks';
   import { REINSTALLP_DEFAULT_GRID_LAYOUT } from './blocks';
   import { api } from '$lib/services/api';
-  import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
+  import { getNodeState, saveNodeState } from '$lib/stores/nodeState.svelte';
   import NodeWrapper from '../NodeWrapper.svelte';
   import { 
     Play, LoaderCircle, FolderOpen, Clipboard, Search,
@@ -46,45 +46,29 @@
   }
 
   const nodeId = $derived(id);
-  const savedState = $derived(getNodeState<ReinstallpState>(nodeId));
   const dataLogs = $derived(data?.logs ?? []);
 
-  let pathText = $state('');
-  let useSystem = $state(true);
+  // 获取共享的响应式状态
+  const ns = getNodeState<ReinstallpState>(id, {
+    pathText: '',
+    useSystem: true,
+    projects: []
+  });
+
   let phase = $state<Phase>('idle');
   let logs = $state<string[]>([]);
   let copied = $state(false);
-  let projects = $state<Project[]>([]);
   let layoutRenderer = $state<any>(undefined);
-
-  let initialized = $state(false);
-  
-  $effect(() => {
-    if (initialized) return;
-    if (savedState) {
-      pathText = savedState.pathText ?? '';
-      useSystem = savedState.useSystem ?? true;
-      projects = savedState.projects ?? [];
-    }
-    initialized = true;
-  });
   
   $effect(() => { logs = [...dataLogs]; });
 
-  function saveState() {
-    if (!initialized) return;
-    setNodeState<ReinstallpState>(nodeId, { pathText, useSystem, projects });
-  }
-
-  let canScan = $derived(phase === 'idle' && pathText.trim() !== '');
-  let canInstall = $derived(phase === 'idle' && projects.some(p => p.selected));
+  let canScan = $derived(phase === 'idle' && ns.pathText.trim() !== '');
+  let canInstall = $derived(phase === 'idle' && ns.projects.some(p => p.selected));
   let isRunning = $derived(phase === 'running');
   let borderClass = $derived({
     idle: 'border-border', running: 'border-primary shadow-sm',
     completed: 'border-primary/50', error: 'border-destructive/50'
   }[phase]);
-
-  $effect(() => { if (pathText || useSystem) saveState(); });
 
   function log(msg: string) { logs = [...logs.slice(-30), msg]; }
 
@@ -93,7 +77,7 @@
       const { platform } = await import('$lib/api/platform');
       const text = await platform.readClipboard();
       if (text) {
-        pathText = text.trim().replace(/^["']|["']$/g, '');
+        ns.pathText = text.trim().replace(/^["']|["']$/g, '');
         log(`📋 从剪贴板读取路径`);
       }
     } catch (e) { log(`❌ 读取剪贴板失败: ${e}`); }
@@ -104,14 +88,14 @@
       const { platform } = await import('$lib/api/platform');
       const selected = await platform.openFolderDialog('选择要扫描的目录');
       if (selected) {
-        pathText = selected;
+        ns.pathText = selected;
         log(`📁 选择了目录: ${selected.split(/[/\\]/).pop()}`);
       }
     } catch (e) { log(`❌ 选择目录失败: ${e}`); }
   }
 
   async function handleScan() {
-    if (!pathText.trim()) { log('❌ 请输入扫描路径'); return; }
+    if (!ns.pathText.trim()) { log('❌ 请输入扫描路径'); return; }
     
     phase = 'running';
     log('🔍 扫描项目...');
@@ -119,19 +103,18 @@
     try {
       const response = await api.executeNode('reinstallp', {
         action: 'scan',
-        path: pathText.trim()
+        path: ns.pathText.trim()
       }) as any;
       
       if (response.success) {
-        projects = (response.data?.projects ?? []).map((p: any) => ({
+        ns.projects = (response.data?.projects ?? []).map((p: any) => ({
           path: p.path,
           name: p.name,
           selected: true,
           status: 'pending'
         }));
         phase = 'completed';
-        log(`✅ 找到 ${projects.length} 个项目`);
-        saveState();
+        log(`✅ 找到 ${ns.projects.length} 个项目`);
       } else {
         phase = 'error';
         log(`❌ ${response.message}`);
@@ -143,7 +126,7 @@
   }
 
   async function handleInstall() {
-    const selectedProjects = projects.filter(p => p.selected);
+    const selectedProjects = ns.projects.filter(p => p.selected);
     if (selectedProjects.length === 0) { log('❌ 请选择要安装的项目'); return; }
     
     phase = 'running';
@@ -153,12 +136,12 @@
       const response = await api.executeNode('reinstallp', {
         action: 'install',
         projects: selectedProjects.map(p => p.path),
-        use_system: useSystem
+        use_system: ns.useSystem
       }) as any;
       
       // 更新项目状态
       const results = response.data?.results ?? [];
-      projects = projects.map(p => {
+      ns.projects = ns.projects.map(p => {
         const result = results.find((r: any) => r.path === p.path);
         if (result) {
           return { ...p, status: result.status === 'success' ? 'success' : 'failed' };
@@ -173,7 +156,6 @@
         phase = 'error';
         log(`❌ ${response.message}`);
       }
-      saveState();
     } catch (e) {
       phase = 'error';
       log(`❌ 安装失败: ${e}`);
@@ -182,24 +164,21 @@
 
   function toggleProject(index: number) {
     if (isRunning) return;
-    projects[index].selected = !projects[index].selected;
-    projects = [...projects];
-    saveState();
+    ns.projects[index].selected = !ns.projects[index].selected;
+    ns.projects = [...ns.projects];
   }
 
   function selectAll() {
-    projects = projects.map(p => ({ ...p, selected: true }));
-    saveState();
+    ns.projects = ns.projects.map(p => ({ ...p, selected: true }));
   }
 
   function selectNone() {
-    projects = projects.map(p => ({ ...p, selected: false }));
-    saveState();
+    ns.projects = ns.projects.map(p => ({ ...p, selected: false }));
   }
 
   function handleReset() {
     phase = 'idle';
-    projects = projects.map(p => ({ ...p, status: 'pending' }));
+    ns.projects = ns.projects.map(p => ({ ...p, status: 'pending' }));
     logs = [];
   }
 
@@ -222,23 +201,23 @@
         <FolderOpen class="cq-icon mr-1" />选择
       </Button>
     </div>
-    <Input bind:value={pathText} placeholder="扫描目录路径" disabled={isRunning} class="cq-text font-mono" />
+    <Input bind:value={ns.pathText} placeholder="扫描目录路径" disabled={isRunning} class="cq-text font-mono" />
   </div>
 {/snippet}
 
 {#snippet optionsBlock()}
   <div class="flex flex-col cq-gap">
     <span class="cq-text-sm text-muted-foreground">安装模式</span>
-    <label class="flex items-center cq-gap cursor-pointer" onclick={() => { if (!isRunning) useSystem = true; }}>
-      <Checkbox checked={useSystem} disabled={isRunning} />
+    <label class="flex items-center cq-gap cursor-pointer" onclick={() => { if (!isRunning) ns.useSystem = true; }}>
+      <Checkbox checked={ns.useSystem} disabled={isRunning} />
       <span class="cq-text-sm">系统安装</span>
     </label>
-    <label class="flex items-center cq-gap cursor-pointer" onclick={() => { if (!isRunning) useSystem = false; }}>
-      <Checkbox checked={!useSystem} disabled={isRunning} />
+    <label class="flex items-center cq-gap cursor-pointer" onclick={() => { if (!isRunning) ns.useSystem = false; }}>
+      <Checkbox checked={!ns.useSystem} disabled={isRunning} />
       <span class="cq-text-sm">虚拟环境</span>
     </label>
     <span class="cq-text-sm text-muted-foreground mt-2">
-      {useSystem ? '使用 --system 安装到系统 Python' : '安装到项目虚拟环境'}
+      {ns.useSystem ? '使用 --system 安装到系统 Python' : '安装到项目虚拟环境'}
     </span>
   </div>
 {/snippet}
@@ -246,15 +225,15 @@
 {#snippet projectsBlock()}
   <div class="h-full flex flex-col">
     <div class="flex items-center justify-between mb-1 shrink-0">
-      <span class="cq-text font-semibold">项目 ({projects.filter(p => p.selected).length}/{projects.length})</span>
+      <span class="cq-text font-semibold">项目 ({ns.projects.filter(p => p.selected).length}/{ns.projects.length})</span>
       <div class="flex cq-gap">
         <Button variant="ghost" size="sm" class="h-5 px-2 cq-text-sm" onclick={selectAll}>全选</Button>
         <Button variant="ghost" size="sm" class="h-5 px-2 cq-text-sm" onclick={selectNone}>全不选</Button>
       </div>
     </div>
     <div class="flex-1 overflow-y-auto bg-muted/30 cq-rounded cq-padding space-y-1">
-      {#if projects.length > 0}
-        {#each projects as project, i}
+      {#if ns.projects.length > 0}
+        {#each ns.projects as project, i}
           <div 
             class="flex items-center cq-gap cq-padding bg-background/50 cq-rounded cursor-pointer hover:bg-background/80"
             onclick={() => toggleProject(i)}

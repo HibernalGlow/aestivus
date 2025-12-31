@@ -15,7 +15,7 @@
   import { NodeLayoutRenderer } from '$lib/components/blocks';
   import { RAWFILTER_DEFAULT_GRID_LAYOUT } from '$lib/components/blocks/blockRegistry';
   import { api } from '$lib/services/api';
-  import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
+  import { getNodeState, saveNodeState } from '$lib/stores/nodeState.svelte';
   import NodeWrapper from '../NodeWrapper.svelte';
   import { 
     Play, LoaderCircle, FolderOpen, Clipboard, Search,
@@ -43,53 +43,25 @@
 
   // 使用 $derived 确保响应式
   const nodeId = $derived(id);
-  const savedState = $derived(getNodeState<RawfilterState>(nodeId));
-  const configPath = $derived(data?.config?.path ?? '');
-  const configNameOnlyMode = $derived(data?.config?.name_only_mode ?? false);
-  const configCreateShortcuts = $derived(data?.config?.create_shortcuts ?? false);
-  const configTrashOnly = $derived(data?.config?.trash_only ?? false);
   const dataLogs = $derived(data?.logs ?? []);
   const dataHasInputConnection = $derived(data?.hasInputConnection ?? false);
 
-  let path = $state('');
-  let nameOnlyMode = $state(false);
-  let createShortcuts = $state(false);
-  let trashOnly = $state(false);
-  let phase = $state<Phase>('idle');
+  // 获取共享的响应式状态
+  const ns = getNodeState<RawfilterState>(id, {
+    phase: 'idle',
+    progress: 0,
+    progressText: '',
+    filterResult: null,
+    nameOnlyMode: false,
+    createShortcuts: false,
+    trashOnly: false,
+    path: ''
+  });
+
   let logs = $state<string[]>([]);
   let hasInputConnection = $state(false);
   let copied = $state(false);
-  let progress = $state(0);
-  let progressText = $state('');
-  let filterResult = $state<FilterResult | null>(null);
-
   let layoutRenderer = $state<any>(undefined);
-
-  // 初始化标记
-  let initialized = $state(false);
-
-  // 初始化 effect - 只执行一次
-  $effect(() => {
-    if (initialized) return;
-    
-    if (savedState) {
-      phase = savedState.phase ?? 'idle';
-      progress = savedState.progress ?? 0;
-      progressText = savedState.progressText ?? '';
-      filterResult = savedState.filterResult ?? null;
-      nameOnlyMode = savedState.nameOnlyMode ?? configNameOnlyMode;
-      createShortcuts = savedState.createShortcuts ?? configCreateShortcuts;
-      trashOnly = savedState.trashOnly ?? configTrashOnly;
-      path = savedState.path || configPath || '';
-    } else {
-      path = configPath || '';
-      nameOnlyMode = configNameOnlyMode;
-      createShortcuts = configCreateShortcuts;
-      trashOnly = configTrashOnly;
-    }
-    
-    initialized = true;
-  });
   
   // 持续同步外部数据
   $effect(() => {
@@ -97,44 +69,45 @@
     hasInputConnection = dataHasInputConnection;
   });
 
-  function saveState() { 
-    if (!initialized) return;
-    setNodeState<RawfilterState>(nodeId, { phase, progress, progressText, filterResult, nameOnlyMode, createShortcuts, trashOnly, path }); 
-  }
+  // 从 config 同步默认值（仅当未设置时）
+  $effect(() => {
+    if (ns.path === '' && data?.config?.path) ns.path = data.config.path;
+    if (data?.config?.name_only_mode !== undefined && !ns.nameOnlyMode) ns.nameOnlyMode = data.config.name_only_mode;
+    if (data?.config?.create_shortcuts !== undefined && !ns.createShortcuts) ns.createShortcuts = data.config.create_shortcuts;
+    if (data?.config?.trash_only !== undefined && !ns.trashOnly) ns.trashOnly = data.config.trash_only;
+  });
 
-  let canExecute = $derived(phase === 'idle' && (path.trim() !== '' || hasInputConnection));
-  let isRunning = $derived(phase === 'scanning');
-  let borderClass = $derived({ idle: 'border-border', scanning: 'border-primary shadow-sm', completed: 'border-primary/50', error: 'border-destructive/50' }[phase]);
-
-  $effect(() => { if (phase || filterResult) saveState(); });
+  let canExecute = $derived(ns.phase === 'idle' && (ns.path.trim() !== '' || hasInputConnection));
+  let isRunning = $derived(ns.phase === 'scanning');
+  let borderClass = $derived({ idle: 'border-border', scanning: 'border-primary shadow-sm', completed: 'border-primary/50', error: 'border-destructive/50' }[ns.phase]);
 
   function log(msg: string) { logs = [...logs.slice(-30), msg]; }
 
-  async function selectFolder() { try { const { platform } = await import('$lib/api/platform'); const selected = await platform.openFolderDialog('选择文件夹'); if (selected) path = selected; } catch (e) { log(`选择文件夹失败: ${e}`); } }
-  async function pasteFromClipboard() { try { const { platform } = await import('$lib/api/platform'); const text = await platform.readClipboard(); if (text) path = text.trim(); } catch (e) { log(`读取剪贴板失败: ${e}`); } }
+  async function selectFolder() { try { const { platform } = await import('$lib/api/platform'); const selected = await platform.openFolderDialog('选择文件夹'); if (selected) ns.path = selected; } catch (e) { log(`选择文件夹失败: ${e}`); } }
+  async function pasteFromClipboard() { try { const { platform } = await import('$lib/api/platform'); const text = await platform.readClipboard(); if (text) ns.path = text.trim(); } catch (e) { log(`读取剪贴板失败: ${e}`); } }
 
   async function handleExecute() {
     if (!canExecute) return;
-    phase = 'scanning'; progress = 0; progressText = '正在扫描文件...';
-    filterResult = null;
-    log(`🔍 开始执行 rawfilter: ${path}`);
-    if (nameOnlyMode) log(`📋 仅名称模式`);
-    if (createShortcuts) log(`🔗 创建快捷方式`);
-    if (trashOnly) log(`🗑️ 仅移动到 trash`);
+    ns.phase = 'scanning'; ns.progress = 0; ns.progressText = '正在扫描文件...';
+    ns.filterResult = null;
+    log(`🔍 开始执行 rawfilter: ${ns.path}`);
+    if (ns.nameOnlyMode) log(`📋 仅名称模式`);
+    if (ns.createShortcuts) log(`🔗 创建快捷方式`);
+    if (ns.trashOnly) log(`🗑️ 仅移动到 trash`);
 
     try {
-      progress = 30; progressText = '正在分析文件...';
-      const response = await api.executeNode('rawfilter', { path, name_only_mode: nameOnlyMode, create_shortcuts: createShortcuts, trash_only: trashOnly }) as any;
+      ns.progress = 30; ns.progressText = '正在分析文件...';
+      const response = await api.executeNode('rawfilter', { path: ns.path, name_only_mode: ns.nameOnlyMode, create_shortcuts: ns.createShortcuts, trash_only: ns.trashOnly }) as any;
       if (response.success) {
-        phase = 'completed'; progress = 100; progressText = '执行完成';
-        filterResult = { totalScanned: response.data?.total_scanned ?? 0, filtered: response.data?.filtered ?? 0, moved: response.data?.moved ?? 0, shortcuts: response.data?.shortcuts ?? 0 };
+        ns.phase = 'completed'; ns.progress = 100; ns.progressText = '执行完成';
+        ns.filterResult = { totalScanned: response.data?.total_scanned ?? 0, filtered: response.data?.filtered ?? 0, moved: response.data?.moved ?? 0, shortcuts: response.data?.shortcuts ?? 0 };
         log(`✅ ${response.message}`);
-        log(`📊 扫描: ${filterResult.totalScanned}, 过滤: ${filterResult.filtered}, 移动: ${filterResult.moved}`);
-      } else { phase = 'error'; progress = 0; log(`❌ 执行失败: ${response.message}`); }
-    } catch (error) { phase = 'error'; progress = 0; log(`❌ 执行失败: ${error}`); }
+        log(`📊 扫描: ${ns.filterResult.totalScanned}, 过滤: ${ns.filterResult.filtered}, 移动: ${ns.filterResult.moved}`);
+      } else { ns.phase = 'error'; ns.progress = 0; log(`❌ 执行失败: ${response.message}`); }
+    } catch (error) { ns.phase = 'error'; ns.progress = 0; log(`❌ 执行失败: ${error}`); }
   }
 
-  function handleReset() { phase = 'idle'; progress = 0; progressText = ''; filterResult = null; logs = []; }
+  function handleReset() { ns.phase = 'idle'; ns.progress = 0; ns.progressText = ''; ns.filterResult = null; logs = []; }
   async function copyLogs() { try { await navigator.clipboard.writeText(logs.join('\n')); copied = true; setTimeout(() => { copied = false; }, 2000); } catch (e) { console.error('复制失败:', e); } }
 </script>
 
@@ -142,7 +115,7 @@
 {#snippet pathBlock()}
   {#if !hasInputConnection}
     <div class="flex cq-gap cq-mb">
-      <Input bind:value={path} placeholder="输入或选择文件夹路径..." disabled={isRunning} class="flex-1 cq-input" />
+      <Input bind:value={ns.path} placeholder="输入或选择文件夹路径..." disabled={isRunning} class="flex-1 cq-input" />
       <Button variant="outline" size="icon" class="cq-button-icon shrink-0" onclick={selectFolder} disabled={isRunning}><FolderOpen class="cq-icon" /></Button>
       <Button variant="outline" size="icon" class="cq-button-icon shrink-0" onclick={pasteFromClipboard} disabled={isRunning}><Clipboard class="cq-icon" /></Button>
     </div>
@@ -155,15 +128,15 @@
 {#snippet optionsBlock()}
   <div class="cq-space">
     <label class="flex items-center cq-gap cursor-pointer">
-      <Checkbox id="name-only-{id}" bind:checked={nameOnlyMode} disabled={isRunning} />
+      <Checkbox id="name-only-{id}" bind:checked={ns.nameOnlyMode} disabled={isRunning} />
       <span class="cq-text flex items-center gap-1"><FileText class="cq-icon" />仅名称模式</span>
     </label>
     <label class="flex items-center cq-gap cursor-pointer">
-      <Checkbox id="shortcuts-{id}" bind:checked={createShortcuts} disabled={isRunning} />
+      <Checkbox id="shortcuts-{id}" bind:checked={ns.createShortcuts} disabled={isRunning} />
       <span class="cq-text flex items-center gap-1"><Link class="cq-icon" />创建快捷方式</span>
     </label>
     <label class="flex items-center cq-gap cursor-pointer">
-      <Checkbox id="trash-only-{id}" bind:checked={trashOnly} disabled={isRunning} />
+      <Checkbox id="trash-only-{id}" bind:checked={ns.trashOnly} disabled={isRunning} />
       <span class="cq-text flex items-center gap-1"><Trash2 class="cq-icon" />仅移动到 trash</span>
     </label>
   </div>
@@ -174,17 +147,17 @@
   <div class="flex flex-col cq-gap h-full">
     <!-- 状态指示 -->
     <div class="flex items-center cq-gap cq-padding bg-muted/30 cq-rounded">
-      {#if phase === 'completed'}
+      {#if ns.phase === 'completed'}
         <CircleCheck class="cq-icon text-green-500 shrink-0" />
         <span class="cq-text text-green-600 font-medium">完成</span>
-        <span class="cq-text-sm text-muted-foreground ml-auto">{filterResult?.moved ?? 0} 移动</span>
-      {:else if phase === 'error'}
+        <span class="cq-text-sm text-muted-foreground ml-auto">{ns.filterResult?.moved ?? 0} 移动</span>
+      {:else if ns.phase === 'error'}
         <Search class="cq-icon text-red-500 shrink-0" />
         <span class="cq-text text-red-600 font-medium">失败</span>
       {:else if isRunning}
         <LoaderCircle class="cq-icon text-primary animate-spin shrink-0" />
-        <div class="flex-1"><Progress value={progress} class="h-1.5" /></div>
-        <span class="cq-text-sm text-muted-foreground">{progress}%</span>
+        <div class="flex-1"><Progress value={ns.progress} class="h-1.5" /></div>
+        <span class="cq-text-sm text-muted-foreground">{ns.progress}%</span>
       {:else}
         <FileSearch class="cq-icon text-muted-foreground/50 shrink-0" />
         <span class="cq-text text-muted-foreground">等待执行</span>
@@ -196,7 +169,7 @@
       <span>过滤</span>
     </Button>
     <!-- 重置按钮 -->
-    {#if phase === 'completed' || phase === 'error'}
+    {#if ns.phase === 'completed' || ns.phase === 'error'}
       <Button variant="outline" class="w-full cq-button-sm" onclick={handleReset}>
         <Play class="cq-icon mr-1" />重新开始
       </Button>
@@ -206,23 +179,23 @@
 
 <!-- 统计区块 -->
 {#snippet statsBlock()}
-  {#if filterResult}
+  {#if ns.filterResult}
     <div class="grid grid-cols-3 cq-gap">
       <div class="cq-stat-card bg-blue-500/10">
         <div class="flex flex-col items-center">
-          <span class="cq-stat-value text-blue-600 tabular-nums">{filterResult.totalScanned}</span>
+          <span class="cq-stat-value text-blue-600 tabular-nums">{ns.filterResult.totalScanned}</span>
           <span class="cq-stat-label text-muted-foreground">扫描</span>
         </div>
       </div>
       <div class="cq-stat-card bg-yellow-500/10">
         <div class="flex flex-col items-center">
-          <span class="cq-stat-value text-yellow-600 tabular-nums">{filterResult.filtered}</span>
+          <span class="cq-stat-value text-yellow-600 tabular-nums">{ns.filterResult.filtered}</span>
           <span class="cq-stat-label text-muted-foreground">过滤</span>
         </div>
       </div>
       <div class="cq-stat-card bg-green-500/10">
         <div class="flex flex-col items-center">
-          <span class="cq-stat-value text-green-600 tabular-nums">{filterResult.moved}</span>
+          <span class="cq-stat-value text-green-600 tabular-nums">{ns.filterResult.moved}</span>
           <span class="cq-stat-label text-muted-foreground">移动</span>
         </div>
       </div>
@@ -235,20 +208,20 @@
 <!-- 进度/状态区块 -->
 {#snippet progressBlock()}
   <div class="h-full flex items-center cq-gap">
-    {#if filterResult}
+    {#if ns.filterResult}
       <CircleCheck class="cq-icon-lg text-green-500 shrink-0" />
       <div class="flex-1">
         <span class="font-semibold text-green-600 cq-text">执行完成</span>
         <div class="flex cq-gap cq-text-sm mt-1">
-          <span class="text-blue-600">扫描: {filterResult.totalScanned}</span>
-          <span class="text-green-600">移动: {filterResult.moved}</span>
+          <span class="text-blue-600">扫描: {ns.filterResult.totalScanned}</span>
+          <span class="text-green-600">移动: {ns.filterResult.moved}</span>
         </div>
       </div>
     {:else if isRunning}
       <LoaderCircle class="cq-icon-lg text-primary animate-spin shrink-0" />
       <div class="flex-1">
-        <div class="flex justify-between cq-text-sm mb-1"><span>{progressText}</span><span>{progress}%</span></div>
-        <Progress value={progress} class="h-2" />
+        <div class="flex justify-between cq-text-sm mb-1"><span>{ns.progressText}</span><span>{ns.progress}%</span></div>
+        <Progress value={ns.progress} class="h-2" />
       </div>
     {:else}
       <FileSearch class="cq-icon-lg text-muted-foreground/50 shrink-0" />
@@ -301,7 +274,7 @@
     nodeId={nodeId} 
     title="rawfilter" 
     icon={Search} 
-    status={phase} 
+    status={ns.phase} 
     {borderClass} 
     isFullscreenRender={isFullscreenRender}
     onCompact={() => layoutRenderer?.compact()}

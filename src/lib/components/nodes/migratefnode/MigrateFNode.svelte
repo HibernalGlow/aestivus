@@ -13,7 +13,7 @@
   import { NodeLayoutRenderer } from '$lib/components/blocks';
   import { MIGRATEF_DEFAULT_GRID_LAYOUT } from '$lib/components/blocks/blockRegistry';
   import { api } from '$lib/services/api';
-  import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
+  import { getNodeState, saveNodeState } from '$lib/stores/nodeState.svelte';
   import NodeWrapper from '../NodeWrapper.svelte';
   import { 
     LoaderCircle, FolderOpen, Clipboard, FolderInput,
@@ -42,62 +42,40 @@
 
   // 使用 $derived 确保响应式
   const nodeId = $derived(id);
-  const savedState = $derived(getNodeState<MigrateFNodeState>(nodeId));
-  const configPath = $derived(data?.config?.path ?? '');
-  const configTargetPath = $derived(data?.config?.target_path ?? 'E:\\1Hub\\EH\\2EHV');
-  const configMode = $derived(data?.config?.mode as 'preserve' | 'flat' | 'direct' ?? 'preserve');
-  const configAction = $derived(data?.config?.action as 'copy' | 'move' ?? 'move');
   const dataLogs = $derived(data?.logs ?? []);
   const dataHasInputConnection = $derived(data?.hasInputConnection ?? false);
 
-  let sourcePath = $state('');
-  let targetPath = $state('E:\\1Hub\\EH\\2EHV');
-  let mode = $state<'preserve' | 'flat' | 'direct'>('preserve');
-  let action = $state<'copy' | 'move'>('move');
-  
-  let phase = $state<Phase>('idle');
+  // 获取共享的响应式状态
+  const ns = getNodeState<MigrateFNodeState>(id, {
+    phase: 'idle',
+    progress: 0,
+    progressText: '',
+    migrateResult: null,
+    lastOperationId: '',
+    sourcePath: '',
+    targetPath: 'E:\\1Hub\\EH\\2EHV',
+    mode: 'preserve',
+    action: 'move'
+  });
+
   let logs = $state<string[]>([]);
   let hasInputConnection = $state(false);
   let copied = $state(false);
-  let progress = $state(0);
-  let progressText = $state('');
-  let migrateResult = $state<MigrateResultData | null>(null);
-  let lastOperationId = $state('');
   let isUndoing = $state(false);
-
   let layoutRenderer = $state<any>(undefined);
-
-  // 初始化标记
-  let initialized = $state(false);
-
-  // 初始化 effect - 只执行一次
-  $effect(() => {
-    if (initialized) return;
-    
-    if (savedState) {
-      phase = savedState.phase ?? 'idle';
-      progress = savedState.progress ?? 0;
-      progressText = savedState.progressText ?? '';
-      migrateResult = savedState.migrateResult ?? null;
-      lastOperationId = savedState.lastOperationId ?? '';
-      sourcePath = savedState.sourcePath || configPath || '';
-      targetPath = savedState.targetPath || configTargetPath || '';
-      mode = savedState.mode || configMode || 'preserve';
-      action = savedState.action || configAction || 'copy';
-    } else {
-      sourcePath = configPath || '';
-      targetPath = configTargetPath || '';
-      mode = configMode || 'preserve';
-      action = configAction || 'copy';
-    }
-    
-    initialized = true;
-  });
   
   // 持续同步外部数据
   $effect(() => {
     logs = [...dataLogs];
     hasInputConnection = dataHasInputConnection;
+  });
+
+  // 从 config 同步默认值（仅当未设置时）
+  $effect(() => {
+    if (ns.sourcePath === '' && data?.config?.path) ns.sourcePath = data.config.path;
+    if (data?.config?.target_path && ns.targetPath === 'E:\\1Hub\\EH\\2EHV') ns.targetPath = data.config.target_path;
+    if (data?.config?.mode) ns.mode = data.config.mode as any;
+    if (data?.config?.action) ns.action = data.config.action as any;
   });
 
   const modeOptions = [
@@ -106,16 +84,9 @@
     { value: 'direct', label: '直接' }
   ];
 
-  function saveState() { 
-    if (!initialized) return;
-    setNodeState<MigrateFNodeState>(nodeId, { phase, progress, progressText, migrateResult, lastOperationId, sourcePath, targetPath, mode, action }); 
-  }
-
-  let canMigrate = $derived(phase === 'idle' && (sourcePath.trim() !== '' || hasInputConnection) && targetPath.trim() !== '');
-  let isRunning = $derived(phase === 'migrating');
-  let borderClass = $derived({ idle: 'border-border', migrating: 'border-primary shadow-sm', completed: 'border-primary/50', error: 'border-destructive/50' }[phase]);
-
-  $effect(() => { if (phase || migrateResult) saveState(); });
+  let canMigrate = $derived(ns.phase === 'idle' && (ns.sourcePath.trim() !== '' || hasInputConnection) && ns.targetPath.trim() !== '');
+  let isRunning = $derived(ns.phase === 'migrating');
+  let borderClass = $derived({ idle: 'border-border', migrating: 'border-primary shadow-sm', completed: 'border-primary/50', error: 'border-destructive/50' }[ns.phase]);
 
   function log(msg: string) { logs = [...logs.slice(-30), msg]; }
 
@@ -123,7 +94,7 @@
     try {
       const { platform } = await import('$lib/api/platform');
       const selected = await platform.openFolderDialog(type === 'source' ? '选择源文件夹' : '选择目标文件夹');
-      if (selected) { if (type === 'source') sourcePath = selected; else targetPath = selected; }
+      if (selected) { if (type === 'source') ns.sourcePath = selected; else ns.targetPath = selected; }
     } catch (e) { log(`选择文件夹失败: ${e}`); }
   }
 
@@ -131,43 +102,43 @@
     try {
       const { platform } = await import('$lib/api/platform');
       const text = await platform.readClipboard();
-      if (text) { if (type === 'source') sourcePath = text.trim(); else targetPath = text.trim(); }
+      if (text) { if (type === 'source') ns.sourcePath = text.trim(); else ns.targetPath = text.trim(); }
     } catch (e) { log(`读取剪贴板失败: ${e}`); }
   }
 
   async function handleMigrate() {
     if (!canMigrate) return;
-    phase = 'migrating'; progress = 0; progressText = '正在迁移...';
-    migrateResult = null;
+    ns.phase = 'migrating'; ns.progress = 0; ns.progressText = '正在迁移...';
+    ns.migrateResult = null;
     
-    const actionText = action === 'move' ? '移动' : '复制';
-    const modeText = mode === 'preserve' ? '保持结构' : mode === 'flat' ? '扁平' : '直接';
-    log(`📁 开始${actionText}到: ${targetPath}`);
+    const actionText = ns.action === 'move' ? '移动' : '复制';
+    const modeText = ns.mode === 'preserve' ? '保持结构' : ns.mode === 'flat' ? '扁平' : '直接';
+    log(`📁 开始${actionText}到: ${ns.targetPath}`);
     log(`⚙️ 模式: ${modeText}`);
 
     try {
-      progress = 10;
-      const response = await api.executeNode('migratef', { path: sourcePath, target_path: targetPath, mode, action }) as any;
+      ns.progress = 10;
+      const response = await api.executeNode('migratef', { path: ns.sourcePath, target_path: ns.targetPath, mode: ns.mode, action: ns.action }) as any;
       if (response.success) {
-        phase = 'completed'; progress = 100; progressText = '迁移完成';
+        ns.phase = 'completed'; ns.progress = 100; ns.progressText = '迁移完成';
         const opId = response.data?.operation_id ?? '';
-        migrateResult = { success: true, migrated: response.data?.migrated_count ?? 0, skipped: response.data?.skipped_count ?? 0, error: response.data?.error_count ?? 0, total: response.data?.total_count ?? 0, operation_id: opId };
-        if (opId) lastOperationId = opId;
+        ns.migrateResult = { success: true, migrated: response.data?.migrated_count ?? 0, skipped: response.data?.skipped_count ?? 0, error: response.data?.error_count ?? 0, total: response.data?.total_count ?? 0, operation_id: opId };
+        if (opId) ns.lastOperationId = opId;
         log(`✅ ${response.message}`);
         if (opId) log(`🔄 撤销 ID: ${opId}`);
-      } else { phase = 'error'; progress = 0; log(`❌ 迁移失败: ${response.message}`); }
-    } catch (error) { phase = 'error'; progress = 0; log(`❌ 迁移失败: ${error}`); }
+      } else { ns.phase = 'error'; ns.progress = 0; log(`❌ 迁移失败: ${response.message}`); }
+    } catch (error) { ns.phase = 'error'; ns.progress = 0; log(`❌ 迁移失败: ${error}`); }
   }
 
-  function handleReset() { phase = 'idle'; progress = 0; progressText = ''; migrateResult = null; logs = []; lastOperationId = ''; }
+  function handleReset() { ns.phase = 'idle'; ns.progress = 0; ns.progressText = ''; ns.migrateResult = null; logs = []; ns.lastOperationId = ''; }
 
   async function handleUndo() {
-    if (!lastOperationId || isUndoing) return;
+    if (!ns.lastOperationId || isUndoing) return;
     isUndoing = true;
-    log(`🔄 开始撤销操作: ${lastOperationId}`);
+    log(`🔄 开始撤销操作: ${ns.lastOperationId}`);
     try {
-      const response = await api.executeNode('migratef', { action: 'undo', batch_id: lastOperationId }) as any;
-      if (response.success) { log(`✅ ${response.message}`); lastOperationId = ''; migrateResult = null; phase = 'idle'; }
+      const response = await api.executeNode('migratef', { action: 'undo', batch_id: ns.lastOperationId }) as any;
+      if (response.success) { log(`✅ ${response.message}`); ns.lastOperationId = ''; ns.migrateResult = null; ns.phase = 'idle'; }
       else { log(`❌ 撤销失败: ${response.message}`); }
     } catch (error) { log(`❌ 撤销失败: ${error}`); }
     finally { isUndoing = false; }
@@ -185,7 +156,7 @@
     </div>
     {#if !hasInputConnection}
       <div class="flex cq-gap">
-        <Input bind:value={sourcePath} placeholder="输入或选择源文件夹..." disabled={isRunning} class="flex-1 cq-input" />
+        <Input bind:value={ns.sourcePath} placeholder="输入或选择源文件夹..." disabled={isRunning} class="flex-1 cq-input" />
         <Button variant="outline" size="icon" class="cq-button-icon shrink-0" onclick={() => selectFolder('source')} disabled={isRunning}>
           <FolderOpen class="cq-icon" />
         </Button>
@@ -209,7 +180,7 @@
       <span class="font-medium">目标目录</span>
     </div>
     <div class="flex cq-gap">
-      <Input bind:value={targetPath} placeholder="输入或选择目标文件夹..." disabled={isRunning} class="flex-1 cq-input" />
+      <Input bind:value={ns.targetPath} placeholder="输入或选择目标文件夹..." disabled={isRunning} class="flex-1 cq-input" />
       <Button variant="outline" size="icon" class="cq-button-icon shrink-0" onclick={() => selectFolder('target')} disabled={isRunning}>
         <FolderOpen class="cq-icon" />
       </Button>
@@ -229,20 +200,20 @@
     <div class="flex flex-wrap cq-gap">
       {#each modeOptions as opt}
         <button
-          class="cq-px cq-py cq-text cq-rounded border transition-colors {mode === opt.value ? 'bg-primary text-primary-foreground border-primary' : 'bg-background border-border hover:border-primary'}"
-          onclick={() => mode = opt.value as any} disabled={isRunning}
+          class="cq-px cq-py cq-text cq-rounded border transition-colors {ns.mode === opt.value ? 'bg-primary text-primary-foreground border-primary' : 'bg-background border-border hover:border-primary'}"
+          onclick={() => ns.mode = opt.value as any} disabled={isRunning}
         >{opt.label}</button>
       {/each}
     </div>
     <div class="flex items-center cq-gap pt-2">
       <span class="cq-text font-medium">操作:</span>
       <button
-        class="cq-px cq-py cq-text cq-rounded border transition-colors {action === 'move' ? 'bg-blue-500 text-white border-blue-500' : 'bg-background border-border hover:border-blue-500'}"
-        onclick={() => action = 'move'} disabled={isRunning}
+        class="cq-px cq-py cq-text cq-rounded border transition-colors {ns.action === 'move' ? 'bg-blue-500 text-white border-blue-500' : 'bg-background border-border hover:border-blue-500'}"
+        onclick={() => ns.action = 'move'} disabled={isRunning}
       >移动</button>
       <button
-        class="cq-px cq-py cq-text cq-rounded border transition-colors {action === 'copy' ? 'bg-green-500 text-white border-green-500' : 'bg-background border-border hover:border-green-500'}"
-        onclick={() => action = 'copy'} disabled={isRunning}
+        class="cq-px cq-py cq-text cq-rounded border transition-colors {ns.action === 'copy' ? 'bg-green-500 text-white border-green-500' : 'bg-background border-border hover:border-green-500'}"
+        onclick={() => ns.action = 'copy'} disabled={isRunning}
       >复制</button>
     </div>
   </div>
@@ -253,17 +224,17 @@
   <div class="flex flex-col cq-gap h-full">
     <!-- 状态指示 -->
     <div class="flex items-center cq-gap cq-padding bg-muted/30 cq-rounded">
-      {#if phase === 'completed'}
+      {#if ns.phase === 'completed'}
         <CircleCheck class="cq-icon text-green-500 shrink-0" />
         <span class="cq-text text-green-600 font-medium">完成</span>
-        <span class="cq-text-sm text-muted-foreground ml-auto">{migrateResult?.migrated ?? 0} 成功</span>
-      {:else if phase === 'error'}
+        <span class="cq-text-sm text-muted-foreground ml-auto">{ns.migrateResult?.migrated ?? 0} 成功</span>
+      {:else if ns.phase === 'error'}
         <CircleX class="cq-icon text-red-500 shrink-0" />
         <span class="cq-text text-red-600 font-medium">失败</span>
       {:else if isRunning}
         <LoaderCircle class="cq-icon text-primary animate-spin shrink-0" />
-        <div class="flex-1"><Progress value={progress} class="h-1.5" /></div>
-        <span class="cq-text-sm text-muted-foreground">{progress}%</span>
+        <div class="flex-1"><Progress value={ns.progress} class="h-1.5" /></div>
+        <span class="cq-text-sm text-muted-foreground">{ns.progress}%</span>
       {:else}
         <FolderInput class="cq-icon text-muted-foreground/50 shrink-0" />
         <span class="cq-text text-muted-foreground">等待执行</span>
@@ -272,14 +243,14 @@
     <!-- 主按钮 -->
     <Button class="w-full cq-button flex-1" onclick={handleMigrate} disabled={!canMigrate || isRunning}>
       {#if isRunning}<LoaderCircle class="cq-icon mr-1 animate-spin" />{:else}<ArrowRight class="cq-icon mr-1" />{/if}
-      <span>{action === 'move' ? '移动' : '复制'}</span>
+      <span>{ns.action === 'move' ? '移动' : '复制'}</span>
     </Button>
     <!-- 辅助按钮 -->
     <div class="flex cq-gap">
       <Button variant="ghost" class="flex-1 cq-button-sm" onclick={handleReset} disabled={isRunning}>
         <RotateCcw class="cq-icon mr-1" />重置
       </Button>
-      {#if lastOperationId}
+      {#if ns.lastOperationId}
         <Button variant="outline" class="flex-1 cq-button-sm" onclick={handleUndo} disabled={isUndoing || isRunning}>
           {#if isUndoing}<LoaderCircle class="cq-icon mr-1 animate-spin" />撤销中{:else}<Undo2 class="cq-icon mr-1" />撤销{/if}
         </Button>
@@ -290,23 +261,23 @@
 
 <!-- 统计区块 -->
 {#snippet statsBlock()}
-  {#if migrateResult}
+  {#if ns.migrateResult}
     <div class="grid grid-cols-3 cq-gap">
       <div class="cq-stat-card bg-green-500/10">
         <div class="flex flex-col items-center">
-          <span class="cq-stat-value text-green-600 tabular-nums">{migrateResult.migrated}</span>
+          <span class="cq-stat-value text-green-600 tabular-nums">{ns.migrateResult.migrated}</span>
           <span class="cq-stat-label text-muted-foreground">成功</span>
         </div>
       </div>
       <div class="cq-stat-card bg-yellow-500/10">
         <div class="flex flex-col items-center">
-          <span class="cq-stat-value text-yellow-600 tabular-nums">{migrateResult.skipped}</span>
+          <span class="cq-stat-value text-yellow-600 tabular-nums">{ns.migrateResult.skipped}</span>
           <span class="cq-stat-label text-muted-foreground">跳过</span>
         </div>
       </div>
       <div class="cq-stat-card bg-red-500/10">
         <div class="flex flex-col items-center">
-          <span class="cq-stat-value text-red-600 tabular-nums">{migrateResult.error}</span>
+          <span class="cq-stat-value text-red-600 tabular-nums">{ns.migrateResult.error}</span>
           <span class="cq-stat-label text-muted-foreground">失败</span>
         </div>
       </div>
@@ -319,15 +290,15 @@
 <!-- 进度/状态区块 -->
 {#snippet progressBlock()}
   <div class="h-full flex items-center cq-gap">
-    {#if migrateResult}
-      {#if migrateResult.success}
+    {#if ns.migrateResult}
+      {#if ns.migrateResult.success}
         <CircleCheck class="cq-icon-lg text-green-500 shrink-0" />
         <div class="flex-1">
           <span class="font-semibold text-green-600 cq-text">迁移完成</span>
           <div class="flex cq-gap cq-text-sm mt-1">
-            <span class="text-green-600">成功: {migrateResult.migrated}</span>
-            <span class="text-yellow-600">跳过: {migrateResult.skipped}</span>
-            <span class="text-red-600">失败: {migrateResult.error}</span>
+            <span class="text-green-600">成功: {ns.migrateResult.migrated}</span>
+            <span class="text-yellow-600">跳过: {ns.migrateResult.skipped}</span>
+            <span class="text-red-600">失败: {ns.migrateResult.error}</span>
           </div>
         </div>
       {:else}
@@ -337,8 +308,8 @@
     {:else if isRunning}
       <LoaderCircle class="cq-icon-lg text-primary animate-spin shrink-0" />
       <div class="flex-1">
-        <div class="flex justify-between cq-text-sm mb-1"><span>{progressText}</span><span>{progress}%</span></div>
-        <Progress value={progress} class="h-2" />
+        <div class="flex justify-between cq-text-sm mb-1"><span>{ns.progressText}</span><span>{ns.progress}%</span></div>
+        <Progress value={ns.progress} class="h-2" />
       </div>
     {:else}
       <FolderInput class="cq-icon-lg text-muted-foreground/50 shrink-0" />
@@ -393,7 +364,7 @@
     nodeId={nodeId} 
     title="migratef" 
     icon={FolderInput} 
-    status={phase} 
+    status={ns.phase} 
     {borderClass} 
     isFullscreenRender={isFullscreenRender}
     onCompact={() => layoutRenderer?.compact()}

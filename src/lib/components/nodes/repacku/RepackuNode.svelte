@@ -12,7 +12,7 @@
   import { NodeLayoutRenderer } from '$lib/components/blocks';
   import { REPACKU_DEFAULT_GRID_LAYOUT } from '$lib/components/blocks/blockRegistry';
   import { api } from '$lib/services/api';
-  import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
+  import { getNodeState, saveNodeState } from '$lib/stores/nodeState.svelte';
   import NodeWrapper from '../NodeWrapper.svelte';
   import type { FolderNode, CompressionStats } from '$lib/types/repacku';
   import { getModeColorClass, getModeName, countCompressionModes } from './utils';
@@ -67,70 +67,60 @@
     expandedFolders: string[];
     path: string;
     deleteAfter: boolean;
+    logs: string[];
+    hasInputConnection: boolean;
   }
 
   // 使用 $derived 确保响应式
   const nodeId = $derived(id);
-  const savedState = $derived(getNodeState<RepackuState>(nodeId));
   const configPath = $derived(data?.config?.path ?? '');
   const configDeleteAfter = $derived(data?.config?.delete_after ?? false);
   const dataLogs = $derived(data?.logs ?? []);
   const dataHasInputConnection = $derived(data?.hasInputConnection ?? false);
 
-  // 状态初始化
-  let path = $state('');
-  let deleteAfter = $state(false);
-  let phase = $state<Phase>('idle');
-  let logs = $state<string[]>([]);
-  let hasInputConnection = $state(false);
+  // 获取共享的响应式状态
+  const ns = getNodeState<RepackuState>(id, {
+    phase: 'idle',
+    progress: 0,
+    progressText: '',
+    folderTree: null,
+    analysisResult: null,
+    compressionResult: null,
+    selectedTypes: [],
+    expandedFolders: [],
+    path: configPath || '',
+    deleteAfter: configDeleteAfter,
+    logs: [],
+    hasInputConnection: false
+  });
+
+  // 本地 UI 状态
   let copied = $state(false);
-
-  let progress = $state(0);
-  let progressText = $state('');
-
-  // 文件树数据
-  let folderTree = $state<FolderNode | null>(null);
+  let layoutRenderer = $state<any>(undefined);
+  
+  // 文件树统计（派生状态）
   let stats = $state<CompressionStats>({ total: 0, entire: 0, selective: 0, skip: 0 });
-  let expandedFolders = $state<Set<string>>(new Set());
+  let expandedFoldersSet = $state<Set<string>>(new Set());
 
-  let analysisResult = $state<AnalysisResult | null>(null);
-  let compressionResult = $state<CompressionResultData | null>(null);
-  let selectedTypes = $state<string[]>([]);
-
-  // 初始化标记
-  let initialized = $state(false);
-
-  // 初始化 effect - 只执行一次
+  // 同步 configPath
   $effect(() => {
-    if (initialized) return;
-    
-    if (savedState) {
-      phase = savedState.phase ?? 'idle';
-      progress = savedState.progress ?? 0;
-      progressText = savedState.progressText ?? '';
-      folderTree = savedState.folderTree ?? null;
-      analysisResult = savedState.analysisResult ?? null;
-      compressionResult = savedState.compressionResult ?? null;
-      selectedTypes = savedState.selectedTypes ?? [];
-      expandedFolders = new Set(savedState.expandedFolders ?? []);
-      path = savedState.path || configPath || '';
-      deleteAfter = savedState.deleteAfter ?? configDeleteAfter;
-    } else {
-      path = configPath || '';
-      deleteAfter = configDeleteAfter;
+    if (configPath && !ns.path) {
+      ns.path = configPath;
     }
-    
-    initialized = true;
+  });
+
+  // 同步外部数据
+  $effect(() => {
+    if (dataLogs.length > 0) {
+      ns.logs = [...dataLogs];
+    }
+    ns.hasInputConnection = dataHasInputConnection;
   });
   
-  // 持续同步外部数据
+  // 同步 expandedFolders
   $effect(() => {
-    logs = [...dataLogs];
-    hasInputConnection = dataHasInputConnection;
+    expandedFoldersSet = new Set(ns.expandedFolders);
   });
-
-  // NodeLayoutRenderer 引用
-  let layoutRenderer = $state<any>(undefined);
 
   const typeOptions = [
     { value: 'image', label: '图片' },
@@ -139,46 +129,40 @@
     { value: 'audio', label: '音频' }
   ];
 
-  function saveState() {
-    if (!initialized) return;
-    setNodeState<RepackuState>(nodeId, {
-      phase, progress, progressText, folderTree, analysisResult, compressionResult,
-      selectedTypes, expandedFolders: Array.from(expandedFolders), path, deleteAfter
-    });
-  }
-
   // 响应式派生值
-  let canAnalyze = $derived(phase === 'idle' && (path.trim() !== '' || hasInputConnection));
-  let canCompress = $derived(phase === 'analyzed' && analysisResult !== null);
-  let isRunning = $derived(phase === 'analyzing' || phase === 'compressing');
+  let canAnalyze = $derived(ns.phase === 'idle' && (ns.path.trim() !== '' || ns.hasInputConnection));
+  let canCompress = $derived(ns.phase === 'analyzed' && ns.analysisResult !== null);
+  let isRunning = $derived(ns.phase === 'analyzing' || ns.phase === 'compressing');
   let borderClass = $derived({
     idle: 'border-border', analyzing: 'border-primary shadow-sm', analyzed: 'border-primary/50',
     compressing: 'border-primary shadow-sm', completed: 'border-primary/50', error: 'border-destructive/50'
-  }[phase]);
+  }[ns.phase]);
 
   // 状态变化时自动保存
   $effect(() => {
-    if (phase || folderTree || analysisResult || compressionResult) saveState();
+    ns.phase; ns.folderTree; ns.analysisResult; ns.compressionResult;
+    saveNodeState(nodeId);
   });
 
   // 当 folderTree 更新时，重新计算统计
   $effect(() => {
-    if (folderTree) stats = countCompressionModes(folderTree);
+    if (ns.folderTree) stats = countCompressionModes(ns.folderTree);
   });
 
-  function log(msg: string) { logs = [...logs.slice(-30), msg]; }
+  function log(msg: string) { ns.logs = [...ns.logs.slice(-30), msg]; }
 
   function toggleFolder(folderPath: string) {
-    if (expandedFolders.has(folderPath)) expandedFolders.delete(folderPath);
-    else expandedFolders.add(folderPath);
-    expandedFolders = new Set(expandedFolders);
+    if (expandedFoldersSet.has(folderPath)) expandedFoldersSet.delete(folderPath);
+    else expandedFoldersSet.add(folderPath);
+    expandedFoldersSet = new Set(expandedFoldersSet);
+    ns.expandedFolders = Array.from(expandedFoldersSet);
   }
 
   async function selectFolder() {
     try {
       const { platform } = await import('$lib/api/platform');
       const selected = await platform.openFolderDialog('选择文件夹');
-      if (selected) path = selected;
+      if (selected) ns.path = selected;
     } catch (e) { log(`选择文件夹失败: ${e}`); }
   }
 
@@ -186,73 +170,73 @@
     try {
       const { platform } = await import('$lib/api/platform');
       const text = await platform.readClipboard();
-      if (text) path = text.trim();
+      if (text) ns.path = text.trim();
     } catch (e) { log(`读取剪贴板失败: ${e}`); }
   }
 
   function toggleType(type: string) {
-    if (selectedTypes.includes(type)) selectedTypes = selectedTypes.filter(t => t !== type);
-    else selectedTypes = [...selectedTypes, type];
+    if (ns.selectedTypes.includes(type)) ns.selectedTypes = ns.selectedTypes.filter(t => t !== type);
+    else ns.selectedTypes = [...ns.selectedTypes, type];
   }
 
   async function handleAnalyze() {
     if (!canAnalyze) return;
-    phase = 'analyzing'; progress = 0; progressText = '正在扫描目录结构...';
-    analysisResult = null; compressionResult = null; folderTree = null;
-    log(`🔍 开始分析目录: ${path}`);
-    if (selectedTypes.length > 0) log(`📋 类型过滤: ${selectedTypes.join(', ')}`);
+    ns.phase = 'analyzing'; ns.progress = 0; ns.progressText = '正在扫描目录结构...';
+    ns.analysisResult = null; ns.compressionResult = null; ns.folderTree = null;
+    log(`🔍 开始分析目录: ${ns.path}`);
+    if (ns.selectedTypes.length > 0) log(`📋 类型过滤: ${ns.selectedTypes.join(', ')}`);
 
     try {
-      progress = 30; progressText = '正在分析文件类型分布...';
+      ns.progress = 30; ns.progressText = '正在分析文件类型分布...';
       const response = await api.executeNode('repacku', {
-        action: 'analyze', path, types: selectedTypes.length > 0 ? selectedTypes : [], display_tree: true
+        action: 'analyze', path: ns.path, types: ns.selectedTypes.length > 0 ? ns.selectedTypes : [], display_tree: true
       }) as any;
 
       if (response.success && response.data) {
-        phase = 'analyzed'; progress = 100; progressText = '分析完成';
-        folderTree = response.data.folder_tree || null;
-        analysisResult = {
+        ns.phase = 'analyzed'; ns.progress = 100; ns.progressText = '分析完成';
+        ns.folderTree = response.data.folder_tree || null;
+        ns.analysisResult = {
           configPath: response.data.config_path ?? '', totalFolders: response.data.total_folders ?? 0,
           entireCount: response.data.entire_count ?? 0, selectiveCount: response.data.selective_count ?? 0,
           skipCount: response.data.skip_count ?? 0, folderTree: response.data.folder_tree
         };
         log(`✅ 分析完成`);
-        log(`📊 整体压缩: ${analysisResult.entireCount}, 选择性: ${analysisResult.selectiveCount}, 跳过: ${analysisResult.skipCount}`);
-      } else { phase = 'error'; progress = 0; log(`❌ 分析失败: ${response.message}`); }
-    } catch (error) { phase = 'error'; progress = 0; log(`❌ 分析失败: ${error}`); }
+        log(`📊 整体压缩: ${ns.analysisResult.entireCount}, 选择性: ${ns.analysisResult.selectiveCount}, 跳过: ${ns.analysisResult.skipCount}`);
+      } else { ns.phase = 'error'; ns.progress = 0; log(`❌ 分析失败: ${response.message}`); }
+    } catch (error) { ns.phase = 'error'; ns.progress = 0; log(`❌ 分析失败: ${error}`); }
   }
 
   async function handleCompress() {
-    if (!canCompress || !analysisResult) return;
-    phase = 'compressing'; progress = 0; progressText = '正在压缩文件...';
+    if (!canCompress || !ns.analysisResult) return;
+    ns.phase = 'compressing'; ns.progress = 0; ns.progressText = '正在压缩文件...';
     log(`📦 开始压缩...`);
 
     try {
-      progress = 20;
+      ns.progress = 20;
       const response = await api.executeNode('repacku', {
-        action: 'compress', config_path: analysisResult.configPath, delete_after: deleteAfter
+        action: 'compress', config_path: ns.analysisResult.configPath, delete_after: ns.deleteAfter
       }) as any;
 
       if (response.success) {
-        phase = 'completed'; progress = 100; progressText = '压缩完成';
-        compressionResult = {
+        ns.phase = 'completed'; ns.progress = 100; ns.progressText = '压缩完成';
+        ns.compressionResult = {
           success: true, compressed: response.data?.compressed_count ?? 0,
           failed: response.data?.failed_count ?? 0, total: response.data?.total_folders ?? 0
         };
         log(`✅ ${response.message}`);
-        log(`📊 成功: ${compressionResult.compressed}, 失败: ${compressionResult.failed}`);
-      } else { phase = 'error'; progress = 0; log(`❌ 压缩失败: ${response.message}`); }
-    } catch (error) { phase = 'error'; progress = 0; log(`❌ 压缩失败: ${error}`); }
+        log(`📊 成功: ${ns.compressionResult.compressed}, 失败: ${ns.compressionResult.failed}`);
+      } else { ns.phase = 'error'; ns.progress = 0; log(`❌ 压缩失败: ${response.message}`); }
+    } catch (error) { ns.phase = 'error'; ns.progress = 0; log(`❌ 压缩失败: ${error}`); }
   }
 
   function handleReset() {
-    phase = 'idle'; progress = 0; progressText = '';
-    analysisResult = null; compressionResult = null; folderTree = null;
-    logs = []; expandedFolders.clear();
+    ns.phase = 'idle'; ns.progress = 0; ns.progressText = '';
+    ns.analysisResult = null; ns.compressionResult = null; ns.folderTree = null;
+    ns.logs = []; expandedFoldersSet.clear(); ns.expandedFolders = [];
   }
 
   async function copyLogs() {
-    try { await navigator.clipboard.writeText(logs.join('\n')); copied = true; setTimeout(() => { copied = false; }, 2000); }
+    try { await navigator.clipboard.writeText(ns.logs.join('\n')); copied = true; setTimeout(() => { copied = false; }, 2000); }
     catch (e) { console.error('复制失败:', e); }
   }
 
@@ -270,7 +254,7 @@
 
 <!-- 递归渲染文件夹树节点 -->
 {#snippet renderFolderNode(node: FolderNode, depth: number = 0)}
-  {@const isExpanded = expandedFolders.has(node.path)}
+  {@const isExpanded = expandedFoldersSet.has(node.path)}
   {@const hasChildren = node.children && node.children.length > 0}
   {@const modeColor = getModeColorClass(node.compress_mode)}
   {@const modeText = getModeName(node.compress_mode)}
@@ -316,9 +300,9 @@
 
 <!-- 路径输入区块 -->
 {#snippet pathBlock()}
-  {#if !hasInputConnection}
+  {#if !ns.hasInputConnection}
     <div class="flex cq-gap cq-mb">
-      <Input bind:value={path} placeholder="输入或选择文件夹路径..." disabled={isRunning} class="flex-1 cq-input" />
+      <Input bind:value={ns.path} placeholder="输入或选择文件夹路径..." disabled={isRunning} class="flex-1 cq-input" />
       <Button variant="outline" size="icon" class="cq-button-icon shrink-0" onclick={selectFolder} disabled={isRunning}>
         <FolderOpen class="cq-icon" />
       </Button>
@@ -338,13 +322,13 @@
   <div class="flex flex-wrap cq-gap">
     {#each typeOptions as option}
       <button
-        class="cq-px cq-py cq-text cq-rounded border transition-colors {selectedTypes.includes(option.value) ? 'bg-primary text-primary-foreground border-primary' : 'bg-background border-border hover:border-primary'}"
+        class="cq-px cq-py cq-text cq-rounded border transition-colors {ns.selectedTypes.includes(option.value) ? 'bg-primary text-primary-foreground border-primary' : 'bg-background border-border hover:border-primary'}"
         onclick={() => toggleType(option.value)} disabled={isRunning}
       >{option.label}</button>
     {/each}
   </div>
   <label class="cq-wide-only-flex items-center cq-gap mt-auto pt-3 border-t cursor-pointer">
-    <Checkbox id="delete-after-fs-{nodeId}" bind:checked={deleteAfter} disabled={isRunning} />
+    <Checkbox id="delete-after-fs-{nodeId}" bind:checked={ns.deleteAfter} disabled={isRunning} />
     <span class="cq-text flex items-center gap-1"><Trash2 class="cq-icon" />压缩后删除源文件</span>
   </label>
 {/snippet}
@@ -354,42 +338,42 @@
   <div class="flex flex-col cq-gap h-full">
     <!-- 状态指示 -->
     <div class="flex items-center cq-gap cq-padding bg-muted/30 cq-rounded">
-      {#if compressionResult}
-        {#if compressionResult.success}
+      {#if ns.compressionResult}
+        {#if ns.compressionResult.success}
           <CircleCheck class="cq-icon text-green-500 shrink-0" />
           <span class="cq-text text-green-600 font-medium">完成</span>
-          <span class="cq-text-sm text-muted-foreground ml-auto">{compressionResult.compressed} 成功</span>
+          <span class="cq-text-sm text-muted-foreground ml-auto">{ns.compressionResult.compressed} 成功</span>
         {:else}
           <CircleX class="cq-icon text-red-500 shrink-0" />
           <span class="cq-text text-red-600 font-medium">失败</span>
         {/if}
       {:else if isRunning}
         <LoaderCircle class="cq-icon text-primary animate-spin shrink-0" />
-        <div class="flex-1"><Progress value={progress} class="h-1.5" /></div>
-        <span class="cq-text-sm text-muted-foreground">{progress}%</span>
+        <div class="flex-1"><Progress value={ns.progress} class="h-1.5" /></div>
+        <span class="cq-text-sm text-muted-foreground">{ns.progress}%</span>
       {:else}
         <Package class="cq-icon text-muted-foreground/50 shrink-0" />
         <span class="cq-text text-muted-foreground">等待扫描</span>
       {/if}
     </div>
     <!-- 主按钮 -->
-    {#if phase === 'idle' || phase === 'error'}
+    {#if ns.phase === 'idle' || ns.phase === 'error'}
       <Button class="w-full cq-button flex-1" onclick={handleAnalyze} disabled={!canAnalyze}>
         <Search class="cq-icon mr-1" /><span>扫描分析</span>
       </Button>
-    {:else if phase === 'analyzing'}
+    {:else if ns.phase === 'analyzing'}
       <Button class="w-full cq-button flex-1" disabled>
         <LoaderCircle class="cq-icon mr-1 animate-spin" /><span>分析中</span>
       </Button>
-    {:else if phase === 'analyzed'}
+    {:else if ns.phase === 'analyzed'}
       <Button class="w-full cq-button flex-1" onclick={handleCompress} disabled={!canCompress}>
         <FileArchive class="cq-icon mr-1" /><span>开始压缩</span>
       </Button>
-    {:else if phase === 'compressing'}
+    {:else if ns.phase === 'compressing'}
       <Button class="w-full cq-button flex-1" disabled>
         <LoaderCircle class="cq-icon mr-1 animate-spin" /><span>压缩中</span>
       </Button>
-    {:else if phase === 'completed'}
+    {:else if ns.phase === 'completed'}
       <Button class="w-full cq-button flex-1" onclick={handleReset}>
         <Play class="cq-icon mr-1" /><span>重新开始</span>
       </Button>
@@ -401,7 +385,7 @@
       </Button>
       <!-- 紧凑模式下的删除选项 -->
       <label class="cq-compact-only-flex items-center gap-2 cursor-pointer">
-        <Checkbox id="delete-after-compact-{nodeId}" bind:checked={deleteAfter} disabled={isRunning} class="h-3 w-3" />
+        <Checkbox id="delete-after-compact-{nodeId}" bind:checked={ns.deleteAfter} disabled={isRunning} class="h-3 w-3" />
         <span class="cq-text-sm flex items-center gap-1"><Trash2 class="cq-icon-sm text-orange-500" />删除源</span>
       </label>
     </div>
@@ -413,19 +397,19 @@
   <div class="grid grid-cols-3 cq-gap">
     <div class="cq-stat-card bg-green-500/10">
       <div class="flex flex-col items-center">
-        <span class="cq-stat-value text-green-600 tabular-nums">{analysisResult?.entireCount ?? '-'}</span>
+        <span class="cq-stat-value text-green-600 tabular-nums">{ns.analysisResult?.entireCount ?? '-'}</span>
         <span class="cq-stat-label text-muted-foreground">整体</span>
       </div>
     </div>
     <div class="cq-stat-card bg-yellow-500/10">
       <div class="flex flex-col items-center">
-        <span class="cq-stat-value text-yellow-600 tabular-nums">{analysisResult?.selectiveCount ?? '-'}</span>
+        <span class="cq-stat-value text-yellow-600 tabular-nums">{ns.analysisResult?.selectiveCount ?? '-'}</span>
         <span class="cq-stat-label text-muted-foreground">选择</span>
       </div>
     </div>
     <div class="cq-stat-card bg-muted/40">
       <div class="flex flex-col items-center">
-        <span class="cq-stat-value text-gray-500 tabular-nums">{analysisResult?.skipCount ?? '-'}</span>
+        <span class="cq-stat-value text-gray-500 tabular-nums">{ns.analysisResult?.skipCount ?? '-'}</span>
         <span class="cq-stat-label text-muted-foreground">跳过</span>
       </div>
     </div>
@@ -435,14 +419,14 @@
 <!-- 进度/状态区块 -->
 {#snippet progressBlock()}
   <div class="h-full flex items-center cq-gap">
-    {#if compressionResult}
-      {#if compressionResult.success}
+    {#if ns.compressionResult}
+      {#if ns.compressionResult.success}
         <CircleCheck class="cq-icon-lg text-green-500 shrink-0" />
         <div class="flex-1">
           <span class="font-semibold text-green-600 cq-text">压缩完成</span>
           <div class="flex cq-gap cq-text-sm mt-1">
-            <span class="text-green-600">成功: {compressionResult.compressed}</span>
-            <span class="text-red-600">失败: {compressionResult.failed}</span>
+            <span class="text-green-600">成功: {ns.compressionResult.compressed}</span>
+            <span class="text-red-600">失败: {ns.compressionResult.failed}</span>
           </div>
         </div>
       {:else}
@@ -452,8 +436,8 @@
     {:else if isRunning}
       <LoaderCircle class="cq-icon-lg text-primary animate-spin shrink-0" />
       <div class="flex-1">
-        <div class="flex justify-between cq-text-sm mb-1"><span>{progressText}</span><span>{progress}%</span></div>
-        <Progress value={progress} class="h-2" />
+        <div class="flex justify-between cq-text-sm mb-1"><span>{ns.progressText}</span><span>{ns.progress}%</span></div>
+        <Progress value={ns.progress} class="h-2" />
       </div>
     {:else}
       <Package class="cq-icon-lg text-muted-foreground/50 shrink-0" />
@@ -479,7 +463,7 @@
       </div>
     </div>
     <div class="flex-1 overflow-y-auto cq-padding">
-      {#if folderTree}{@render renderFolderNode(folderTree)}
+      {#if ns.folderTree}{@render renderFolderNode(ns.folderTree)}
       {:else}<div class="cq-text text-muted-foreground text-center py-3">扫描后显示</div>{/if}
     </div>
   </div>
@@ -495,8 +479,8 @@
       </Button>
     </div>
     <div class="flex-1 overflow-y-auto bg-muted/30 cq-rounded cq-padding font-mono cq-text-sm space-y-0.5">
-      {#if logs.length > 0}
-        {#each logs.slice(-10) as logItem}<div class="text-muted-foreground break-all">{logItem}</div>{/each}
+      {#if ns.logs.length > 0}
+        {#each ns.logs.slice(-10) as logItem}<div class="text-muted-foreground break-all">{logItem}</div>{/each}
       {:else}
         <div class="text-muted-foreground text-center py-2">暂无日志</div>
       {/if}
@@ -528,7 +512,7 @@
     nodeId={nodeId} 
     title="repacku" 
     icon={Package} 
-    status={phase} 
+    status={ns.phase} 
     {borderClass} 
     isFullscreenRender={isFullscreenRender}
     onCompact={() => layoutRenderer?.compact()}

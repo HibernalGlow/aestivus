@@ -14,7 +14,7 @@
   import { NodeLayoutRenderer } from '$lib/components/blocks';
   import { LINEDUP_DEFAULT_GRID_LAYOUT } from './blocks';
   import { api } from '$lib/services/api';
-  import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
+  import { getNodeState, saveNodeState } from '$lib/stores/nodeState.svelte';
   import NodeWrapper from '../NodeWrapper.svelte';
   import { 
     LoaderCircle, Filter, Clipboard,
@@ -48,13 +48,16 @@
   }
 
   const nodeId = $derived(id);
-  const savedState = $derived(getNodeState<LinedupState>(nodeId));
   const dataLogs = $derived(data?.logs ?? []);
   const dataHasInputConnection = $derived(data?.hasInputConnection ?? false);
 
-  // 状态变量
-  let sourceText = $state('');
-  let filterText = $state('');
+  // 获取共享的响应式状态
+  const ns = getNodeState<LinedupState>(id, {
+    sourceText: '',
+    filterText: ''
+  });
+
+  // 运行时状态（不需持久化）
   let keptLines = $state<string[]>([]);
   let removedLines = $state<string[]>([]);
   let diffParts = $state<DiffPart[]>([]);
@@ -64,32 +67,15 @@
   let copied = $state(false);
   let hasInputConnection = $state(false);
   let layoutRenderer = $state<any>(undefined);
-
-  let initialized = $state(false);
-  
-  $effect(() => {
-    if (initialized) return;
-    
-    if (savedState) {
-      sourceText = savedState.sourceText ?? '';
-      filterText = savedState.filterText ?? '';
-    }
-    initialized = true;
-  });
   
   $effect(() => {
     logs = [...dataLogs];
     hasInputConnection = dataHasInputConnection;
   });
 
-  function saveState() {
-    if (!initialized) return;
-    setNodeState<LinedupState>(nodeId, { sourceText, filterText });
-  }
-
   let isRunning = $derived(phase === 'running');
-  let sourceLines = $derived(sourceText.split('\n').filter(s => s.trim()));
-  let filterLines = $derived(filterText.split('\n').filter(s => s.trim()));
+  let sourceLines = $derived(ns.sourceText.split('\n').filter(s => s.trim()));
+  let filterLines = $derived(ns.filterText.split('\n').filter(s => s.trim()));
   let canExecute = $derived(sourceLines.length > 0 && !isRunning);
   
   let borderClass = $derived({
@@ -99,15 +85,13 @@
     error: 'border-destructive/50'
   }[phase]);
 
-  $effect(() => { if (sourceText || filterText) saveState(); });
-
   function log(msg: string) { logs = [...logs.slice(-50), msg]; }
 
   async function pasteSource() {
     try {
       const { platform } = await import('$lib/api/platform');
       const text = await platform.readClipboard();
-      if (text) sourceText = text;
+      if (text) ns.sourceText = text;
     } catch (e) { log(`读取剪贴板失败: ${e}`); }
   }
 
@@ -115,7 +99,7 @@
     try {
       const { platform } = await import('$lib/api/platform');
       const text = await platform.readClipboard();
-      if (text) filterText = text;
+      if (text) ns.filterText = text;
     } catch (e) { log(`读取剪贴板失败: ${e}`); }
   }
 
@@ -232,7 +216,7 @@
       </Button>
     </div>
     <Textarea 
-      bind:value={sourceText}
+      bind:value={ns.sourceText}
       placeholder="每行一个内容..."
       disabled={isRunning}
       class="flex-1 cq-input font-mono text-xs resize-none min-h-[80px]"
@@ -250,7 +234,7 @@
       </Button>
     </div>
     <Textarea 
-      bind:value={filterText}
+      bind:value={ns.filterText}
       placeholder="每行一个过滤关键词...&#10;源行包含这些内容将被移除"
       disabled={isRunning}
       class="flex-1 cq-input font-mono text-xs resize-none min-h-[80px]"

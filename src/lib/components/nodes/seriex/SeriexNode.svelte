@@ -14,7 +14,7 @@
   import { NodeLayoutRenderer } from '$lib/components/blocks';
   import { SERIEX_DEFAULT_GRID_LAYOUT } from './blocks';
   import { api } from '$lib/services/api';
-  import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
+  import { getNodeState, saveNodeState } from '$lib/stores/nodeState.svelte';
   import NodeWrapper from '../NodeWrapper.svelte';
   import { 
     BookOpen, FolderSearch, Play, RotateCcw, Copy, Check,
@@ -45,69 +45,60 @@
     addPrefix: boolean;
     prefix: string;
     knownSeriesDirs: string;
+    // 运行时状态
+    phase: Phase;
+    logs: string[];
+    plan: Record<string, Record<string, string[]>>;
+    totalSeries: number;
+    totalFiles: number;
+    expandedDirs: string[];
   }
 
   const nodeId = $derived(id);
-  const savedState = $derived(getNodeState<SeriexState>(nodeId));
   const dataLogs = $derived(data?.logs ?? []);
 
-  // 状态变量
-  let directoryPath = $state('');
-  let threshold = $state(75);
-  let ratioThreshold = $state(75);
-  let partialThreshold = $state(85);
-  let tokenThreshold = $state(80);
-  let lengthDiffMax = $state(0.3);
-  let addPrefix = $state(true);
-  let prefix = $state('[#s]');
-  let knownSeriesDirs = $state('');
-  
-  let phase = $state<Phase>('idle');
-  let logs = $state<string[]>([]);
+  // 获取共享的响应式状态
+  const ns = getNodeState<SeriexState>(id, {
+    directoryPath: '',
+    threshold: 75,
+    ratioThreshold: 75,
+    partialThreshold: 85,
+    tokenThreshold: 80,
+    lengthDiffMax: 0.3,
+    addPrefix: true,
+    prefix: '[#s]',
+    knownSeriesDirs: '',
+    phase: 'idle',
+    logs: [],
+    plan: {},
+    totalSeries: 0,
+    totalFiles: 0,
+    expandedDirs: []
+  });
+
+  // 本地 UI 状态
   let copied = $state(false);
   let layoutRenderer = $state<any>(undefined);
   
-  // 计划结果
-  let plan = $state<Record<string, Record<string, string[]>>>({});
-  let totalSeries = $state(0);
-  let totalFiles = $state(0);
-  
-  // 展开状态
-  let expandedDirs = $state<Set<string>>(new Set());
+  // 展开状态 Set（派生自 ns.expandedDirs）
+  let expandedDirsSet = $state<Set<string>>(new Set());
 
-  let initialized = $state(false);
-  
-  $effect(() => {
-    if (initialized) return;
-    
-    if (savedState) {
-      directoryPath = savedState.directoryPath ?? '';
-      threshold = savedState.threshold ?? 75;
-      ratioThreshold = savedState.ratioThreshold ?? 75;
-      partialThreshold = savedState.partialThreshold ?? 85;
-      tokenThreshold = savedState.tokenThreshold ?? 80;
-      lengthDiffMax = savedState.lengthDiffMax ?? 0.3;
-      addPrefix = savedState.addPrefix ?? true;
-      prefix = savedState.prefix ?? '[#s]';
-      knownSeriesDirs = savedState.knownSeriesDirs ?? '';
+  // 同步 data.logs
+  $effect(() => { 
+    if (dataLogs.length > 0) {
+      ns.logs = [...dataLogs]; 
     }
-    initialized = true;
   });
   
-  $effect(() => { logs = [...dataLogs]; });
-
-  function saveState() {
-    if (!initialized) return;
-    setNodeState<SeriexState>(nodeId, { 
-      directoryPath, threshold, ratioThreshold, partialThreshold,
-      tokenThreshold, lengthDiffMax, addPrefix, prefix, knownSeriesDirs
-    });
-  }
+  // 同步 expandedDirs
+  $effect(() => {
+    expandedDirsSet = new Set(ns.expandedDirs);
+  });
 
   // 派生状态
-  let isPlanning = $derived(phase === 'planning');
-  let isExecuting = $derived(phase === 'executing');
-  let hasPlan = $derived(Object.keys(plan).length > 0);
+  let isPlanning = $derived(ns.phase === 'planning');
+  let isExecuting = $derived(ns.phase === 'executing');
+  let hasPlan = $derived(Object.keys(ns.plan).length > 0);
   
   let borderClass = $derived({
     idle: 'border-border',
@@ -116,55 +107,59 @@
     executing: 'border-orange-500/50',
     completed: 'border-green-500/50',
     error: 'border-destructive/50'
-  }[phase]);
+  }[ns.phase]);
 
-  $effect(() => { if (directoryPath || threshold) saveState(); });
+  // 配置变更时自动保存
+  $effect(() => { 
+    ns.directoryPath; ns.threshold;
+    saveNodeState(nodeId); 
+  });
 
-  function log(msg: string) { logs = [...logs.slice(-100), msg]; }
+  function log(msg: string) { ns.logs = [...ns.logs.slice(-100), msg]; }
 
   // 生成计划
   async function handlePlan() {
-    if (!directoryPath) {
+    if (!ns.directoryPath) {
       log('❌ 请输入目录路径');
       return;
     }
     
-    phase = 'planning';
-    plan = {};
-    log(`📂 开始扫描: ${directoryPath}`);
+    ns.phase = 'planning';
+    ns.plan = {};
+    log(`📂 开始扫描: ${ns.directoryPath}`);
     
     try {
       const response = await api.executeNode('seriex', {
         action: 'plan',
-        directory_path: directoryPath,
-        threshold,
-        ratio_threshold: ratioThreshold,
-        partial_threshold: partialThreshold,
-        token_threshold: tokenThreshold,
-        length_diff_max: lengthDiffMax,
-        add_prefix: addPrefix,
-        prefix,
-        known_series_dirs: knownSeriesDirs.split('\n').filter(s => s.trim())
+        directory_path: ns.directoryPath,
+        threshold: ns.threshold,
+        ratio_threshold: ns.ratioThreshold,
+        partial_threshold: ns.partialThreshold,
+        token_threshold: ns.tokenThreshold,
+        length_diff_max: ns.lengthDiffMax,
+        add_prefix: ns.addPrefix,
+        prefix: ns.prefix,
+        known_series_dirs: ns.knownSeriesDirs.split('\n').filter(s => s.trim())
       }) as any;
       
       if (response.logs) for (const m of response.logs) log(m);
       
       if (response.success) {
-        phase = 'planned';
-        plan = response.data?.plan ?? {};
-        totalSeries = response.data?.total_series ?? 0;
-        totalFiles = response.data?.total_files ?? 0;
+        ns.phase = 'planned';
+        ns.plan = response.data?.plan ?? {};
+        ns.totalSeries = response.data?.total_series ?? 0;
+        ns.totalFiles = response.data?.total_files ?? 0;
         
         // 默认展开所有目录
-        expandedDirs = new Set(Object.keys(plan));
+        ns.expandedDirs = Object.keys(ns.plan);
         
         log(`✅ ${response.message}`);
       } else {
-        phase = 'error';
+        ns.phase = 'error';
         log(`❌ ${response.message}`);
       }
     } catch (error) {
-      phase = 'error';
+      ns.phase = 'error';
       log(`❌ 扫描失败: ${error}`);
     }
   }
@@ -176,61 +171,62 @@
       return;
     }
     
-    phase = 'executing';
+    ns.phase = 'executing';
     log(`🚀 开始执行移动...`);
     
     try {
       const response = await api.executeNode('seriex', {
         action: 'apply',
-        directory_path: directoryPath,
-        threshold,
-        ratio_threshold: ratioThreshold,
-        partial_threshold: partialThreshold,
-        token_threshold: tokenThreshold,
-        length_diff_max: lengthDiffMax,
-        add_prefix: addPrefix,
-        prefix,
-        known_series_dirs: knownSeriesDirs.split('\n').filter(s => s.trim())
+        directory_path: ns.directoryPath,
+        threshold: ns.threshold,
+        ratio_threshold: ns.ratioThreshold,
+        partial_threshold: ns.partialThreshold,
+        token_threshold: ns.tokenThreshold,
+        length_diff_max: ns.lengthDiffMax,
+        add_prefix: ns.addPrefix,
+        prefix: ns.prefix,
+        known_series_dirs: ns.knownSeriesDirs.split('\n').filter(s => s.trim())
       }) as any;
       
       if (response.logs) for (const m of response.logs) log(m);
       
       if (response.success) {
-        phase = 'completed';
-        totalSeries = response.data?.total_series ?? 0;
-        totalFiles = response.data?.total_files ?? 0;
-        plan = {}; // 清空计划
+        ns.phase = 'completed';
+        ns.totalSeries = response.data?.total_series ?? 0;
+        ns.totalFiles = response.data?.total_files ?? 0;
+        ns.plan = {}; // 清空计划
         log(`✅ ${response.message}`);
       } else {
-        phase = 'error';
+        ns.phase = 'error';
         log(`❌ ${response.message}`);
       }
     } catch (error) {
-      phase = 'error';
+      ns.phase = 'error';
       log(`❌ 执行失败: ${error}`);
     }
   }
 
   function toggleDir(dirPath: string) {
-    const newSet = new Set(expandedDirs);
+    const newSet = new Set(expandedDirsSet);
     if (newSet.has(dirPath)) {
       newSet.delete(dirPath);
     } else {
       newSet.add(dirPath);
     }
-    expandedDirs = newSet;
+    expandedDirsSet = newSet;
+    ns.expandedDirs = Array.from(newSet);
   }
 
   function handleReset() {
-    phase = 'idle';
-    plan = {};
-    expandedDirs = new Set();
-    logs = [];
+    ns.phase = 'idle';
+    ns.plan = {};
+    ns.expandedDirs = [];
+    ns.logs = [];
   }
 
   async function copyLogs() {
     try {
-      await navigator.clipboard.writeText(logs.join('\n'));
+      await navigator.clipboard.writeText(ns.logs.join('\n'));
       copied = true;
       setTimeout(() => { copied = false; }, 2000);
     } catch (e) { console.error('复制失败:', e); }
@@ -253,7 +249,7 @@
     <div class="flex flex-col cq-gap">
       <Label class="cq-text font-medium">目录路径</Label>
       <Input 
-        bind:value={directoryPath}
+        bind:value={ns.directoryPath}
         placeholder="要处理的目录路径"
         disabled={isPlanning || isExecuting}
         class="cq-input font-mono text-xs"
@@ -263,7 +259,7 @@
     <div class="flex flex-col cq-gap">
       <Label class="cq-text font-medium">系列前缀</Label>
       <Input 
-        bind:value={prefix}
+        bind:value={ns.prefix}
         placeholder="[#s]"
         disabled={isPlanning || isExecuting}
         class="cq-input font-mono text-xs"
@@ -273,7 +269,7 @@
     <div class="flex items-center cq-gap">
       <Checkbox 
         id="addPrefix"
-        bind:checked={addPrefix}
+        bind:checked={ns.addPrefix}
         disabled={isPlanning || isExecuting}
       />
       <Label for="addPrefix" class="cq-text-sm">添加系列前缀</Label>
@@ -282,7 +278,7 @@
     <div class="flex flex-col cq-gap">
       <Label class="cq-text font-medium">已知系列目录（每行一个）</Label>
       <textarea 
-        bind:value={knownSeriesDirs}
+        bind:value={ns.knownSeriesDirs}
         placeholder="已知系列库目录..."
         disabled={isPlanning || isExecuting}
         class="flex-1 cq-input font-mono text-xs resize-none min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2"
@@ -296,12 +292,12 @@
     <div class="flex flex-col cq-gap">
       <div class="flex justify-between">
         <Label class="cq-text-sm">基本相似度</Label>
-        <span class="cq-text-sm text-muted-foreground">{threshold}%</span>
+        <span class="cq-text-sm text-muted-foreground">{ns.threshold}%</span>
       </div>
       <Slider 
         type="single"
-        value={threshold} 
-        onValueChange={(v: number) => threshold = v}
+        value={ns.threshold} 
+        onValueChange={(v: number) => ns.threshold = v}
         min={0} max={100} step={1}
         disabled={isPlanning || isExecuting}
       />
@@ -310,12 +306,12 @@
     <div class="flex flex-col cq-gap">
       <div class="flex justify-between">
         <Label class="cq-text-sm">完全匹配</Label>
-        <span class="cq-text-sm text-muted-foreground">{ratioThreshold}%</span>
+        <span class="cq-text-sm text-muted-foreground">{ns.ratioThreshold}%</span>
       </div>
       <Slider 
         type="single"
-        value={ratioThreshold} 
-        onValueChange={(v: number) => ratioThreshold = v}
+        value={ns.ratioThreshold} 
+        onValueChange={(v: number) => ns.ratioThreshold = v}
         min={0} max={100} step={1}
         disabled={isPlanning || isExecuting}
       />
@@ -324,12 +320,12 @@
     <div class="flex flex-col cq-gap">
       <div class="flex justify-between">
         <Label class="cq-text-sm">部分匹配</Label>
-        <span class="cq-text-sm text-muted-foreground">{partialThreshold}%</span>
+        <span class="cq-text-sm text-muted-foreground">{ns.partialThreshold}%</span>
       </div>
       <Slider 
         type="single"
-        value={partialThreshold} 
-        onValueChange={(v: number) => partialThreshold = v}
+        value={ns.partialThreshold} 
+        onValueChange={(v: number) => ns.partialThreshold = v}
         min={0} max={100} step={1}
         disabled={isPlanning || isExecuting}
       />
@@ -338,12 +334,12 @@
     <div class="flex flex-col cq-gap">
       <div class="flex justify-between">
         <Label class="cq-text-sm">标记匹配</Label>
-        <span class="cq-text-sm text-muted-foreground">{tokenThreshold}%</span>
+        <span class="cq-text-sm text-muted-foreground">{ns.tokenThreshold}%</span>
       </div>
       <Slider 
         type="single"
-        value={tokenThreshold} 
-        onValueChange={(v: number) => tokenThreshold = v}
+        value={ns.tokenThreshold} 
+        onValueChange={(v: number) => ns.tokenThreshold = v}
         min={0} max={100} step={1}
         disabled={isPlanning || isExecuting}
       />
@@ -352,12 +348,12 @@
     <div class="flex flex-col cq-gap">
       <div class="flex justify-between">
         <Label class="cq-text-sm">长度差异</Label>
-        <span class="cq-text-sm text-muted-foreground">{lengthDiffMax.toFixed(2)}</span>
+        <span class="cq-text-sm text-muted-foreground">{ns.lengthDiffMax.toFixed(2)}</span>
       </div>
       <Slider 
         type="single"
-        value={lengthDiffMax * 100} 
-        onValueChange={(v: number) => lengthDiffMax = v / 100}
+        value={ns.lengthDiffMax * 100} 
+        onValueChange={(v: number) => ns.lengthDiffMax = v / 100}
         min={0} max={100} step={1}
         disabled={isPlanning || isExecuting}
       />
@@ -371,7 +367,7 @@
       <Button 
         class="flex-1 cq-button" 
         onclick={handlePlan}
-        disabled={isPlanning || isExecuting || !directoryPath}
+        disabled={isPlanning || isExecuting || !ns.directoryPath}
       >
         {#if isPlanning}
           <Loader2 class="cq-icon mr-1 animate-spin" />
@@ -398,8 +394,8 @@
     
     {#if hasPlan}
       <div class="p-2 rounded bg-muted/50 cq-text-sm">
-        <div>📚 系列: {totalSeries}</div>
-        <div>📄 文件: {totalFiles}</div>
+        <div>📚 系列: {ns.totalSeries}</div>
+        <div>📄 文件: {ns.totalFiles}</div>
       </div>
     {/if}
     
@@ -417,8 +413,8 @@
       </div>
     {:else}
       <div class="flex-1 overflow-y-auto space-y-2 cq-padding">
-        {#each Object.entries(plan) as [dirPath, groups] (dirPath)}
-          {@const isExpanded = expandedDirs.has(dirPath)}
+        {#each Object.entries(ns.plan) as [dirPath, groups] (dirPath)}
+          {@const isExpanded = expandedDirsSet.has(dirPath)}
           {@const dirName = dirPath.split(/[/\\]/).pop() ?? dirPath}
           
           <div class="border rounded-lg bg-card/50">
@@ -492,8 +488,8 @@
       </Button>
     </div>
     <div class="flex-1 overflow-y-auto bg-muted/30 cq-rounded cq-padding font-mono cq-text-sm space-y-0.5">
-      {#if logs.length > 0}
-        {#each logs.slice(-30) as logItem}<div class="text-muted-foreground break-all">{logItem}</div>{/each}
+      {#if ns.logs.length > 0}
+        {#each ns.logs.slice(-30) as logItem}<div class="text-muted-foreground break-all">{logItem}</div>{/each}
       {:else}
         <div class="text-muted-foreground text-center py-2">暂无日志</div>
       {/if}
@@ -520,7 +516,7 @@
     nodeId={nodeId} 
     title="seriex" 
     icon={BookOpen} 
-    status={phase === 'idle' ? 'idle' : phase === 'planning' || phase === 'executing' ? 'running' : phase === 'completed' ? 'completed' : phase === 'error' ? 'error' : 'idle'} 
+    status={ns.phase === 'idle' ? 'idle' : ns.phase === 'planning' || ns.phase === 'executing' ? 'running' : ns.phase === 'completed' ? 'completed' : ns.phase === 'error' ? 'error' : 'idle'} 
     {borderClass} 
     isFullscreenRender={isFullscreenRender}
     onCompact={() => layoutRenderer?.compact()}

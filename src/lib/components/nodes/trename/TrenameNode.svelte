@@ -13,7 +13,7 @@
   import { NodeLayoutRenderer } from '$lib/components/blocks';
   import { TRENAME_DEFAULT_GRID_LAYOUT } from '$lib/components/blocks/blockRegistry';
   import { api } from '$lib/services/api';
-  import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
+  import { getNodeState, saveNodeState } from '$lib/stores/nodeState.svelte';
   import NodeWrapper from '../NodeWrapper.svelte';
   import { 
     LoaderCircle, FolderOpen, Clipboard, FilePenLine, Search, Undo2,
@@ -36,123 +36,116 @@
 
   // 使用 $derived 确保响应式
   const nodeId = $derived(id);
-  const savedState = $derived(getNodeState<TrenameState>(nodeId));
   const configPath = $derived(data?.config?.path ?? '');
   const dataLogs = $derived(data?.logs ?? []);
 
-  // 状态初始化
-  let phase = $state<Phase>('idle');
-  let logs = $state<string[]>([]);
-  let copied = $state(false);
-
-  // 配置
-  let scanPath = $state('');
-  let includeHidden = $state(false);
-  let excludeExts = $state(DEFAULT_EXCLUDE_EXTS);
-  let maxLines = $state(1000);
-  let useCompact = $state(true);
-  let basePath = $state('');
-  let dryRun = $state(false);
-
-  // 数据
-  let treeData = $state<TreeNode[]>([]);
-  let segments = $state<string[]>([]);
-  let currentSegment = $state(0);
-  let stats = $state({ ...DEFAULT_STATS });
-  let conflicts = $state<string[]>([]);
-  let lastOperationId = $state('');
-  let operationHistory = $state<OperationRecord[]>([]);
-
-  // 初始化标记，防止 $effect 覆盖用户输入
-  let initialized = $state(false);
-
-  // 初始化状态（只执行一次）
-  $effect(() => {
-    if (initialized) return;
-    
-    scanPath = savedState?.scanPath ?? configPath;
-    logs = savedState?.logs ?? [...dataLogs];
-    
-    if (savedState) {
-      phase = savedState.phase ?? 'idle';
-      includeHidden = savedState.includeHidden ?? false;
-      excludeExts = savedState.excludeExts ?? DEFAULT_EXCLUDE_EXTS;
-      maxLines = savedState.maxLines ?? 1000;
-      useCompact = savedState.useCompact ?? true;
-      basePath = savedState.basePath ?? '';
-      dryRun = savedState.dryRun ?? false;
-      treeData = savedState.treeData ?? [];
-      segments = savedState.segments ?? [];
-      currentSegment = savedState.currentSegment ?? 0;
-      stats = savedState.stats ?? { ...DEFAULT_STATS };
-      conflicts = savedState.conflicts ?? [];
-      lastOperationId = savedState.lastOperationId ?? '';
-      operationHistory = savedState.operationHistory ?? [];
-    }
-    
-    initialized = true;
-  });
-
-  // NodeLayoutRenderer 引用
-  let layoutRenderer = $state<any>(undefined);
-
-  function saveState() {
-    setNodeState<TrenameState>(nodeId, {
-      phase, logs, showTree: true, showOptions: true, showJsonInput: false, jsonInputText: '',
-      scanPath, includeHidden, excludeExts, maxLines, useCompact, basePath, dryRun,
-      treeData, segments, currentSegment, stats, conflicts, lastOperationId, operationHistory
-    });
+  interface TrenameNodeState {
+    phase: Phase;
+    logs: string[];
+    scanPath: string;
+    includeHidden: boolean;
+    excludeExts: string;
+    maxLines: number;
+    useCompact: boolean;
+    basePath: string;
+    dryRun: boolean;
+    treeData: TreeNode[];
+    segments: string[];
+    currentSegment: number;
+    stats: typeof DEFAULT_STATS;
+    conflicts: string[];
+    lastOperationId: string;
+    operationHistory: OperationRecord[];
   }
 
+  // 获取共享的响应式状态
+  const ns = getNodeState<TrenameNodeState>(id, {
+    phase: 'idle',
+    logs: [],
+    scanPath: configPath || '',
+    includeHidden: false,
+    excludeExts: DEFAULT_EXCLUDE_EXTS,
+    maxLines: 1000,
+    useCompact: true,
+    basePath: '',
+    dryRun: false,
+    treeData: [],
+    segments: [],
+    currentSegment: 0,
+    stats: { ...DEFAULT_STATS },
+    conflicts: [],
+    lastOperationId: '',
+    operationHistory: []
+  });
+
+  // 本地 UI 状态
+  let copied = $state(false);
+  let layoutRenderer = $state<any>(undefined);
+
+  // 同步 configPath
+  $effect(() => {
+    if (configPath && !ns.scanPath) {
+      ns.scanPath = configPath;
+    }
+  });
+
+  // 同步 data.logs
+  $effect(() => { 
+    if (dataLogs.length > 0) {
+      ns.logs = [...dataLogs]; 
+    }
+  });
+
   // 响应式派生值
-  let isRunning = $derived(phase === 'scanning' || phase === 'renaming');
-  let canRename = $derived(phase === 'ready' && stats.ready > 0);
-  let borderClass = $derived(getPhaseBorderClass(phase));
+  let isRunning = $derived(ns.phase === 'scanning' || ns.phase === 'renaming');
+  let canRename = $derived(ns.phase === 'ready' && ns.stats.ready > 0);
+  let borderClass = $derived(getPhaseBorderClass(ns.phase));
 
   // 状态变化时自动保存
   $effect(() => {
-    if (phase || treeData || segments || stats) saveState();
+    ns.phase; ns.treeData; ns.segments; ns.stats;
+    saveNodeState(nodeId);
   });
 
-  function log(msg: string) { logs = [...logs.slice(-30), msg]; }
+  function log(msg: string) { ns.logs = [...ns.logs.slice(-30), msg]; }
 
   async function selectFolder() {
     try {
       const { platform } = await import('$lib/api/platform');
       const s = await platform.openFolderDialog('选择文件夹');
-      if (s) scanPath = s;
+      if (s) ns.scanPath = s;
     } catch (e) { log(`选择失败: ${e}`); }
   }
 
   async function pastePath() {
-    try { scanPath = (await navigator.clipboard.readText()).trim(); } catch (e) { log(`粘贴失败: ${e}`); }
+    try { ns.scanPath = (await navigator.clipboard.readText()).trim(); } catch (e) { log(`粘贴失败: ${e}`); }
   }
 
   async function handleScan(merge = false) {
-    if (!scanPath.trim()) { log('❌ 请输入路径'); return; }
-    phase = 'scanning'; log(`🔍 ${merge ? '合并' : '替换'}扫描: ${scanPath}`);
+    if (!ns.scanPath.trim()) { log('❌ 请输入路径'); return; }
+    ns.phase = 'scanning'; log(`🔍 ${merge ? '合并' : '替换'}扫描: ${ns.scanPath}`);
     try {
       const r = await api.executeNode('trename', {
-        action: 'scan', paths: [scanPath], include_hidden: includeHidden,
-        exclude_exts: excludeExts, max_lines: maxLines, compact: useCompact
+        action: 'scan', paths: [ns.scanPath], include_hidden: ns.includeHidden,
+        exclude_exts: ns.excludeExts, max_lines: ns.maxLines, compact: ns.useCompact
       }) as any;
       if (r.success && r.data) {
         const segs = r.data.segments || [];
-        if (merge && segments.length > 0) {
-          segments = [...segments, ...segs];
-          stats.total += r.data.total_items || 0;
-          stats.pending += r.data.pending_count || 0;
-          stats.ready += r.data.ready_count || 0;
+        if (merge && ns.segments.length > 0) {
+          ns.segments = [...ns.segments, ...segs];
+          ns.stats.total += r.data.total_items || 0;
+          ns.stats.pending += r.data.pending_count || 0;
+          ns.stats.ready += r.data.ready_count || 0;
         } else {
-          segments = segs;
-          stats = { total: r.data.total_items || 0, pending: r.data.pending_count || 0, ready: r.data.ready_count || 0, conflicts: 0 };
-          basePath = r.data.base_path || '';
+          ns.segments = segs;
+          ns.stats = { total: r.data.total_items || 0, pending: r.data.pending_count || 0, ready: r.data.ready_count || 0, conflicts: 0 };
+          ns.basePath = r.data.base_path || '';
         }
-        if (segs.length > 0) treeData = parseTree(segs[0]);
-        currentSegment = 0; conflicts = []; phase = 'ready';
+        if (segs.length > 0) ns.treeData = parseTree(segs[0]);
+        ns.currentSegment = 0; ns.conflicts = []; ns.phase = 'ready';
         log(`✅ ${r.data.total_items} 项, ${segs.length} 段`);
-      } else { phase = 'error'; log(`❌ ${r.message}`); }
-    } catch (e) { phase = 'error'; log(`❌ ${e}`); }
+      } else { ns.phase = 'error'; log(`❌ ${r.message}`); }
+    } catch (e) { ns.phase = 'error'; log(`❌ ${e}`); }
   }
 
   async function importJson() {
@@ -162,25 +155,25 @@
       log('📋 导入中...');
       const r = await api.executeNode('trename', { action: 'import', json_content: text }) as any;
       if (r.success && r.data) {
-        segments = [text];
-        stats = { total: r.data.total_items || 0, pending: r.data.pending_count || 0, ready: r.data.ready_count || 0, conflicts: 0 };
-        treeData = parseTree(text);
-        currentSegment = 0; phase = 'ready';
+        ns.segments = [text];
+        ns.stats = { total: r.data.total_items || 0, pending: r.data.pending_count || 0, ready: r.data.ready_count || 0, conflicts: 0 };
+        ns.treeData = parseTree(text);
+        ns.currentSegment = 0; ns.phase = 'ready';
         log(`✅ 导入 ${r.data.total_items} 项`);
       } else log(`❌ ${r.message}`);
     } catch (e) { log(`❌ ${e}`); }
   }
 
   async function copySegment(i: number) {
-    if (i >= segments.length) return;
-    try { await navigator.clipboard.writeText(segments[i]); copied = true; log(`📋 段${i+1}已复制`); setTimeout(() => copied = false, 2000); }
+    if (i >= ns.segments.length) return;
+    try { await navigator.clipboard.writeText(ns.segments[i]); copied = true; log(`📋 段${i+1}已复制`); setTimeout(() => copied = false, 2000); }
     catch (e) { log(`复制失败: ${e}`); }
   }
 
   function downloadSegment(i: number) {
-    if (i >= segments.length) return;
+    if (i >= ns.segments.length) return;
     try {
-      const blob = new Blob([segments[i]], { type: 'application/json' });
+      const blob = new Blob([ns.segments[i]], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = generateDownloadFilename(i);
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
@@ -189,54 +182,54 @@
   }
 
   async function validate() {
-    if (!segments.length) return;
+    if (!ns.segments.length) return;
     log('🔍 检测冲突...');
     try {
-      const r = await api.executeNode('trename', { action: 'validate', json_content: segments[currentSegment], base_path: basePath }) as any;
-      if (r.success) { conflicts = r.data?.conflicts || []; stats.conflicts = conflicts.length; log(conflicts.length ? `⚠️ ${conflicts.length} 冲突` : '✅ 无冲突'); }
+      const r = await api.executeNode('trename', { action: 'validate', json_content: ns.segments[ns.currentSegment], base_path: ns.basePath }) as any;
+      if (r.success) { ns.conflicts = r.data?.conflicts || []; ns.stats.conflicts = ns.conflicts.length; log(ns.conflicts.length ? `⚠️ ${ns.conflicts.length} 冲突` : '✅ 无冲突'); }
       else log(`❌ ${r.message}`);
     } catch (e) { log(`❌ ${e}`); }
   }
 
   async function handleRename() {
-    if (!segments.length || !stats.ready) { log('❌ 无可重命名项'); return; }
-    phase = 'renaming'; log(`${dryRun ? '🔍 模拟' : '▶️ 执行'}重命名...`);
+    if (!ns.segments.length || !ns.stats.ready) { log('❌ 无可重命名项'); return; }
+    ns.phase = 'renaming'; log(`${ns.dryRun ? '🔍 模拟' : '▶️ 执行'}重命名...`);
     try {
-      const r = await api.executeNode('trename', { action: 'rename', json_content: segments[currentSegment], base_path: basePath, dry_run: dryRun }) as any;
+      const r = await api.executeNode('trename', { action: 'rename', json_content: ns.segments[ns.currentSegment], base_path: ns.basePath, dry_run: ns.dryRun }) as any;
       if (r.success) {
-        lastOperationId = r.data?.operation_id || ''; phase = 'completed';
+        ns.lastOperationId = r.data?.operation_id || ''; ns.phase = 'completed';
         const successCount = r.data?.success_count || 0;
         log(`✅ 成功${successCount} 失败${r.data?.failed_count || 0}`);
-        if (lastOperationId && !dryRun) {
-          operationHistory = [{ id: lastOperationId, time: new Date().toLocaleTimeString(), count: successCount, canUndo: true }, ...operationHistory].slice(0, 10);
+        if (ns.lastOperationId && !ns.dryRun) {
+          ns.operationHistory = [{ id: ns.lastOperationId, time: new Date().toLocaleTimeString(), count: successCount, canUndo: true }, ...ns.operationHistory].slice(0, 10);
         }
-      } else { phase = 'error'; log(`❌ ${r.message}`); }
-    } catch (e) { phase = 'error'; log(`❌ ${e}`); }
+      } else { ns.phase = 'error'; log(`❌ ${r.message}`); }
+    } catch (e) { ns.phase = 'error'; log(`❌ ${e}`); }
   }
 
   async function handleUndo(opId?: string) {
-    const targetId = opId || lastOperationId;
+    const targetId = opId || ns.lastOperationId;
     if (!targetId) { log('❌ 无可撤销操作'); return; }
     log('🔄 撤销...');
     try {
       const r = await api.executeNode('trename', { action: 'undo', batch_id: targetId }) as any;
       if (r.success) { 
         log(`✅ ${r.message}`); 
-        operationHistory = operationHistory.map(op => op.id === targetId ? { ...op, canUndo: false } : op);
-        if (targetId === lastOperationId) lastOperationId = '';
-        phase = 'ready'; 
+        ns.operationHistory = ns.operationHistory.map(op => op.id === targetId ? { ...op, canUndo: false } : op);
+        if (targetId === ns.lastOperationId) ns.lastOperationId = '';
+        ns.phase = 'ready'; 
       } else log(`❌ ${r.message}`);
     } catch (e) { log(`❌ ${e}`); }
   }
 
   function clear() {
-    treeData = []; segments = []; currentSegment = 0;
-    stats = { ...DEFAULT_STATS }; conflicts = []; lastOperationId = ''; phase = 'idle';
+    ns.treeData = []; ns.segments = []; ns.currentSegment = 0;
+    ns.stats = { ...DEFAULT_STATS }; ns.conflicts = []; ns.lastOperationId = ''; ns.phase = 'idle';
     log('🗑️ 已清空');
   }
 
   async function copyLogs() { 
-    try { await navigator.clipboard.writeText(logs.join('\n')); copied = true; setTimeout(() => copied = false, 2000); } catch {} 
+    try { await navigator.clipboard.writeText(ns.logs.join('\n')); copied = true; setTimeout(() => copied = false, 2000); } catch {} 
   }
 </script>
 
@@ -281,7 +274,7 @@
 <!-- 路径输入区块 -->
 {#snippet pathBlock()}
   <div class="flex cq-gap cq-mb">
-    <Input bind:value={scanPath} placeholder="输入目录路径..." disabled={isRunning} class="flex-1 cq-input" />
+    <Input bind:value={ns.scanPath} placeholder="输入目录路径..." disabled={isRunning} class="flex-1 cq-input" />
     <Button variant="outline" size="icon" class="cq-button-icon shrink-0" onclick={selectFolder} disabled={isRunning}>
       <FolderOpen class="cq-icon" />
     </Button>
@@ -291,7 +284,7 @@
   </div>
   <div class="cq-wide-only-flex cq-gap">
     <Button variant="outline" class="flex-1 cq-button" onclick={() => handleScan(false)} disabled={isRunning}>
-      {#if isRunning && phase === 'scanning'}<LoaderCircle class="cq-icon mr-2 animate-spin" />{:else}<RefreshCw class="cq-icon mr-2" />{/if}替换扫描
+      {#if isRunning && ns.phase === 'scanning'}<LoaderCircle class="cq-icon mr-2 animate-spin" />{:else}<RefreshCw class="cq-icon mr-2" />{/if}替换扫描
     </Button>
     <Button variant="outline" class="flex-1 cq-button" onclick={() => handleScan(true)} disabled={isRunning}>
       <Download class="cq-icon mr-2" />合并扫描
@@ -303,7 +296,7 @@
 {#snippet scanBlock()}
   <div class="flex cq-gap">
     <Button variant="outline" size="sm" class="flex-1 cq-button" onclick={() => handleScan(false)} disabled={isRunning}>
-      {#if isRunning && phase === 'scanning'}<LoaderCircle class="cq-icon-sm mr-1 animate-spin" />{/if}替换
+      {#if isRunning && ns.phase === 'scanning'}<LoaderCircle class="cq-icon-sm mr-1 animate-spin" />{/if}替换
     </Button>
     <Button variant="outline" size="sm" class="flex-1 cq-button" onclick={() => handleScan(true)} disabled={isRunning}>合并</Button>
   </div>
@@ -314,40 +307,40 @@
   <div class="flex flex-col cq-gap h-full">
     <!-- 状态指示 -->
     <div class="flex items-center cq-gap cq-padding bg-muted/30 cq-rounded">
-      {#if phase === 'completed'}
+      {#if ns.phase === 'completed'}
         <Check class="cq-icon text-green-500 shrink-0" />
         <span class="cq-text text-green-600 font-medium">完成</span>
-      {:else if phase === 'error'}
+      {:else if ns.phase === 'error'}
         <span class="cq-text text-red-600 font-medium">错误</span>
       {:else if isRunning}
         <LoaderCircle class="cq-icon text-primary animate-spin shrink-0" />
-        <span class="cq-text text-muted-foreground">{phase === 'scanning' ? '扫描中' : '执行中'}</span>
+        <span class="cq-text text-muted-foreground">{ns.phase === 'scanning' ? '扫描中' : '执行中'}</span>
       {:else}
         <FilePenLine class="cq-icon text-muted-foreground/50 shrink-0" />
         <span class="cq-text text-muted-foreground">等待扫描</span>
       {/if}
     </div>
     <!-- 主按钮 -->
-    {#if phase === 'idle' || phase === 'error'}
-      <Button class="w-full cq-button flex-1" onclick={() => handleScan(false)} disabled={!scanPath.trim()}>
+    {#if ns.phase === 'idle' || ns.phase === 'error'}
+      <Button class="w-full cq-button flex-1" onclick={() => handleScan(false)} disabled={!ns.scanPath.trim()}>
         <Search class="cq-icon mr-1" /><span>扫描</span>
       </Button>
-    {:else if phase === 'scanning'}
+    {:else if ns.phase === 'scanning'}
       <Button class="w-full cq-button flex-1" disabled>
         <LoaderCircle class="cq-icon mr-1 animate-spin" /><span>扫描中</span>
       </Button>
-    {:else if phase === 'ready' || phase === 'completed'}
+    {:else if ns.phase === 'ready' || ns.phase === 'completed'}
       <Button class="w-full cq-button flex-1" onclick={handleRename} disabled={!canRename}>
         <Play class="cq-icon mr-1" /><span>执行重命名</span>
       </Button>
-    {:else if phase === 'renaming'}
+    {:else if ns.phase === 'renaming'}
       <Button class="w-full cq-button flex-1" disabled>
         <LoaderCircle class="cq-icon mr-1 animate-spin" /><span>执行中</span>
       </Button>
     {/if}
     <!-- 辅助按钮 -->
     <div class="flex cq-gap">
-      <Button variant="outline" class="flex-1 cq-button-sm" onclick={validate} disabled={isRunning || !segments.length}>
+      <Button variant="outline" class="flex-1 cq-button-sm" onclick={validate} disabled={isRunning || !ns.segments.length}>
         <Search class="cq-icon mr-1" />检测冲突
       </Button>
       <Button variant="ghost" class="flex-1 cq-button-sm" onclick={clear} disabled={isRunning}>
@@ -362,19 +355,19 @@
   <div class="grid grid-cols-3 cq-gap">
     <div class="cq-stat-card bg-muted/40">
       <div class="flex flex-col items-center">
-        <span class="cq-stat-value tabular-nums">{stats.total}</span>
+        <span class="cq-stat-value tabular-nums">{ns.stats.total}</span>
         <span class="cq-stat-label text-muted-foreground">总计</span>
       </div>
     </div>
     <div class="cq-stat-card bg-yellow-500/10">
       <div class="flex flex-col items-center">
-        <span class="cq-stat-value text-yellow-600 tabular-nums">{stats.pending}</span>
+        <span class="cq-stat-value text-yellow-600 tabular-nums">{ns.stats.pending}</span>
         <span class="cq-stat-label text-muted-foreground">待翻译</span>
       </div>
     </div>
     <div class="cq-stat-card bg-green-500/10">
       <div class="flex flex-col items-center">
-        <span class="cq-stat-value text-green-600 tabular-nums">{stats.ready}</span>
+        <span class="cq-stat-value text-green-600 tabular-nums">{ns.stats.ready}</span>
         <span class="cq-stat-label text-muted-foreground">就绪</span>
       </div>
     </div>
@@ -387,19 +380,19 @@
     <Button variant="ghost" size="sm" class="cq-button-sm" onclick={importJson} disabled={isRunning}>
       <Upload class="cq-icon mr-1" />导入
     </Button>
-    <Button variant="ghost" size="sm" class="cq-button-sm" onclick={() => copySegment(currentSegment)} disabled={!segments.length}>
+    <Button variant="ghost" size="sm" class="cq-button-sm" onclick={() => copySegment(ns.currentSegment)} disabled={!ns.segments.length}>
       {#if copied}<Check class="cq-icon mr-1 text-green-500" />{:else}<Clipboard class="cq-icon mr-1" />{/if}复制
     </Button>
-    <Button variant="ghost" size="sm" class="cq-button-sm" onclick={() => downloadSegment(currentSegment)} disabled={!segments.length}>
+    <Button variant="ghost" size="sm" class="cq-button-sm" onclick={() => downloadSegment(ns.currentSegment)} disabled={!ns.segments.length}>
       <Download class="cq-icon" />
     </Button>
   </div>
-  {#if segments.length > 1}
+  {#if ns.segments.length > 1}
     <div class="flex items-center gap-1 cq-text mt-2">
       <span class="text-muted-foreground">段:</span>
-      {#each segments as _, i}
-        <Button variant={currentSegment === i ? 'default' : 'ghost'} size="sm" class="h-5 w-5 p-0 cq-text"
-          onclick={() => { currentSegment = i; treeData = parseTree(segments[i]); }}>{i + 1}</Button>
+      {#each ns.segments as _, i}
+        <Button variant={ns.currentSegment === i ? 'default' : 'ghost'} size="sm" class="h-5 w-5 p-0 cq-text"
+          onclick={() => { ns.currentSegment = i; ns.treeData = parseTree(ns.segments[i]); }}>{i + 1}</Button>
       {/each}
     </div>
   {/if}
@@ -408,18 +401,18 @@
 <!-- 高级选项区块 -->
 {#snippet optionsBlock()}
   <div class="flex flex-wrap cq-gap cq-text mb-2">
-    <label class="flex items-center gap-1"><Checkbox bind:checked={includeHidden} class="h-3 w-3" /><span>隐藏文件</span></label>
-    <label class="flex items-center gap-1"><Checkbox bind:checked={dryRun} class="h-3 w-3" /><span>模拟执行</span></label>
-    <label class="flex items-center gap-1"><Checkbox bind:checked={useCompact} class="h-3 w-3" /><span>紧凑格式</span></label>
+    <label class="flex items-center gap-1"><Checkbox bind:checked={ns.includeHidden} class="h-3 w-3" /><span>隐藏文件</span></label>
+    <label class="flex items-center gap-1"><Checkbox bind:checked={ns.dryRun} class="h-3 w-3" /><span>模拟执行</span></label>
+    <label class="flex items-center gap-1"><Checkbox bind:checked={ns.useCompact} class="h-3 w-3" /><span>紧凑格式</span></label>
   </div>
   <div class="flex cq-gap cq-text">
     <label class="flex items-center gap-1 flex-1 min-w-0">
       <span class="text-muted-foreground whitespace-nowrap">排除:</span>
-      <Input bind:value={excludeExts} class="cq-input flex-1 min-w-0" placeholder=".json,.txt" />
+      <Input bind:value={ns.excludeExts} class="cq-input flex-1 min-w-0" placeholder=".json,.txt" />
     </label>
     <label class="flex items-center gap-1">
       <span class="text-muted-foreground whitespace-nowrap">分段:</span>
-      <Input type="number" bind:value={maxLines} class="cq-input w-16" min={50} max={5000} step={100} />
+      <Input type="number" bind:value={ns.maxLines} class="cq-input w-16" min={50} max={5000} step={100} />
     </label>
   </div>
 {/snippet}
@@ -432,13 +425,13 @@
         <Folder class="cq-icon text-yellow-500" />文件树
       </span>
       <div class="flex items-center cq-gap cq-text-sm">
-        <span class="flex items-center gap-0.5"><span class="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>{stats.pending}</span>
-        <span class="flex items-center gap-0.5"><span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>{stats.ready}</span>
+        <span class="flex items-center gap-0.5"><span class="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>{ns.stats.pending}</span>
+        <span class="flex items-center gap-0.5"><span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>{ns.stats.ready}</span>
       </div>
     </div>
     <div class="flex-1 overflow-y-auto cq-padding">
-      {#if treeData.length > 0}
-        <TreeView.Root class="text-xs">{#each treeData as node}{@render renderTreeNode(node)}{/each}</TreeView.Root>
+      {#if ns.treeData.length > 0}
+        <TreeView.Root class="text-xs">{#each ns.treeData as node}{@render renderTreeNode(node)}{/each}</TreeView.Root>
       {:else}<div class="cq-text text-muted-foreground text-center py-3">扫描后显示</div>{/if}
     </div>
   </div>
@@ -454,16 +447,16 @@
       </Button>
     </div>
     <div class="flex-1 overflow-y-auto bg-muted/30 cq-rounded cq-padding font-mono cq-text-sm space-y-0.5 mb-2" style="max-height: 80px;">
-      {#if logs.length > 0}
-        {#each logs.slice(-8) as logItem}<div class="text-muted-foreground break-all">{logItem}</div>{/each}
+      {#if ns.logs.length > 0}
+        {#each ns.logs.slice(-8) as logItem}<div class="text-muted-foreground break-all">{logItem}</div>{/each}
       {:else}
         <div class="text-muted-foreground text-center py-2">暂无日志</div>
       {/if}
     </div>
     <div class="flex items-center gap-2 mb-1 shrink-0"><Undo2 class="cq-icon" /><span class="cq-text font-semibold">操作历史</span></div>
     <div class="flex-1 overflow-y-auto">
-      {#if operationHistory.length > 0}
-        {#each operationHistory as op}
+      {#if ns.operationHistory.length > 0}
+        {#each ns.operationHistory as op}
           <div class="flex items-center justify-between cq-padding bg-muted/30 cq-rounded mb-1 cq-text-sm">
             <span>{op.time} - {op.count}项</span>
             {#if op.canUndo}<Button variant="ghost" size="sm" class="h-5 px-2 cq-text-sm" onclick={() => handleUndo(op.id)}>撤销</Button>
@@ -500,7 +493,7 @@
     nodeId={nodeId} 
     title="trename" 
     icon={FilePenLine} 
-    status={phase} 
+    status={ns.phase} 
     {borderClass} 
     isFullscreenRender={isFullscreenRender}
     onCompact={() => layoutRenderer?.compact()}

@@ -98,6 +98,7 @@ import { LINEDUP_BLOCKS, LINEDUP_DEFAULT_GRID_LAYOUT } from '$lib/components/nod
 import { MOVEA_BLOCKS, MOVEA_DEFAULT_GRID_LAYOUT } from '$lib/components/nodes/movea/blocks';
 import { SERIEX_BLOCKS, SERIEX_DEFAULT_GRID_LAYOUT } from '$lib/components/nodes/seriex/blocks';
 import { LATA_BLOCKS, LATA_DEFAULT_GRID_LAYOUT } from '$lib/components/nodes/lata/blocks';
+import { WEIBOSPIDER_BLOCKS, WEIBOSPIDER_DEFAULT_GRID_LAYOUT } from '$lib/components/nodes/weibospider/blocks';
 
 // 重新导出供外部使用
 export { FINDZ_BLOCKS, FINDZ_DEFAULT_GRID_LAYOUT };
@@ -122,6 +123,7 @@ export { LINEDUP_BLOCKS, LINEDUP_DEFAULT_GRID_LAYOUT };
 export { MOVEA_BLOCKS, MOVEA_DEFAULT_GRID_LAYOUT };
 export { SERIEX_BLOCKS, SERIEX_DEFAULT_GRID_LAYOUT };
 export { LATA_BLOCKS, LATA_DEFAULT_GRID_LAYOUT };
+export { WEIBOSPIDER_BLOCKS, WEIBOSPIDER_DEFAULT_GRID_LAYOUT };
 
 // ============ 注册表 ============
 export const nodeBlockRegistry: Record<string, NodeBlockLayout> = {
@@ -146,7 +148,8 @@ export const nodeBlockRegistry: Record<string, NodeBlockLayout> = {
   linedup: { nodeType: 'linedup', blocks: LINEDUP_BLOCKS, defaultGridLayout: LINEDUP_DEFAULT_GRID_LAYOUT },
   movea: { nodeType: 'movea', blocks: MOVEA_BLOCKS, defaultGridLayout: MOVEA_DEFAULT_GRID_LAYOUT },
   seriex: { nodeType: 'seriex', blocks: SERIEX_BLOCKS, defaultGridLayout: SERIEX_DEFAULT_GRID_LAYOUT },
-  lata: { nodeType: 'lata', blocks: LATA_BLOCKS, defaultGridLayout: LATA_DEFAULT_GRID_LAYOUT }
+  lata: { nodeType: 'lata', blocks: LATA_BLOCKS, defaultGridLayout: LATA_DEFAULT_GRID_LAYOUT },
+  weibospider: { nodeType: 'weibospider', blocks: WEIBOSPIDER_BLOCKS, defaultGridLayout: WEIBOSPIDER_DEFAULT_GRID_LAYOUT }
 };
 
 // ============ 工具函数 ============

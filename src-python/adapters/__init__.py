@@ -35,6 +35,8 @@ _ADAPTER_REGISTRY: Dict[str, str] = {
     "seriex": "adapters.seriex_adapter.SeriexAdapter",
     # Taskfile 任务启动器
     "lata": "adapters.lata_adapter.LataAdapter",
+    # 微博爬虫
+    "weibospider": "adapters.weibospider_adapter.WeiboSpiderAdapter",
 }
 
 # 适配器实例缓存

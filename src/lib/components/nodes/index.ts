@@ -22,3 +22,4 @@ export { LinedupNode } from './linedup';
 export { MoveaNode } from './movea';
 export { SeriexNode } from './seriex';
 export { LataNode } from './lata';
+export { WeiboSpiderNode } from './weibospider';

@@ -35,6 +35,7 @@ import { LinedupNode } from '$lib/components/nodes/linedup';
 import { MoveaNode } from '$lib/components/nodes/movea';
 import { SeriexNode } from '$lib/components/nodes/seriex';
 import { LataNode } from '$lib/components/nodes/lata';
+import { WeiboSpiderNode } from '$lib/components/nodes/weibospider';
 
 /** 节点注册项 - 包含定义和组件 */
 export interface NodeRegistryEntry extends NodeDefinition {
@@ -417,6 +418,22 @@ export const NODE_REGISTRY: NodeRegistryEntry[] = [
       taskfile_path: { type: 'path', label: 'Taskfile 路径', required: false },
       task_name: { type: 'string', label: '任务名称', required: false },
       task_args: { type: 'string', label: '任务参数', default: '' }
+    }
+  },
+  {
+    type: 'weibospider',
+    category: 'tool',
+    label: '微博爬虫',
+    description: '爬取微博用户数据，支持下载图片和视频',
+    icon: 'Users',
+    inputs: ['any'],
+    outputs: ['path'],
+    component: WeiboSpiderNode,
+    configSchema: {
+      user_ids: { type: 'array', label: '用户ID列表', default: [] },
+      filter_original: { type: 'boolean', label: '只爬原创', default: true },
+      pic_download: { type: 'boolean', label: '下载图片', default: true },
+      video_download: { type: 'boolean', label: '下载视频', default: true }
     }
   },
 

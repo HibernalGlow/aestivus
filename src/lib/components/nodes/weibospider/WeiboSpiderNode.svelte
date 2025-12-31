@@ -51,6 +51,7 @@
     cookie: string;
     cookieValid: boolean;
     browser: 'edge' | 'chrome' | 'firefox';
+    configPath: string;  // 自定义配置文件路径
     phase: Phase;
     logs: string[];
     progress: number;
@@ -87,6 +88,7 @@
     cookie: '',
     cookieValid: false,
     browser: 'edge',
+    configPath: '',
     phase: 'idle',
     logs: [],
     progress: 0,
@@ -138,10 +140,14 @@
   }
 
   // 加载配置
-  async function loadConfig() {
+  async function loadConfig(configPath?: string) {
     try {
       log('📂 加载配置...');
-      const response = await api.executeNode('weibospider', { action: 'load_config' }) as any;
+      const params: any = { action: 'load_config' };
+      if (configPath || ns.configPath) {
+        params.config_path = configPath || ns.configPath;
+      }
+      const response = await api.executeNode('weibospider', params) as any;
       
       if (response.success && response.data) {
         const config = response.data;
@@ -159,6 +165,74 @@
       }
     } catch (e: any) {
       log(`❌ 加载失败: ${e}`);
+    }
+  }
+
+  // 导入配置文件
+  async function importConfig() {
+    try {
+      // 使用文件选择器
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.json';
+      input.onchange = async (e) => {
+        const file = (e.target as HTMLInputElement).files?.[0];
+        if (!file) return;
+        
+        log(`📂 导入配置: ${file.name}`);
+        const text = await file.text();
+        const imported = JSON.parse(text);
+        
+        // 如果是纯 cookie 文件
+        if (imported.cookie && Object.keys(imported).length === 1) {
+          ns.cookie = imported.cookie;
+          log('✅ Cookie 导入成功');
+          return;
+        }
+        
+        // 完整配置文件
+        if (imported.user_id_list) ns.userIds = imported.user_id_list;
+        if (imported.filter !== undefined) ns.filterOriginal = imported.filter === 1;
+        if (imported.since_date) ns.sinceDate = imported.since_date;
+        if (imported.end_date) ns.endDate = imported.end_date;
+        if (imported.pic_download !== undefined) ns.picDownload = imported.pic_download === 1;
+        if (imported.video_download !== undefined) ns.videoDownload = imported.video_download === 1;
+        if (imported.write_mode) ns.writeMode = imported.write_mode;
+        if (imported.cookie) ns.cookie = imported.cookie;
+        
+        log('✅ 配置导入成功');
+      };
+      input.click();
+    } catch (e: any) {
+      log(`❌ 导入失败: ${e}`);
+    }
+  }
+
+  // 导出配置文件
+  async function exportConfig() {
+    try {
+      const config = {
+        user_id_list: ns.userIds,
+        filter: ns.filterOriginal ? 1 : 0,
+        since_date: ns.sinceDate,
+        end_date: ns.endDate,
+        pic_download: ns.picDownload ? 1 : 0,
+        video_download: ns.videoDownload ? 1 : 0,
+        write_mode: ns.writeMode,
+        cookie: ns.cookie
+      };
+      
+      const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `weibo_config_${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      
+      log('✅ 配置已导出');
+    } catch (e: any) {
+      log(`❌ 导出失败: ${e}`);
     }
   }
 
@@ -478,9 +552,17 @@
       </Button>
     {/if}
     
-    <Button variant="outline" class="w-full cq-button-sm" onclick={loadConfig} disabled={isRunning}>
-      <RefreshCw class="cq-icon mr-1" />加载配置
-    </Button>
+    <div class="flex cq-gap">
+      <Button variant="outline" class="flex-1 cq-button-sm" onclick={() => loadConfig()} disabled={isRunning}>
+        <RefreshCw class="cq-icon mr-1" />加载
+      </Button>
+      <Button variant="outline" class="flex-1 cq-button-sm" onclick={importConfig} disabled={isRunning}>
+        📥 导入
+      </Button>
+      <Button variant="outline" class="flex-1 cq-button-sm" onclick={exportConfig} disabled={isRunning}>
+        📤 导出
+      </Button>
+    </div>
     
     {#if ns.phase !== 'idle'}
       <div class="space-y-1">

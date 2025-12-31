@@ -35,6 +35,11 @@ class WeiboSpiderInput(BaseModel):
     browser: str = Field(default="edge", description="浏览器类型")
     random_wait_pages: List[int] = Field(default=[1, 5])
     random_wait_seconds: List[int] = Field(default=[6, 10])
+    # 配置文件路径（可选，默认使用 weiboSpider 目录下的 config.json）
+    config_path: str = Field(default="", description="自定义配置文件路径")
+    # 导入导出
+    import_path: str = Field(default="", description="导入配置文件路径")
+    export_path: str = Field(default="", description="导出配置文件路径")
 
 
 class WeiboSpiderOutput(AdapterOutput):
@@ -96,19 +101,28 @@ class WeiboSpiderAdapter(BaseAdapter):
         
         actions = {
             "status": self._get_status,
-            "load_config": self._load_config,
+            "load_config": lambda m, l: self._load_config(input_data, m, l),
             "save_config": lambda m, l: self._save_config(input_data, m, l),
             "validate_cookie": lambda m, l: self._validate_cookie(input_data, m, l),
             "get_browser_cookie": lambda m, l: self._get_browser_cookie(input_data, m, l),
+            "import_config": lambda m, l: self._import_config(input_data, m, l),
+            "export_config": lambda m, l: self._export_config(input_data, m, l),
             "crawl": lambda m, l: self._crawl(input_data, m, on_progress, l),
         }
         
         handler = actions.get(action)
         if handler:
-            if action in ["status", "load_config"]:
+            if action == "status":
                 return await handler(modules, on_log)
             return await handler(modules, on_log)
         return WeiboSpiderOutput(success=False, message=f"未知操作: {action}")
+    
+    def _get_config_path(self, input_data, modules: Dict) -> Path:
+        """获取配置文件路径"""
+        if input_data.config_path:
+            return Path(input_data.config_path)
+        weibo_path = modules.get("path")
+        return weibo_path / "config.json" if weibo_path else None
     
     async def _get_status(self, modules: Dict, on_log) -> WeiboSpiderOutput:
         """获取状态"""
@@ -119,19 +133,30 @@ class WeiboSpiderAdapter(BaseAdapter):
             data={"path": str(weibo_path), "has_config": config_file and config_file.exists()}
         )
     
-    async def _load_config(self, modules: Dict, on_log) -> WeiboSpiderOutput:
+    async def _load_config(self, input_data, modules: Dict, on_log) -> WeiboSpiderOutput:
         """加载配置"""
-        weibo_path = modules.get("path")
-        config_file = weibo_path / "config.json" if weibo_path else None
+        config_file = self._get_config_path(input_data, modules)
         
         if not config_file or not config_file.exists():
-            return WeiboSpiderOutput(success=False, message="配置文件不存在")
+            return WeiboSpiderOutput(success=False, message=f"配置文件不存在: {config_file}")
         
         try:
             with open(config_file, 'r', encoding='utf-8') as f:
                 config = json.load(f)
+            
+            # 支持 {"cookie": "..."} 格式的配置文件
+            if "cookie" in config and len(config) == 1:
+                # 这是纯 cookie 文件，合并到默认配置
+                weibo_path = modules.get("path")
+                default_config_file = weibo_path / "config.json" if weibo_path else None
+                if default_config_file and default_config_file.exists():
+                    with open(default_config_file, 'r', encoding='utf-8') as f:
+                        default_config = json.load(f)
+                    default_config["cookie"] = config["cookie"]
+                    config = default_config
+            
             if on_log:
-                on_log("✅ 配置加载成功")
+                on_log(f"✅ 配置加载成功: {config_file}")
             return WeiboSpiderOutput(success=True, message="配置加载成功", 
                                      config_data=config, data=config)
         except Exception as e:
@@ -139,8 +164,7 @@ class WeiboSpiderAdapter(BaseAdapter):
     
     async def _save_config(self, input_data, modules: Dict, on_log) -> WeiboSpiderOutput:
         """保存配置"""
-        weibo_path = modules.get("path")
-        config_file = weibo_path / "config.json" if weibo_path else None
+        config_file = self._get_config_path(input_data, modules)
         
         if not config_file:
             return WeiboSpiderOutput(success=False, message="无法确定配置路径")
@@ -164,14 +188,95 @@ class WeiboSpiderAdapter(BaseAdapter):
             if input_data.cookie:
                 config["cookie"] = input_data.cookie
             
+            # 确保目录存在
+            config_file.parent.mkdir(parents=True, exist_ok=True)
+            
             with open(config_file, 'w', encoding='utf-8') as f:
                 json.dump(config, f, indent=4, ensure_ascii=False)
             
             if on_log:
-                on_log("✅ 配置保存成功")
+                on_log(f"✅ 配置保存成功: {config_file}")
             return WeiboSpiderOutput(success=True, message="配置保存成功", config_data=config)
         except Exception as e:
             return WeiboSpiderOutput(success=False, message=f"保存失败: {e}")
+    
+    async def _import_config(self, input_data, modules: Dict, on_log) -> WeiboSpiderOutput:
+        """从指定路径导入配置"""
+        import_path = input_data.import_path
+        if not import_path:
+            return WeiboSpiderOutput(success=False, message="未指定导入路径")
+        
+        import_file = Path(import_path)
+        if not import_file.exists():
+            return WeiboSpiderOutput(success=False, message=f"文件不存在: {import_path}")
+        
+        try:
+            with open(import_file, 'r', encoding='utf-8') as f:
+                imported = json.load(f)
+            
+            if on_log:
+                on_log(f"📂 导入配置: {import_path}")
+            
+            # 获取目标配置文件
+            target_file = self._get_config_path(input_data, modules)
+            
+            # 读取现有配置
+            existing = {}
+            if target_file and target_file.exists():
+                with open(target_file, 'r', encoding='utf-8') as f:
+                    existing = json.load(f)
+            
+            # 合并配置（导入的覆盖现有的）
+            merged = {**existing, **imported}
+            
+            # 保存
+            if target_file:
+                with open(target_file, 'w', encoding='utf-8') as f:
+                    json.dump(merged, f, indent=4, ensure_ascii=False)
+                if on_log:
+                    on_log(f"✅ 配置已导入并保存到: {target_file}")
+            
+            return WeiboSpiderOutput(
+                success=True, 
+                message=f"配置导入成功",
+                config_data=merged,
+                data=merged
+            )
+        except Exception as e:
+            return WeiboSpiderOutput(success=False, message=f"导入失败: {e}")
+    
+    async def _export_config(self, input_data, modules: Dict, on_log) -> WeiboSpiderOutput:
+        """导出配置到指定路径"""
+        export_path = input_data.export_path
+        if not export_path:
+            return WeiboSpiderOutput(success=False, message="未指定导出路径")
+        
+        # 读取当前配置
+        config_file = self._get_config_path(input_data, modules)
+        if not config_file or not config_file.exists():
+            return WeiboSpiderOutput(success=False, message="当前配置文件不存在")
+        
+        try:
+            with open(config_file, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            
+            # 导出
+            export_file = Path(export_path)
+            export_file.parent.mkdir(parents=True, exist_ok=True)
+            
+            with open(export_file, 'w', encoding='utf-8') as f:
+                json.dump(config, f, indent=4, ensure_ascii=False)
+            
+            if on_log:
+                on_log(f"✅ 配置已导出到: {export_path}")
+            
+            return WeiboSpiderOutput(
+                success=True,
+                message=f"配置导出成功: {export_path}",
+                config_data=config
+            )
+        except Exception as e:
+            return WeiboSpiderOutput(success=False, message=f"导出失败: {e}")
     
     async def _validate_cookie(self, input_data, modules: Dict, on_log) -> WeiboSpiderOutput:
         """验证 Cookie"""

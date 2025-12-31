@@ -162,6 +162,49 @@
     }
   }
 
+  // 解析 Cookie（支持 JSON 格式和纯文本）
+  function parseCookieInput(input: string): string {
+    const trimmed = input.trim();
+    if (!trimmed) return '';
+    
+    // 尝试解析 JSON 格式
+    if (trimmed.startsWith('{')) {
+      try {
+        const json = JSON.parse(trimmed);
+        // 支持 {"cookie": "..."} 格式
+        if (json.cookie && typeof json.cookie === 'string') {
+          return json.cookie;
+        }
+        // 支持 {"name": "value", ...} 格式，转换为 cookie 字符串
+        if (typeof json === 'object' && !Array.isArray(json)) {
+          return Object.entries(json)
+            .filter(([_, v]) => typeof v === 'string')
+            .map(([k, v]) => `${k}=${v}`)
+            .join('; ');
+        }
+      } catch {
+        // 不是有效 JSON，当作普通文本处理
+      }
+    }
+    return trimmed;
+  }
+
+  // 处理 Cookie 输入变化
+  function handleCookieInput(e: Event) {
+    const target = e.target as HTMLTextAreaElement;
+    const raw = target.value;
+    const parsed = parseCookieInput(raw);
+    
+    // 如果解析出不同的值，说明是 JSON 格式，自动转换
+    if (parsed !== raw && parsed) {
+      ns.cookie = parsed;
+      log('📋 已从 JSON 解析 Cookie');
+    } else {
+      ns.cookie = raw;
+    }
+    ns.cookieValid = false;
+  }
+
   // 验证 Cookie
   async function validateCookie() {
     try {
@@ -374,8 +417,9 @@
       </div>
     </div>
     <Textarea 
-      bind:value={ns.cookie} 
-      placeholder="粘贴微博 Cookie 或点击下方按钮自动获取..." 
+      value={ns.cookie} 
+      oninput={handleCookieInput}
+      placeholder={'粘贴 Cookie 或 JSON 格式 {"cookie": "..."}'}
       class="cq-text flex-1 font-mono text-xs min-h-[60px]"
       disabled={isRunning}
     />

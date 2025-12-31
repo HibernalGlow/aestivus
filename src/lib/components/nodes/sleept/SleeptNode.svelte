@@ -13,7 +13,7 @@
   import { NodeLayoutRenderer } from '$lib/components/blocks';
   import { SLEEPT_DEFAULT_GRID_LAYOUT } from './blocks';
   import { api } from '$lib/services/api';
-  import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
+  import { getNodeState, saveNodeState } from '$lib/stores/nodeState.svelte';
   import { getWsBaseUrl } from '$lib/stores/backend';
   import NodeWrapper from '../NodeWrapper.svelte';
   import { 
@@ -53,109 +53,98 @@
     cpuThreshold: number;
     cpuDuration: number;
     dryrun: boolean;
+    // 运行时状态
+    phase: Phase;
+    logs: string[];
+    progress: number;
+    progressText: string;
+    remainingTime: string;
+    currentUpload: number;
+    currentDownload: number;
+    currentCpu: number;
+    netHistory: {time: number, up: number, down: number}[];
+    cpuHistory: number[];
   }
 
   const nodeId = $derived(id);
-  const savedState = $derived(getNodeState<SleeptState>(nodeId));
   const dataLogs = $derived(data?.logs ?? []);
 
-  // 状态变量
-  let timerMode = $state<TimerMode>('countdown');
-  let powerMode = $state<PowerMode>('sleep');
-  let hours = $state(0);
-  let minutes = $state(0);
-  let seconds = $state(5);
-  let targetDatetime = $state('');
-  let uploadThreshold = $state(242);
-  let downloadThreshold = $state(242);
-  let netDuration = $state(2);
-  let netTriggerMode = $state<'both' | 'any'>('both');
-  let cpuThreshold = $state(10);
-  let cpuDuration = $state(2);
-  let dryrun = $state(true);
-  
-  let phase = $state<Phase>('idle');
-  let logs = $state<string[]>([]);
+  // 初始化默认目标时间
+  function getDefaultTargetDatetime(): string {
+    const d = new Date(Date.now() + 3600000);
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:00`;
+  }
+
+  // 获取共享的响应式状态（节点模式和全屏模式共用同一个对象）
+  const ns = getNodeState<SleeptState>(id, {
+    timerMode: 'countdown',
+    powerMode: 'sleep',
+    hours: 0,
+    minutes: 0,
+    seconds: 5,
+    targetDatetime: getDefaultTargetDatetime(),
+    uploadThreshold: 242,
+    downloadThreshold: 242,
+    netDuration: 2,
+    netTriggerMode: 'both',
+    cpuThreshold: 10,
+    cpuDuration: 2,
+    dryrun: true,
+    phase: 'idle',
+    logs: [],
+    progress: 0,
+    progressText: '',
+    remainingTime: '00:00:00',
+    currentUpload: 0,
+    currentDownload: 0,
+    currentCpu: 0,
+    netHistory: [],
+    cpuHistory: []
+  });
+
+  // 本地 UI 状态（不需要跨实例同步）
   let copied = $state(false);
-  let progress = $state(0);
-  let progressText = $state('');
-  let remainingTime = $state('00:00:00');
-  let currentUpload = $state(0);
-  let currentDownload = $state(0);
-  let currentCpu = $state(0);
   let layoutRenderer = $state<any>(undefined);
-  
-  // 网速历史数据（用于折线图）
-  let netHistory = $state<{time: number, up: number, down: number}[]>([]);
-  let cpuHistory = $state<number[]>([]);
   
   // WebSocket 和取消控制
   let ws: WebSocket | null = null;
   let abortController: AbortController | null = null;
 
-  let initialized = $state(false);
-  
-  $effect(() => {
-    if (initialized) return;
-    
-    if (savedState) {
-      timerMode = savedState.timerMode ?? 'countdown';
-      powerMode = savedState.powerMode ?? 'sleep';
-      hours = savedState.hours ?? 0;
-      minutes = savedState.minutes ?? 0;
-      seconds = savedState.seconds ?? 5;
-      targetDatetime = savedState.targetDatetime ?? '';
-      uploadThreshold = savedState.uploadThreshold ?? 242;
-      downloadThreshold = savedState.downloadThreshold ?? 242;
-      netDuration = savedState.netDuration ?? 2;
-      netTriggerMode = savedState.netTriggerMode ?? 'both';
-      cpuThreshold = savedState.cpuThreshold ?? 10;
-      cpuDuration = savedState.cpuDuration ?? 2;
-      dryrun = savedState.dryrun ?? true;
+  // 同步 data.logs
+  $effect(() => { 
+    if (dataLogs.length > 0) {
+      ns.logs = [...dataLogs]; 
     }
-    
-    // 设置默认目标时间为1小时后
-    if (!targetDatetime) {
-      const d = new Date(Date.now() + 3600000);
-      targetDatetime = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:00`;
-    }
-    
-    initialized = true;
   });
-  
-  $effect(() => { logs = [...dataLogs]; });
 
-  function saveState() {
-    if (!initialized) return;
-    setNodeState<SleeptState>(nodeId, {
-      timerMode, powerMode, hours, minutes, seconds, targetDatetime,
-      uploadThreshold, downloadThreshold, netDuration, netTriggerMode,
-      cpuThreshold, cpuDuration, dryrun
-    });
-  }
-
-  let isRunning = $derived(phase === 'running');
-  let isPaused = $derived(phase === 'paused');
-  let canStart = $derived(phase === 'idle' || phase === 'error' || phase === 'cancelled' || phase === 'completed');
+  // 派生状态
+  let isRunning = $derived(ns.phase === 'running');
+  let isPaused = $derived(ns.phase === 'paused');
+  let canStart = $derived(ns.phase === 'idle' || ns.phase === 'error' || ns.phase === 'cancelled' || ns.phase === 'completed');
   let borderClass = $derived({
     idle: 'border-border', running: 'border-primary shadow-sm', paused: 'border-yellow-500 shadow-sm',
     completed: 'border-green-500/50', cancelled: 'border-yellow-500/50', error: 'border-destructive/50'
-  }[phase]);
+  }[ns.phase]);
 
-  $effect(() => { if (timerMode || powerMode || dryrun) saveState(); });
+  // 配置变更时自动保存
+  $effect(() => { 
+    ns.timerMode; ns.powerMode; ns.dryrun;
+    ns.hours; ns.minutes; ns.seconds;
+    saveNodeState(nodeId); 
+  });
 
-  function log(msg: string) { logs = [...logs.slice(-50), msg]; }
+  function log(msg: string) { ns.logs = [...ns.logs.slice(-50), msg]; }
 
   // 启动定时器
   async function handleStart() {
     if (isRunning) return;
     
-    phase = 'running';
-    progress = 0;
-    progressText = '启动中...';
-    netHistory = [];
-    cpuHistory = [];
-    log(`⏰ 启动 ${timerMode} 模式`);
+    ns.phase = 'running';
+    ns.progress = 0;
+    ns.progressText = '启动中...';
+    ns.netHistory = [];
+    ns.cpuHistory = [];
+    log(`⏰ 启动 ${ns.timerMode} 模式`);
     
     const taskId = `sleept-${nodeId}-${Date.now()}`;
     abortController = new AbortController();
@@ -169,23 +158,23 @@
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === 'progress') {
-            progress = msg.progress;
-            progressText = msg.message;
+            ns.progress = msg.progress;
+            ns.progressText = msg.message;
             // 解析剩余时间
             const match = msg.message.match(/剩余 (\d{2}:\d{2}:\d{2})/);
-            if (match) remainingTime = match[1];
+            if (match) ns.remainingTime = match[1];
             // 解析网速数据
             const netMatch = msg.message.match(/↑([\d.]+) ↓([\d.]+)/);
             if (netMatch) {
-              currentUpload = parseFloat(netMatch[1]);
-              currentDownload = parseFloat(netMatch[2]);
-              netHistory = [...netHistory.slice(-29), { time: Date.now(), up: currentUpload, down: currentDownload }];
+              ns.currentUpload = parseFloat(netMatch[1]);
+              ns.currentDownload = parseFloat(netMatch[2]);
+              ns.netHistory = [...ns.netHistory.slice(-29), { time: Date.now(), up: ns.currentUpload, down: ns.currentDownload }];
             }
             // 解析CPU数据
             const cpuMatch = msg.message.match(/CPU ([\d.]+)%/);
             if (cpuMatch) {
-              currentCpu = parseFloat(cpuMatch[1]);
-              cpuHistory = [...cpuHistory.slice(-29), currentCpu];
+              ns.currentCpu = parseFloat(cpuMatch[1]);
+              ns.cpuHistory = [...ns.cpuHistory.slice(-29), ns.currentCpu];
             }
           } else if (msg.type === 'log') {
             log(msg.message);
@@ -204,44 +193,44 @@
       
       // 构建参数
       const params: Record<string, any> = {
-        action: timerMode,
-        power_mode: powerMode,
-        dryrun
+        action: ns.timerMode,
+        power_mode: ns.powerMode,
+        dryrun: ns.dryrun
       };
       
-      if (timerMode === 'countdown') {
-        params.hours = hours;
-        params.minutes = minutes;
-        params.seconds = seconds;
-      } else if (timerMode === 'specific_time') {
-        params.target_datetime = targetDatetime;
-      } else if (timerMode === 'netspeed') {
-        params.upload_threshold = uploadThreshold;
-        params.download_threshold = downloadThreshold;
-        params.net_duration = netDuration;
-        params.net_trigger_mode = netTriggerMode;
-      } else if (timerMode === 'cpu') {
-        params.cpu_threshold = cpuThreshold;
-        params.cpu_duration = cpuDuration;
+      if (ns.timerMode === 'countdown') {
+        params.hours = ns.hours;
+        params.minutes = ns.minutes;
+        params.seconds = ns.seconds;
+      } else if (ns.timerMode === 'specific_time') {
+        params.target_datetime = ns.targetDatetime;
+      } else if (ns.timerMode === 'netspeed') {
+        params.upload_threshold = ns.uploadThreshold;
+        params.download_threshold = ns.downloadThreshold;
+        params.net_duration = ns.netDuration;
+        params.net_trigger_mode = ns.netTriggerMode;
+      } else if (ns.timerMode === 'cpu') {
+        params.cpu_threshold = ns.cpuThreshold;
+        params.cpu_duration = ns.cpuDuration;
       }
       
       const response = await api.executeNode('sleept', params, { taskId, nodeId }) as any;
       
       if (response.success) {
-        phase = 'completed';
-        progress = 100;
-        progressText = '完成';
+        ns.phase = 'completed';
+        ns.progress = 100;
+        ns.progressText = '完成';
         log(`✅ ${response.message}`);
       } else {
-        phase = 'error';
+        ns.phase = 'error';
         log(`❌ ${response.message}`);
       }
     } catch (error: any) {
       if (error.name === 'AbortError') {
-        phase = 'cancelled';
+        ns.phase = 'cancelled';
         log('⏹️ 已停止');
       } else {
-        phase = 'error';
+        ns.phase = 'error';
         log(`❌ 执行失败: ${error}`);
       }
     } finally {
@@ -261,7 +250,7 @@
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.close();
     }
-    phase = 'cancelled';
+    ns.phase = 'cancelled';
     log('⏹️ 已停止');
   }
 
@@ -271,13 +260,13 @@
     if (isRunning || isPaused) {
       handleStop();
     }
-    phase = 'idle';
-    progress = 0;
-    progressText = '';
-    remainingTime = '00:00:00';
-    netHistory = [];
-    cpuHistory = [];
-    logs = [];
+    ns.phase = 'idle';
+    ns.progress = 0;
+    ns.progressText = '';
+    ns.remainingTime = '00:00:00';
+    ns.netHistory = [];
+    ns.cpuHistory = [];
+    ns.logs = [];
   }
 
   // 获取系统状态
@@ -285,9 +274,9 @@
     try {
       const response = await api.executeNode('sleept', { action: 'get_stats' }) as any;
       if (response.success) {
-        currentUpload = response.current_upload ?? 0;
-        currentDownload = response.current_download ?? 0;
-        currentCpu = response.current_cpu ?? 0;
+        ns.currentUpload = response.current_upload ?? 0;
+        ns.currentDownload = response.current_download ?? 0;
+        ns.currentCpu = response.current_cpu ?? 0;
       }
     } catch (e) {
       console.error('获取状态失败:', e);
@@ -296,7 +285,7 @@
 
   async function copyLogs() {
     try {
-      await navigator.clipboard.writeText(logs.join('\n'));
+      await navigator.clipboard.writeText(ns.logs.join('\n'));
       copied = true;
       setTimeout(() => { copied = false; }, 2000);
     } catch (e) {
@@ -305,7 +294,7 @@
   }
 
   function setPreset(h: number, m: number, s: number) {
-    hours = h; minutes = m; seconds = s;
+    ns.hours = h; ns.minutes = m; ns.seconds = s;
   }
   
   // 绘制迷你折线图
@@ -323,37 +312,37 @@
     <Label class="cq-text font-medium">计时模式</Label>
     <div class="grid grid-cols-2 cq-gap">
       <Button 
-        variant={timerMode === 'countdown' ? 'default' : 'outline'} 
+        variant={ns.timerMode === 'countdown' ? 'default' : 'outline'} 
         size="sm" 
         class="cq-button-sm"
-        onclick={() => timerMode = 'countdown'}
+        onclick={() => ns.timerMode = 'countdown'}
         disabled={isRunning}
       >
         <Timer class="cq-icon mr-1" />倒计时
       </Button>
       <Button 
-        variant={timerMode === 'specific_time' ? 'default' : 'outline'} 
+        variant={ns.timerMode === 'specific_time' ? 'default' : 'outline'} 
         size="sm" 
         class="cq-button-sm"
-        onclick={() => timerMode = 'specific_time'}
+        onclick={() => ns.timerMode = 'specific_time'}
         disabled={isRunning}
       >
         <Calendar class="cq-icon mr-1" />指定时间
       </Button>
       <Button 
-        variant={timerMode === 'netspeed' ? 'default' : 'outline'} 
+        variant={ns.timerMode === 'netspeed' ? 'default' : 'outline'} 
         size="sm" 
         class="cq-button-sm"
-        onclick={() => timerMode = 'netspeed'}
+        onclick={() => ns.timerMode = 'netspeed'}
         disabled={isRunning}
       >
         <Wifi class="cq-icon mr-1" />网速监控
       </Button>
       <Button 
-        variant={timerMode === 'cpu' ? 'default' : 'outline'} 
+        variant={ns.timerMode === 'cpu' ? 'default' : 'outline'} 
         size="sm" 
         class="cq-button-sm"
-        onclick={() => timerMode = 'cpu'}
+        onclick={() => ns.timerMode = 'cpu'}
         disabled={isRunning}
       >
         <Cpu class="cq-icon mr-1" />CPU监控
@@ -363,28 +352,28 @@
     <Label class="cq-text font-medium mt-2">电源操作</Label>
     <div class="flex cq-gap">
       <Button 
-        variant={powerMode === 'sleep' ? 'default' : 'outline'} 
+        variant={ns.powerMode === 'sleep' ? 'default' : 'outline'} 
         size="sm" 
         class="cq-button-sm flex-1"
-        onclick={() => powerMode = 'sleep'}
+        onclick={() => ns.powerMode = 'sleep'}
         disabled={isRunning}
       >
         <Moon class="cq-icon mr-1" />休眠
       </Button>
       <Button 
-        variant={powerMode === 'shutdown' ? 'default' : 'outline'} 
+        variant={ns.powerMode === 'shutdown' ? 'default' : 'outline'} 
         size="sm" 
         class="cq-button-sm flex-1"
-        onclick={() => powerMode = 'shutdown'}
+        onclick={() => ns.powerMode = 'shutdown'}
         disabled={isRunning}
       >
         <Power class="cq-icon mr-1" />关机
       </Button>
       <Button 
-        variant={powerMode === 'restart' ? 'default' : 'outline'} 
+        variant={ns.powerMode === 'restart' ? 'default' : 'outline'} 
         size="sm" 
         class="cq-button-sm flex-1"
-        onclick={() => powerMode = 'restart'}
+        onclick={() => ns.powerMode = 'restart'}
         disabled={isRunning}
       >
         <RotateCcw class="cq-icon mr-1" />重启
@@ -392,7 +381,7 @@
     </div>
     
     <label class="flex items-center cq-gap cursor-pointer mt-2">
-      <Checkbox bind:checked={dryrun} disabled={isRunning} />
+      <Checkbox bind:checked={ns.dryrun} disabled={isRunning} />
       <span class="cq-text">演练模式</span>
     </label>
   </div>
@@ -400,20 +389,20 @@
 
 {#snippet timerBlock()}
   <div class="flex flex-col cq-gap h-full">
-    {#if timerMode === 'countdown'}
+    {#if ns.timerMode === 'countdown'}
       <Label class="cq-text font-medium">倒计时设置</Label>
       <div class="flex cq-gap items-center">
         <div class="flex-1">
           <Label class="cq-text-sm text-muted-foreground">时</Label>
-          <Input type="number" bind:value={hours} min={0} max={23} disabled={isRunning} class="cq-text" />
+          <Input type="number" bind:value={ns.hours} min={0} max={23} disabled={isRunning} class="cq-text" />
         </div>
         <div class="flex-1">
           <Label class="cq-text-sm text-muted-foreground">分</Label>
-          <Input type="number" bind:value={minutes} min={0} max={59} disabled={isRunning} class="cq-text" />
+          <Input type="number" bind:value={ns.minutes} min={0} max={59} disabled={isRunning} class="cq-text" />
         </div>
         <div class="flex-1">
           <Label class="cq-text-sm text-muted-foreground">秒</Label>
-          <Input type="number" bind:value={seconds} min={0} max={59} disabled={isRunning} class="cq-text" />
+          <Input type="number" bind:value={ns.seconds} min={0} max={59} disabled={isRunning} class="cq-text" />
         </div>
       </div>
       <div class="grid grid-cols-4 cq-gap">
@@ -422,45 +411,45 @@
         <Button variant="outline" size="sm" class="cq-button-sm" onclick={() => setPreset(0, 30, 0)} disabled={isRunning}>30分</Button>
         <Button variant="outline" size="sm" class="cq-button-sm" onclick={() => setPreset(1, 0, 0)} disabled={isRunning}>1时</Button>
       </div>
-    {:else if timerMode === 'specific_time'}
+    {:else if ns.timerMode === 'specific_time'}
       <Label class="cq-text font-medium">目标时间</Label>
-      <Input type="text" bind:value={targetDatetime} placeholder="YYYY-MM-DD HH:MM:SS" disabled={isRunning} class="cq-text font-mono" />
+      <Input type="text" bind:value={ns.targetDatetime} placeholder="YYYY-MM-DD HH:MM:SS" disabled={isRunning} class="cq-text font-mono" />
       <span class="cq-text-sm text-muted-foreground">格式: 2024-12-21 23:30:00</span>
-    {:else if timerMode === 'netspeed'}
+    {:else if ns.timerMode === 'netspeed'}
       <Label class="cq-text font-medium">网速监控设置</Label>
       <div class="flex cq-gap items-center">
         <div class="flex-1">
           <Label class="cq-text-sm text-muted-foreground">上传阈值(KB/s)</Label>
-          <Input type="number" bind:value={uploadThreshold} min={0} disabled={isRunning} class="cq-text" />
+          <Input type="number" bind:value={ns.uploadThreshold} min={0} disabled={isRunning} class="cq-text" />
         </div>
         <div class="flex-1">
           <Label class="cq-text-sm text-muted-foreground">下载阈值(KB/s)</Label>
-          <Input type="number" bind:value={downloadThreshold} min={0} disabled={isRunning} class="cq-text" />
+          <Input type="number" bind:value={ns.downloadThreshold} min={0} disabled={isRunning} class="cq-text" />
         </div>
       </div>
       <div class="flex cq-gap items-center">
         <div class="flex-1">
           <Label class="cq-text-sm text-muted-foreground">持续(分钟)</Label>
-          <Input type="number" bind:value={netDuration} min={0.5} step={0.5} disabled={isRunning} class="cq-text" />
+          <Input type="number" bind:value={ns.netDuration} min={0.5} step={0.5} disabled={isRunning} class="cq-text" />
         </div>
         <div class="flex-1">
           <Label class="cq-text-sm text-muted-foreground">触发</Label>
           <div class="flex cq-gap">
-            <Button variant={netTriggerMode === 'both' ? 'default' : 'outline'} size="sm" class="cq-button-sm flex-1" onclick={() => netTriggerMode = 'both'} disabled={isRunning}>都低于</Button>
-            <Button variant={netTriggerMode === 'any' ? 'default' : 'outline'} size="sm" class="cq-button-sm flex-1" onclick={() => netTriggerMode = 'any'} disabled={isRunning}>任一</Button>
+            <Button variant={ns.netTriggerMode === 'both' ? 'default' : 'outline'} size="sm" class="cq-button-sm flex-1" onclick={() => ns.netTriggerMode = 'both'} disabled={isRunning}>都低于</Button>
+            <Button variant={ns.netTriggerMode === 'any' ? 'default' : 'outline'} size="sm" class="cq-button-sm flex-1" onclick={() => ns.netTriggerMode = 'any'} disabled={isRunning}>任一</Button>
           </div>
         </div>
       </div>
-    {:else if timerMode === 'cpu'}
+    {:else if ns.timerMode === 'cpu'}
       <Label class="cq-text font-medium">CPU监控设置</Label>
       <div class="flex cq-gap items-center">
         <div class="flex-1">
           <Label class="cq-text-sm text-muted-foreground">CPU阈值(%)</Label>
-          <Input type="number" bind:value={cpuThreshold} min={1} max={100} disabled={isRunning} class="cq-text" />
+          <Input type="number" bind:value={ns.cpuThreshold} min={1} max={100} disabled={isRunning} class="cq-text" />
         </div>
         <div class="flex-1">
           <Label class="cq-text-sm text-muted-foreground">持续(分钟)</Label>
-          <Input type="number" bind:value={cpuDuration} min={0.5} step={0.5} disabled={isRunning} class="cq-text" />
+          <Input type="number" bind:value={ns.cpuDuration} min={0.5} step={0.5} disabled={isRunning} class="cq-text" />
         </div>
       </div>
       <span class="cq-text-sm text-muted-foreground">CPU低于阈值持续指定时间后触发</span>
@@ -470,7 +459,7 @@
 
 {#snippet statusBlock()}
   <div class="flex flex-col cq-gap h-full">
-    {#if timerMode === 'countdown' || timerMode === 'specific_time'}
+    {#if ns.timerMode === 'countdown' || ns.timerMode === 'specific_time'}
       <!-- 倒计时/指定时间：圆形进度 -->
       <div class="flex-1 flex flex-col items-center justify-center">
         <div class="relative w-24 h-24">
@@ -478,49 +467,49 @@
           <svg class="w-full h-full -rotate-90" viewBox="0 0 100 100">
             <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="8" class="text-muted/30" />
             <circle cx="50" cy="50" r="45" fill="none" stroke="currentColor" stroke-width="8" 
-              class={phase === 'completed' ? 'text-green-500' : phase === 'error' ? 'text-red-500' : 'text-primary'}
-              stroke-dasharray={`${progress * 2.83} 283`}
+              class={ns.phase === 'completed' ? 'text-green-500' : ns.phase === 'error' ? 'text-red-500' : 'text-primary'}
+              stroke-dasharray={`${ns.progress * 2.83} 283`}
               stroke-linecap="round" />
           </svg>
           <!-- 中心文字 -->
           <div class="absolute inset-0 flex flex-col items-center justify-center">
             {#if isRunning}
-              <span class="text-lg font-mono font-bold">{remainingTime}</span>
-              <span class="cq-text-sm text-muted-foreground">{progress}%</span>
-            {:else if phase === 'completed'}
+              <span class="text-lg font-mono font-bold">{ns.remainingTime}</span>
+              <span class="cq-text-sm text-muted-foreground">{ns.progress}%</span>
+            {:else if ns.phase === 'completed'}
               <CircleCheck class="w-8 h-8 text-green-500" />
-            {:else if phase === 'error'}
+            {:else if ns.phase === 'error'}
               <CircleX class="w-8 h-8 text-red-500" />
             {:else}
               <Clock class="w-8 h-8 text-muted-foreground/50" />
             {/if}
           </div>
         </div>
-        <span class="cq-text text-muted-foreground mt-2">{progressText || '等待启动'}</span>
+        <span class="cq-text text-muted-foreground mt-2">{ns.progressText || '等待启动'}</span>
       </div>
-    {:else if timerMode === 'netspeed'}
+    {:else if ns.timerMode === 'netspeed'}
       <!-- 网速监控：折线图 -->
       <div class="flex-1 flex flex-col">
         <div class="flex justify-between cq-text-sm mb-1">
-          <span class="text-cyan-500">↑ {currentUpload.toFixed(1)} KB/s</span>
-          <span class="text-green-500">↓ {currentDownload.toFixed(1)} KB/s</span>
+          <span class="text-cyan-500">↑ {ns.currentUpload.toFixed(1)} KB/s</span>
+          <span class="text-green-500">↓ {ns.currentDownload.toFixed(1)} KB/s</span>
         </div>
         <div class="flex-1 bg-muted/20 rounded relative overflow-hidden min-h-[60px]">
-          {#if netHistory.length > 1}
+          {#if ns.netHistory.length > 1}
             <svg viewBox="0 0 100 50" class="w-full h-full" preserveAspectRatio="none">
               <!-- 上传线 -->
               <polyline 
                 fill="none" 
                 stroke="#06b6d4" 
                 stroke-width="1.5"
-                points={netHistory.map((d, i) => `${(i / Math.max(netHistory.length - 1, 1)) * 100},${50 - (d.up / Math.max(...netHistory.map(h => Math.max(h.up, h.down)), 1)) * 45}`).join(' ')}
+                points={ns.netHistory.map((d, i) => `${(i / Math.max(ns.netHistory.length - 1, 1)) * 100},${50 - (d.up / Math.max(...ns.netHistory.map(h => Math.max(h.up, h.down)), 1)) * 45}`).join(' ')}
               />
               <!-- 下载线 -->
               <polyline 
                 fill="none" 
                 stroke="#22c55e" 
                 stroke-width="1.5"
-                points={netHistory.map((d, i) => `${(i / Math.max(netHistory.length - 1, 1)) * 100},${50 - (d.down / Math.max(...netHistory.map(h => Math.max(h.up, h.down)), 1)) * 45}`).join(' ')}
+                points={ns.netHistory.map((d, i) => `${(i / Math.max(ns.netHistory.length - 1, 1)) * 100},${50 - (d.down / Math.max(...ns.netHistory.map(h => Math.max(h.up, h.down)), 1)) * 45}`).join(' ')}
               />
               <!-- 阈值线 -->
               <line x1="0" y1="25" x2="100" y2="25" stroke="#f59e0b" stroke-width="0.5" stroke-dasharray="2,2" />
@@ -532,29 +521,29 @@
           {/if}
         </div>
         <div class="flex items-center cq-gap mt-1">
-          <Progress value={progress} class="flex-1 h-1.5" />
-          <span class="cq-text-sm text-muted-foreground w-10 text-right">{progress}%</span>
+          <Progress value={ns.progress} class="flex-1 h-1.5" />
+          <span class="cq-text-sm text-muted-foreground w-10 text-right">{ns.progress}%</span>
         </div>
       </div>
-    {:else if timerMode === 'cpu'}
+    {:else if ns.timerMode === 'cpu'}
       <!-- CPU监控：柱状/折线 -->
       <div class="flex-1 flex flex-col">
         <div class="flex justify-between items-center mb-1">
-          <span class="cq-text font-medium">CPU {currentCpu.toFixed(1)}%</span>
-          <span class="cq-text-sm text-muted-foreground">阈值 {cpuThreshold}%</span>
+          <span class="cq-text font-medium">CPU {ns.currentCpu.toFixed(1)}%</span>
+          <span class="cq-text-sm text-muted-foreground">阈值 {ns.cpuThreshold}%</span>
         </div>
         <div class="flex-1 bg-muted/20 rounded relative overflow-hidden min-h-[60px]">
-          {#if cpuHistory.length > 1}
+          {#if ns.cpuHistory.length > 1}
             <svg viewBox="0 0 100 50" class="w-full h-full" preserveAspectRatio="none">
               <!-- CPU折线 -->
               <polyline 
                 fill="none" 
                 stroke="#8b5cf6" 
                 stroke-width="2"
-                points={cpuHistory.map((v, i) => `${(i / Math.max(cpuHistory.length - 1, 1)) * 100},${50 - (v / 100) * 45}`).join(' ')}
+                points={ns.cpuHistory.map((v, i) => `${(i / Math.max(ns.cpuHistory.length - 1, 1)) * 100},${50 - (v / 100) * 45}`).join(' ')}
               />
               <!-- 阈值线 -->
-              <line x1="0" y1={50 - (cpuThreshold / 100) * 45} x2="100" y2={50 - (cpuThreshold / 100) * 45} stroke="#f59e0b" stroke-width="0.5" stroke-dasharray="2,2" />
+              <line x1="0" y1={50 - (ns.cpuThreshold / 100) * 45} x2="100" y2={50 - (ns.cpuThreshold / 100) * 45} stroke="#f59e0b" stroke-width="0.5" stroke-dasharray="2,2" />
             </svg>
           {:else}
             <div class="flex items-center justify-center h-full text-muted-foreground cq-text-sm">
@@ -563,8 +552,8 @@
           {/if}
         </div>
         <div class="flex items-center cq-gap mt-1">
-          <Progress value={progress} class="flex-1 h-1.5" />
-          <span class="cq-text-sm text-muted-foreground w-10 text-right">{progress}%</span>
+          <Progress value={ns.progress} class="flex-1 h-1.5" />
+          <span class="cq-text-sm text-muted-foreground w-10 text-right">{ns.progress}%</span>
         </div>
       </div>
     {/if}
@@ -602,8 +591,8 @@
       </Button>
     </div>
     <div class="flex-1 overflow-y-auto bg-muted/30 cq-rounded cq-padding font-mono cq-text-sm space-y-0.5">
-      {#if logs.length > 0}
-        {#each logs.slice(-15) as logItem}<div class="text-muted-foreground break-all">{logItem}</div>{/each}
+      {#if ns.logs.length > 0}
+        {#each ns.logs.slice(-15) as logItem}<div class="text-muted-foreground break-all">{logItem}</div>{/each}
       {:else}
         <div class="text-muted-foreground text-center py-2">暂无日志</div>
       {/if}
@@ -630,7 +619,7 @@
     nodeId={nodeId} 
     title="sleept" 
     icon={Clock} 
-    status={phase} 
+    status={ns.phase} 
     {borderClass} 
     isFullscreenRender={isFullscreenRender}
     onCompact={() => layoutRenderer?.compact()}

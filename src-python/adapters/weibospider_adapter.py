@@ -334,7 +334,7 @@ class WeiboSpiderAdapter(BaseAdapter):
             on_log("🕷️ 开始爬取微博...")
         
         if on_progress:
-            on_progress(10, "初始化爬虫...")
+            on_progress(5, "初始化爬虫...")
         
         try:
             with open(config_file, 'r', encoding='utf-8') as f:
@@ -354,13 +354,17 @@ class WeiboSpiderAdapter(BaseAdapter):
             if on_log:
                 on_log(f"📋 待爬取用户数: {total_users}")
             
+            if on_progress:
+                on_progress(10, f"准备爬取 {total_users} 个用户...")
+            
             for user_config in wb.user_config_list:
                 crawled_users += 1
                 user_uri = user_config['user_uri']
                 
+                base_progress = 10 + int((crawled_users - 1) / max(total_users, 1) * 80)
+                
                 if on_progress:
-                    progress = int(10 + (crawled_users / total_users) * 80)
-                    on_progress(progress, f"爬取用户 {user_uri} ({crawled_users}/{total_users})")
+                    on_progress(base_progress, f"爬取用户 {user_uri} ({crawled_users}/{total_users})")
                 
                 if on_log:
                     on_log(f"👤 开始爬取用户: {user_uri}")
@@ -368,34 +372,70 @@ class WeiboSpiderAdapter(BaseAdapter):
                 try:
                     # 获取用户信息
                     wb.get_user_info(user_config['user_uri'])
+                    
+                    # 检查是否成功获取用户信息
+                    if not wb.user or not hasattr(wb.user, 'id') or not wb.user.id:
+                        if on_log:
+                            on_log(f"⚠️ 无法获取用户 {user_uri} 信息，可能 Cookie 已过期")
+                        continue
+                    
                     wb.initialize_info(user_config)
                     wb.write_user(wb.user)
                     
+                    nickname = getattr(wb.user, 'nickname', user_uri)
+                    weibo_num = getattr(wb.user, 'weibo_num', '未知')
+                    
                     if on_log:
-                        on_log(f"  昵称: {wb.user.nickname}")
-                        on_log(f"  微博数: {wb.user.weibo_num}")
+                        on_log(f"  昵称: {nickname}")
+                        on_log(f"  微博数: {weibo_num}")
+                    
+                    if on_progress:
+                        on_progress(base_progress + 5, f"获取 {nickname} 的微博...")
                     
                     # 爬取微博
+                    page_count = 0
                     for weibos in wb.get_weibo_info():
                         wb.write_weibo(weibos)
                         wb.got_num += len(weibos)
                         total_weibos += len(weibos)
+                        page_count += 1
                         
-                        if on_log:
-                            on_log(f"  已获取 {wb.got_num} 条微博")
+                        if on_log and page_count % 5 == 0:
+                            on_log(f"  已获取 {wb.got_num} 条微博...")
                         
-                        # 让出控制权
-                        await asyncio.sleep(0)
+                        # 更新进度
+                        if on_progress:
+                            sub_progress = min(base_progress + 40, 90)
+                            on_progress(sub_progress, f"{nickname}: {wb.got_num} 条微博")
+                        
+                        # 让出控制权，避免阻塞
+                        await asyncio.sleep(0.01)
                     
                     if on_log:
-                        on_log(f"✅ 用户 {wb.user.nickname} 爬取完成，共 {wb.got_num} 条")
+                        on_log(f"✅ 用户 {nickname} 爬取完成，共 {wb.got_num} 条")
                     
                 except Exception as e:
+                    error_msg = str(e)
+                    # 检查是否是 Cookie 相关错误
+                    if 'cookie' in error_msg.lower() or '过期' in error_msg or '登录' in error_msg:
+                        if on_log:
+                            on_log(f"⚠️ Cookie 可能已过期，请重新获取")
+                        return WeiboSpiderOutput(
+                            success=False,
+                            message="Cookie 已过期，请重新获取并更新",
+                            crawled_users=crawled_users,
+                            crawled_weibos=total_weibos
+                        )
                     if on_log:
-                        on_log(f"❌ 用户 {user_uri} 爬取失败: {e}")
+                        on_log(f"❌ 用户 {user_uri} 爬取失败: {error_msg}")
+                    # 继续爬取下一个用户
+                    continue
             
             if on_progress:
                 on_progress(100, "爬取完成")
+            
+            if on_log:
+                on_log(f"🎉 全部完成！共 {crawled_users} 个用户，{total_weibos} 条微博")
             
             return WeiboSpiderOutput(
                 success=True,
@@ -405,9 +445,10 @@ class WeiboSpiderAdapter(BaseAdapter):
             )
             
         except Exception as e:
+            error_msg = str(e)
             if on_log:
-                on_log(f"❌ 爬取失败: {e}")
+                on_log(f"❌ 爬取失败: {error_msg}")
             return WeiboSpiderOutput(
                 success=False,
-                message=f"爬取失败: {e}"
+                message=f"爬取失败: {error_msg}"
             )

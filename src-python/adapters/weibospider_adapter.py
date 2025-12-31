@@ -95,6 +95,14 @@ class WeiboSpiderAdapter(BaseAdapter):
         WeiboSpiderAdapter._weibo_spider_path = weibo_spider_src
         
         try:
+            # 先初始化 absl flags，避免 "flags not parsed" 错误
+            from absl import flags
+            try:
+                flags.FLAGS.mark_as_parsed()
+            except:
+                # 如果已经解析过，忽略错误
+                pass
+            
             from weibo_spider import spider, config_util
             WeiboSpiderAdapter._spider_module = spider
             WeiboSpiderAdapter._config_util_module = config_util

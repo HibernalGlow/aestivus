@@ -2,10 +2,10 @@
   /**
    * NodeLayoutRenderer - 统一节点布局渲染器
    *
-   * Tab 分组采用"虚拟分组"模式：
-   * - 区块始终保留在 gridLayout 中
-   * - Tab 分组使用主区块（第一个区块）的位置渲染
-   * - tabGroups 只存储在 fullscreen 模式，两种模式都读取 fullscreen 的配置
+   * 布局和 Tab 分组按模式独立存储：
+   * - normal 模式有自己的 gridLayout 和 tabGroups
+   * - fullscreen 模式有自己的 gridLayout 和 tabGroups
+   * - 两种模式的配置互不影响
    */
   import type { Snippet } from "svelte";
   import type { GridItem } from "$lib/components/ui/dashboard-grid";
@@ -310,7 +310,7 @@
         })
   );
   
-  // 每种模式使用自己的 tabGroups
+  // 每种模式使用自己的 tabGroups（跟随布局）
   let tabGroups = $derived(nodeConfig[mode].tabGroups);
   
   // 计算被 Tab 分组隐藏的区块 ID（用于全屏模式的 CSS 隐藏）
@@ -394,6 +394,7 @@
     // 如果在节点模式下重置，也需要重置 fullscreen 的 gridLayout
     if (!isFullscreen) {
       updateGridLayout(nodeType, "fullscreen", defaultFullscreenLayout);
+      clearTabGroups(nodeType, 'fullscreen');
     }
 
     if (isFullscreen && dashboardGrid) {
@@ -424,7 +425,7 @@
     
     updateGridLayout(nodeType, mode, adjustedLayout);
     
-    // 应用 Tab 分组：
+    // 应用 Tab 分组（按当前模式）：
     // - 如果 newTabGroups 是数组（包括空数组），则清除现有分组并应用新分组
     // - 如果 newTabGroups 是 undefined/null，则保留现有 Tab 分组（旧预设兼容）
     if (Array.isArray(newTabGroups)) {

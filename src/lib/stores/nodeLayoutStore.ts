@@ -3,11 +3,10 @@
  * 
  * 存储后端：使用 SQLModel + SQLite 后端存储（通过 storageClient）
  * 
- * Tab 分组采用"虚拟分组"模式：
- * - 区块始终保留在 gridLayout 中，Tab 只是渲染层的逻辑分组
- * - Tab 分组使用主区块（第一个区块）的位置渲染
- * - 解散时无需恢复位置，区块位置一直在 gridLayout 中
- * - tabGroups 只存储在 fullscreen 模式，normal 模式读取 fullscreen 的配置
+ * 布局和 Tab 分组按模式独立存储：
+ * - normal 模式：节点模式的 gridLayout 和 tabGroups
+ * - fullscreen 模式：全屏模式的 gridLayout 和 tabGroups
+ * - 两种模式的配置互不影响，各自独立
  */
 
 import { Store } from '@tanstack/store';

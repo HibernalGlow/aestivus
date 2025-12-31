@@ -18,7 +18,7 @@
   import type { NodeConfig, LayoutMode } from '$lib/stores/nodeLayoutStore';
   import { FINDZ_DEFAULT_GRID_LAYOUT } from '$lib/components/blocks/blockRegistry';
   import { api } from '$lib/services/api';
-  import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
+  import { getNodeState, saveNodeState } from '$lib/stores/nodeState.svelte';
   import { getWsBaseUrl } from '$lib/stores/backend';
   import NodeWrapper from '../NodeWrapper.svelte';
   import FilterBuilder from './FilterBuilder.svelte';
@@ -59,32 +59,35 @@
 
   // 使用 $derived 确保响应式
   const nodeId = $derived(id);
-  const savedState = $derived(getNodeState<FindzNodeState>(nodeId));
   const configPath = $derived(data?.config?.path ?? '.');
   const configWhere = $derived(data?.config?.where ?? '1');
   const dataLogs = $derived(data?.logs ?? []);
   const dataHasInputConnection = $derived(data?.hasInputConnection ?? false);
 
-  // 状态
-  let targetPath = $state('.');
-  let whereClause = $state('1');
-  let phase = $state<Phase>('idle');
-  let logs = $state<string[]>([]);
+  // 获取共享的响应式状态
+  const ns = getNodeState<FindzNodeState>(id, {
+    phase: 'idle',
+    progress: 0,
+    searchResult: null,
+    files: [],
+    byExtension: {},
+    targetPath: configPath || '.',
+    whereClause: configWhere || '1',
+    logs: []
+  });
+
+  // 本地 UI 状态
   let hasInputConnection = $state(false);
-  let progress = $state(0);
-  let searchResult = $state<SearchResult | null>(null);
-  let files = $state<FileData[]>([]);
-  let byExtension = $state<Record<string, number>>({});
   let layoutRenderer = $state<LayoutRendererInstance | undefined>(undefined);
   let advancedMode = $state(false);
   
-  // 实时进度状态
+  // 实时进度状态（不需要持久化）
   let progressMessage = $state('');
   let scannedCount = $state(0);
   let matchedCount = $state(0);
   let elapsedTime = $state(0);
   
-  // WebSocket 连接
+  // WebSocket 连接（本地状态）
   let ws: WebSocket | null = null;
   let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
   
@@ -92,8 +95,11 @@
   let copiedLogs = $state(false);
   let copiedPath = $state(false);
 
-  // 初始化标记
-  let initialized = $state(false);
+  // 同步外部状态
+  $effect(() => {
+    if (dataLogs.length > 0) ns.logs = [...dataLogs];
+    hasInputConnection = dataHasInputConnection;
+  });
 
   // WebSocket 连接管理
   function connectWebSocket(tid: string) {
@@ -114,11 +120,9 @@
         const msg = JSON.parse(event.data);
         
         if (msg.type === 'progress') {
-          // 实时进度更新
-          progress = msg.progress;
+          ns.progress = msg.progress;
           progressMessage = msg.message || '';
           
-          // 解析扫描统计（如果消息中包含）
           const match = msg.message?.match(/(\d+)\s*文件.*?(\d+)\s*匹配/);
           if (match) {
             scannedCount = parseInt(match[1], 10);
@@ -128,10 +132,10 @@
           log(msg.message);
         } else if (msg.type === 'status') {
           if (msg.status === 'completed') {
-            phase = 'completed';
-            progress = 100;
+            ns.phase = 'completed';
+            ns.progress = 100;
           } else if (msg.status === 'error') {
-            phase = 'error';
+            ns.phase = 'error';
           }
         }
       } catch (e) {
@@ -164,55 +168,22 @@
     disconnectWebSocket();
   });
 
-  // 初始化 effect - 只执行一次
-  $effect(() => {
-    if (initialized) return;
-    
-    if (savedState) {
-      phase = savedState.phase ?? 'idle';
-      progress = savedState.progress ?? 0;
-      searchResult = savedState.searchResult ?? null;
-      files = savedState.files ?? [];
-      byExtension = savedState.byExtension ?? {};
-      targetPath = savedState.targetPath || configPath || '';
-      whereClause = savedState.whereClause || configWhere || '';
-    } else {
-      targetPath = configPath || '';
-      whereClause = configWhere || '';
-    }
-    
-    initialized = true;
-  });
-  
-  // 持续同步外部数据
-  $effect(() => {
-    logs = [...dataLogs];
-    hasInputConnection = dataHasInputConnection;
-  });
-
-  function saveState() {
-    if (!initialized) return;
-    setNodeState<FindzNodeState>(nodeId, { phase, progress, searchResult, files, byExtension, targetPath, whereClause });
-  }
-
-  let canExecute = $derived(phase === 'idle' && (targetPath.trim() !== '' || hasInputConnection));
-  let isRunning = $derived(phase === 'searching');
+  let canExecute = $derived(ns.phase === 'idle' && (ns.targetPath.trim() !== '' || hasInputConnection));
+  let isRunning = $derived(ns.phase === 'searching');
   let borderClass = $derived({
     idle: 'border-border',
     searching: 'border-blue-500 shadow-sm',
     completed: 'border-primary/50',
     error: 'border-destructive/50'
-  }[phase]);
+  }[ns.phase]);
 
-  $effect(() => { if (phase || searchResult || files) saveState(); });
-
-  function log(msg: string) { logs = [...logs.slice(-30), msg]; }
+  function log(msg: string) { ns.logs = [...ns.logs.slice(-30), msg]; }
 
   async function selectFolder() {
     try {
       const { platform } = await import('$lib/api/platform');
       const selected = await platform.openFolderDialog('选择搜索目录');
-      if (selected) targetPath = selected;
+      if (selected) ns.targetPath = selected;
     } catch (e) { log(`选择文件夹失败: ${e}`); }
   }
 
@@ -220,14 +191,14 @@
     try {
       const { platform } = await import('$lib/api/platform');
       const text = await platform.readClipboard();
-      if (text) targetPath = text.trim();
+      if (text) ns.targetPath = text.trim();
     } catch (e) { log(`读取剪贴板失败: ${e}`); }
   }
 
   async function executeAction(action: Action) {
     if (!canExecute) return;
-    phase = 'searching'; 
-    progress = 0;
+    ns.phase = 'searching'; 
+    ns.progress = 0;
     progressMessage = '准备中...';
     scannedCount = 0;
     matchedCount = 0;
@@ -237,7 +208,7 @@
     const newTaskId = `findz-${nodeId}-${Date.now()}`;
     connectWebSocket(newTaskId);
     
-    log(`🔍 开始搜索: ${targetPath}`);
+    log(`🔍 开始搜索: ${ns.targetPath}`);
     
     // 计时器
     const startTime = Date.now();
@@ -246,9 +217,9 @@
     }, 100);
 
     try {
-      progress = 10;
+      ns.progress = 10;
       const response = await api.executeNode('findz', {
-        path: targetPath, where: whereClause, action, long_format: true, max_results: 0
+        path: ns.targetPath, where: ns.whereClause, action, long_format: true, max_results: 0
       }, { taskId: newTaskId, nodeId }) as any;
 
       if (response.logs) for (const m of response.logs) log(m);
@@ -257,7 +228,7 @@
       console.log('FindzNode response:', JSON.stringify(response, null, 2).slice(0, 2000));
 
       if (response.success) {
-        phase = 'completed'; progress = 100;
+        ns.phase = 'completed'; ns.progress = 100;
         
         // 兼容多种响应结构：
         // 1. response.data.xxx (标准结构)
@@ -267,7 +238,7 @@
         // 获取文件列表 - 尝试多个位置
         const returnedFiles = data.files || response.files || [];
         
-        searchResult = {
+        ns.searchResult = {
           total_count: data.total_count ?? response.total_count ?? 0,
           file_count: data.file_count ?? response.file_count ?? 0,
           dir_count: data.dir_count ?? response.dir_count ?? 0,
@@ -275,10 +246,10 @@
           nested_count: data.nested_count ?? response.nested_count ?? 0,
         };
         
-        log(`📊 返回文件数: ${returnedFiles.length}, 总计: ${searchResult.total_count}`);
+        log(`📊 返回文件数: ${returnedFiles.length}, 总计: ${ns.searchResult.total_count}`);
         
-        files = returnedFiles;
-        byExtension = data.by_extension ?? response.by_extension ?? {};
+        ns.files = returnedFiles;
+        ns.byExtension = data.by_extension ?? response.by_extension ?? {};
         
         // 更新统计
         scannedCount = data.scanned_files ?? response.scanned_files ?? scannedCount;
@@ -286,11 +257,11 @@
         
         log(`✅ ${response.message}`);
       } else {
-        phase = 'error'; progress = 0;
+        ns.phase = 'error'; ns.progress = 0;
         log(`❌ 失败: ${response.message}`);
       }
     } catch (error) {
-      phase = 'error'; progress = 0;
+      ns.phase = 'error'; ns.progress = 0;
       log(`❌ 失败: ${error}`);
     } finally {
       clearInterval(timer);
@@ -300,8 +271,8 @@
   }
 
   function handleReset() {
-    phase = 'idle'; progress = 0;
-    searchResult = null; files = []; byExtension = {}; logs = [];
+    ns.phase = 'idle'; ns.progress = 0;
+    ns.searchResult = null; ns.files = []; ns.byExtension = {}; ns.logs = [];
   }
 
   async function copyToClipboard(text: string, setter: (v: boolean) => void) {
@@ -313,7 +284,7 @@
   }
 
   function getOutsideArchiveCount(): number {
-    return files.filter(f => !f.archive && !f.container).length;
+    return ns.files.filter(f => !f.archive && !f.container).length;
   }
 </script>
 
@@ -328,7 +299,7 @@
     </div>
     {#if !hasInputConnection}
       <div class="flex cq-gap">
-        <Input bind:value={targetPath} placeholder="输入或选择目录..." disabled={isRunning} class="flex-1 cq-input" />
+        <Input bind:value={ns.targetPath} placeholder="输入或选择目录..." disabled={isRunning} class="flex-1 cq-input" />
         <Button variant="outline" size="icon" class="cq-button-icon shrink-0" onclick={selectFolder} disabled={isRunning}>
           <FolderOpen class="cq-icon" />
         </Button>
@@ -349,8 +320,8 @@
   <div class="h-full flex flex-col overflow-auto">
     <FilterBuilder 
       advancedMode={advancedMode}
-      sqlValue={whereClause}
-      onchange={(_, sql) => { whereClause = sql; }}
+      sqlValue={ns.whereClause}
+      onchange={(_, sql) => { ns.whereClause = sql; }}
       onAdvancedChange={(adv) => advancedMode = adv}
       disabled={isRunning}
     />
@@ -363,20 +334,20 @@
     <!-- 状态指示 -->
     <div class="flex flex-col cq-gap cq-padding bg-muted/30 cq-rounded">
       <div class="flex items-center cq-gap">
-        {#if phase === 'completed'}
+        {#if ns.phase === 'completed'}
           <CircleCheck class="cq-icon text-green-500 shrink-0" />
           <span class="cq-text text-green-600 font-medium">完成</span>
-          <span class="cq-text-sm text-muted-foreground ml-auto">{searchResult?.total_count ?? 0} 项</span>
-        {:else if phase === 'error'}
+          <span class="cq-text-sm text-muted-foreground ml-auto">{ns.searchResult?.total_count ?? 0} 项</span>
+        {:else if ns.phase === 'error'}
           <CircleX class="cq-icon text-red-500 shrink-0" />
           <span class="cq-text text-red-600 font-medium">失败</span>
         {:else if isRunning}
           <LoaderCircle class="cq-icon text-primary animate-spin shrink-0" />
           <div class="flex-1 flex flex-col gap-0.5">
-            <Progress value={progress} class="h-1.5" />
+            <Progress value={ns.progress} class="h-1.5" />
             <div class="flex items-center justify-between cq-text-sm text-muted-foreground">
               <span class="truncate">{progressMessage || '搜索中...'}</span>
-              <span class="tabular-nums shrink-0">{progress}%</span>
+              <span class="tabular-nums shrink-0">{ns.progress}%</span>
             </div>
           </div>
         {:else}
@@ -407,7 +378,7 @@
       <Button variant="outline" class="flex-1 cq-button-sm" onclick={() => executeAction('nested')} disabled={!canExecute || isRunning}>
         <Layers class="cq-icon" /><span class="cq-wide-only ml-1">嵌套</span>
       </Button>
-      {#if phase === 'completed' || phase === 'error'}
+      {#if ns.phase === 'completed' || ns.phase === 'error'}
         <Button variant="ghost" size="icon" class="cq-button-icon" onclick={handleReset}>
           <RotateCcw class="cq-icon" />
         </Button>
@@ -419,12 +390,12 @@
 <!-- 统计 -->
 {#snippet statsBlock()}
   {@const outsideCount = getOutsideArchiveCount()}
-  {#if searchResult}
+  {#if ns.searchResult}
     <div class="grid grid-cols-2 cq-gap">
       <div class="cq-stat-card bg-blue-500/10 col-span-2">
         <div class="flex items-center justify-between">
           <span class="cq-stat-label text-muted-foreground">总计</span>
-          <span class="cq-stat-value text-blue-600 tabular-nums">{searchResult.total_count}</span>
+          <span class="cq-stat-value text-blue-600 tabular-nums">{ns.searchResult.total_count}</span>
         </div>
       </div>
       <div class="cq-stat-card bg-green-500/10">
@@ -437,17 +408,17 @@
       <div class="cq-stat-card bg-purple-500/10">
         <div class="flex items-center justify-between">
           <Package class="cq-icon text-purple-600" />
-          <span class="cq-stat-value text-purple-600 tabular-nums">{searchResult.archive_count}</span>
+          <span class="cq-stat-value text-purple-600 tabular-nums">{ns.searchResult.archive_count}</span>
         </div>
         <div class="cq-stat-label text-muted-foreground">压缩包内</div>
       </div>
     </div>
     <!-- 扩展名统计（仅宽屏） -->
-    {#if Object.keys(byExtension).length > 0}
+    {#if Object.keys(ns.byExtension).length > 0}
       <div class="cq-wide-only mt-2">
         <div class="text-xs text-muted-foreground mb-1">按扩展名</div>
         <div class="flex flex-wrap gap-1">
-          {#each Object.entries(byExtension).sort((a, b) => b[1] - a[1]).slice(0, 8) as [ext, count]}
+          {#each Object.entries(ns.byExtension).sort((a, b) => b[1] - a[1]).slice(0, 8) as [ext, count]}
             <span class="text-xs px-1.5 py-0.5 bg-muted rounded">.{ext || '无'}: {count}</span>
           {/each}
         </div>
@@ -461,8 +432,8 @@
 <!-- 文件列表 -->
 {#snippet treeBlock()}
   {@const displayLimit = 200}
-  {@const displayFiles = files.slice(0, displayLimit)}
-  {@const totalCount = searchResult?.total_count ?? files.length}
+  {@const displayFiles = ns.files.slice(0, displayLimit)}
+  {@const totalCount = ns.searchResult?.total_count ?? ns.files.length}
   <div class="h-full flex flex-col overflow-hidden">
     <div class="flex items-center justify-between cq-padding border-b bg-muted/30 shrink-0">
       <span class="cq-text font-semibold flex items-center gap-1">
@@ -470,21 +441,21 @@
       </span>
       <div class="flex items-center gap-1">
         <span class="cq-text-sm text-muted-foreground">
-          {#if totalCount > files.length}
-            {files.length.toLocaleString()}/{totalCount.toLocaleString()}
+          {#if totalCount > ns.files.length}
+            {ns.files.length.toLocaleString()}/{totalCount.toLocaleString()}
           {:else}
-            {files.length.toLocaleString()}
+            {ns.files.length.toLocaleString()}
           {/if}
         </span>
-        {#if files.length > 0}
-          <Button variant="ghost" size="icon" class="h-5 w-5" onclick={() => copyToClipboard(files.map(f => f.container ? `${f.container}//${f.path}` : f.path).join('\n'), v => copiedPath = v)}>
+        {#if ns.files.length > 0}
+          <Button variant="ghost" size="icon" class="h-5 w-5" onclick={() => copyToClipboard(ns.files.map(f => f.container ? `${f.container}//${f.path}` : f.path).join('\n'), v => copiedPath = v)}>
             {#if copiedPath}<Check class="w-3 h-3 text-green-500" />{:else}<Copy class="w-3 h-3" />{/if}
           </Button>
         {/if}
       </div>
     </div>
     <div class="flex-1 overflow-y-auto cq-padding">
-      {#if files.length > 0}
+      {#if ns.files.length > 0}
         <div class="space-y-0.5">
           {#each displayFiles as file, idx (file.container ? `${file.container}//${file.path}//${idx}` : `${file.path}//${idx}`)}
             <div class="flex items-center gap-1 cq-text truncate py-0.5 hover:bg-muted/50 rounded px-1">
@@ -497,10 +468,10 @@
               <span class="cq-text-sm text-muted-foreground shrink-0">{file.size_formatted}</span>
             </div>
           {/each}
-          {#if files.length > displayLimit}
+          {#if ns.files.length > displayLimit}
             <div class="cq-text-sm text-muted-foreground text-center py-2 border-t mt-1">
-              显示前 {displayLimit} 条，共 {files.length.toLocaleString()} 条
-              {#if totalCount > files.length}
+              显示前 {displayLimit} 条，共 {ns.files.length.toLocaleString()} 条
+              {#if totalCount > ns.files.length}
                 <br/><span class="text-orange-500">（总计 {totalCount.toLocaleString()} 条，已截断）</span>
               {/if}
             </div>
@@ -518,13 +489,13 @@
   <div class="h-full flex flex-col">
     <div class="flex items-center justify-between mb-1 shrink-0">
       <span class="cq-text font-semibold">日志</span>
-      <Button variant="ghost" size="icon" class="h-5 w-5" onclick={() => copyToClipboard(logs.join('\n'), v => copiedLogs = v)}>
+      <Button variant="ghost" size="icon" class="h-5 w-5" onclick={() => copyToClipboard(ns.logs.join('\n'), v => copiedLogs = v)}>
         {#if copiedLogs}<Check class="w-3 h-3 text-green-500" />{:else}<Copy class="w-3 h-3" />{/if}
       </Button>
     </div>
     <div class="flex-1 overflow-y-auto bg-muted/30 cq-rounded cq-padding font-mono cq-text-sm space-y-0.5">
-      {#if logs.length > 0}
-        {#each logs.slice(-10) as logItem}
+      {#if ns.logs.length > 0}
+        {#each ns.logs.slice(-10) as logItem}
           <div class="text-muted-foreground break-all">{logItem}</div>
         {/each}
       {:else}
@@ -536,7 +507,7 @@
 
 <!-- 分析面板 -->
 {#snippet analysisBlock()}
-  <AnalysisPanel {files} />
+  <AnalysisPanel files={ns.files} />
 {/snippet}
 
 <!-- 区块渲染器 -->
@@ -562,7 +533,7 @@
     nodeId={nodeId} 
     title="findz" 
     icon={Search} 
-    status={phase} 
+    status={ns.phase} 
     {borderClass} 
     isFullscreenRender={isFullscreenRender}
     onCompact={() => layoutRenderer?.compact()}

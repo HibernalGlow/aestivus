@@ -13,7 +13,7 @@
   import { NodeLayoutRenderer } from '$lib/components/blocks';
   import { LATA_DEFAULT_GRID_LAYOUT } from './blocks';
   import { api } from '$lib/services/api';
-  import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
+  import { getNodeState, saveNodeState } from '$lib/stores/nodeState.svelte';
   import { getWsBaseUrl } from '$lib/stores/backend';
   import NodeWrapper from '../NodeWrapper.svelte';
   import { 
@@ -55,91 +55,65 @@
     tasks: TaskInfo[];
     selectedTask: string | null;
     taskArgs: string;
+    logs: string[];
   }
 
   const nodeId = $derived(id);
-  const savedState = $derived(getNodeState<LataState>(nodeId));
   const configTaskfilePath = $derived(data?.config?.taskfile_path ?? '');
   const dataLogs = $derived(data?.logs ?? []);
+  
+  // 默认 Taskfile 路径
+  function getDefaultTaskfilePath(): string {
+    try { return localStorage.getItem('lata-default-taskfile') || ''; }
+    catch { return ''; }
+  }
 
-  let taskfilePath = $state('');
-  let phase = $state<Phase>('idle');
-  let logs = $state<string[]>([]);
+  // 获取共享的响应式状态
+  const ns = getNodeState<LataState>(id, {
+    phase: 'idle',
+    progress: 0,
+    progressText: '',
+    taskfilePath: configTaskfilePath || getDefaultTaskfilePath(),
+    tasks: [],
+    selectedTask: null,
+    taskArgs: '',
+    logs: []
+  });
+
+  // 纯 UI 状态（不需要同步）
   let copied = $state(false);
-  let progress = $state(0);
-  let progressText = $state('');
-  let tasks = $state<TaskInfo[]>([]);
-  let selectedTask = $state<string | null>(null);
-  let taskArgs = $state('');
   let layoutRenderer = $state<any>(undefined);
 
-  // xterm 终端相关
+  // xterm 终端相关（本地 UI 状态）
   let terminalContainer: HTMLDivElement | null = $state(null);
   let term: any = null;
   let fitAddon: any = null;
   let terminalWs: WebSocket | null = null;
   let terminalConnected = $state(false);
-
-  let initialized = $state(false);
-  
-  // 默认 Taskfile 路径存储 key
-  const DEFAULT_TASKFILE_KEY = 'lata-default-taskfile';
-  
-  // 获取默认路径
-  function getDefaultTaskfilePath(): string {
-    try {
-      return localStorage.getItem(DEFAULT_TASKFILE_KEY) || '';
-    } catch { return ''; }
-  }
   
   // 保存为默认路径
   function saveAsDefaultPath() {
-    if (taskfilePath) {
-      localStorage.setItem(DEFAULT_TASKFILE_KEY, taskfilePath);
+    if (ns.taskfilePath) {
+      localStorage.setItem('lata-default-taskfile', ns.taskfilePath);
       log(`💾 已保存为默认路径`);
     }
   }
-
-  // 初始化
-  $effect(() => {
-    if (initialized) return;
-    
-    if (savedState) {
-      phase = savedState.phase ?? 'idle';
-      progress = savedState.progress ?? 0;
-      progressText = savedState.progressText ?? '';
-      taskfilePath = savedState.taskfilePath ?? configTaskfilePath ?? getDefaultTaskfilePath();
-      tasks = savedState.tasks ?? [];
-      selectedTask = savedState.selectedTask ?? null;
-      taskArgs = savedState.taskArgs ?? '';
-    } else {
-      taskfilePath = configTaskfilePath || getDefaultTaskfilePath();
-    }
-    
-    initialized = true;
-  });
   
+  // 同步外部日志
   $effect(() => {
-    logs = [...dataLogs];
+    if (dataLogs.length > 0) {
+      ns.logs = [...dataLogs];
+    }
   });
 
-  function saveState() {
-    if (!initialized) return;
-    setNodeState<LataState>(nodeId, {
-      phase, progress, progressText, taskfilePath, tasks, selectedTask, taskArgs
-    });
-  }
-
-  let isRunning = $derived(phase === 'loading' || phase === 'running');
-  let canExecute = $derived(phase !== 'loading' && phase !== 'running' && selectedTask !== null);
+  let isRunning = $derived(ns.phase === 'loading' || ns.phase === 'running');
+  let canExecute = $derived(ns.phase !== 'loading' && ns.phase !== 'running' && ns.selectedTask !== null);
   let borderClass = $derived({
     idle: 'border-border', loading: 'border-primary shadow-sm', running: 'border-primary shadow-sm',
     completed: 'border-primary/50', error: 'border-destructive/50'
-  }[phase]);
+  }[ns.phase]);
 
-  $effect(() => { if (phase || tasks || selectedTask) saveState(); });
-
-  function log(msg: string) { logs = [...logs.slice(-30), msg]; }
+  function log(msg: string) { ns.logs = [...ns.logs.slice(-30), msg]; }
 
   async function selectTaskfile() {
     try {
@@ -148,7 +122,7 @@
         { name: 'Taskfile', extensions: ['yml', 'yaml'] }
       ]);
       if (selected) {
-        taskfilePath = selected;
+        ns.taskfilePath = selected;
         log(`📁 选择了 Taskfile: ${selected.split(/[/\\]/).pop()}`);
         await loadTasks();
       }
@@ -156,93 +130,93 @@
   }
 
   async function loadTasks() {
-    if (!taskfilePath) {
+    if (!ns.taskfilePath) {
       log('❌ 请先选择 Taskfile');
       return;
     }
     
     // 清理路径中的引号
-    const cleanPath = taskfilePath.trim().replace(/^["']|["']$/g, '');
-    if (cleanPath !== taskfilePath) {
-      taskfilePath = cleanPath;
+    const cleanPath = ns.taskfilePath.trim().replace(/^["']|["']$/g, '');
+    if (cleanPath !== ns.taskfilePath) {
+      ns.taskfilePath = cleanPath;
     }
     
-    phase = 'loading';
-    progress = 0;
-    progressText = '正在加载任务列表...';
-    log(`📋 加载 Taskfile: ${taskfilePath}`);
+    ns.phase = 'loading';
+    ns.progress = 0;
+    ns.progressText = '正在加载任务列表...';
+    log(`📋 加载 Taskfile: ${ns.taskfilePath}`);
     
     try {
       const response = await api.executeNode('lata', {
         action: 'list',
-        taskfile_path: taskfilePath
+        taskfile_path: ns.taskfilePath
       }) as any;
       
       if (response.success) {
-        tasks = response.data?.tasks || response.tasks || [];
-        phase = 'idle';
-        progress = 100;
-        progressText = '';
-        log(`✅ 找到 ${tasks.length} 个任务`);
-        if (tasks.length > 0 && !selectedTask) {
-          selectedTask = tasks[0].name;
+        ns.tasks = response.data?.tasks || response.tasks || [];
+        ns.phase = 'idle';
+        ns.progress = 100;
+        ns.progressText = '';
+        log(`✅ 找到 ${ns.tasks.length} 个任务`);
+        if (ns.tasks.length > 0 && !ns.selectedTask) {
+          ns.selectedTask = ns.tasks[0].name;
         }
       } else {
-        phase = 'error';
+        ns.phase = 'error';
         log(`❌ 加载失败: ${response.message}`);
       }
     } catch (error) {
-      phase = 'error';
+      ns.phase = 'error';
       log(`❌ 加载失败: ${error}`);
     }
   }
 
   async function handleExecute() {
-    if (!canExecute || !selectedTask) return;
+    if (!canExecute || !ns.selectedTask) return;
     
-    phase = 'running';
-    progress = 0;
-    progressText = `正在执行任务: ${selectedTask}`;
-    log(`🚀 执行任务: ${selectedTask}`);
+    ns.phase = 'running';
+    ns.progress = 0;
+    ns.progressText = `正在执行任务: ${ns.selectedTask}`;
+    log(`🚀 执行任务: ${ns.selectedTask}`);
     
     // 生成任务 ID 并连接 WebSocket
     const taskId = `lata-${nodeId}-${Date.now()}`;
-    writeToTerminal(`\x1b[36m[lata]\x1b[0m 执行任务: ${selectedTask}`);
+    writeToTerminal(`\x1b[36m[lata]\x1b[0m 执行任务: ${ns.selectedTask}`);
     connectTerminalWs(taskId);
     
     try {
       const response = await api.executeNode('lata', {
         action: 'execute',
-        taskfile_path: taskfilePath,
-        task_name: selectedTask,
-        task_args: taskArgs
+        taskfile_path: ns.taskfilePath,
+        task_name: ns.selectedTask,
+        task_args: ns.taskArgs
       }, { taskId, nodeId }) as any;
       
       if (response.success) {
-        phase = 'completed';
-        progress = 100;
-        progressText = '任务执行完成';
+        ns.phase = 'completed';
+        ns.progress = 100;
+        ns.progressText = '任务执行完成';
         log(`✅ ${response.message}`);
       } else {
-        phase = 'error';
+        ns.phase = 'error';
         log(`❌ 执行失败: ${response.message}`);
       }
     } catch (error) {
-      phase = 'error';
+      ns.phase = 'error';
       log(`❌ 执行失败: ${error}`);
     }
   }
 
   function handleReset() {
-    phase = 'idle';
-    progress = 0;
-    progressText = '';
-    logs = [];
+    ns.phase = 'idle';
+    ns.progress = 0;
+    ns.progressText = '';
+    ns.logs = [];
   }
 
   async function copyLogs() {
     try {
-      await navigator.clipboard.writeText(logs.join('\n'));
+      await navigator.clipboard.writeText(ns.logs.join('\n'));
       copied = true;
       setTimeout(() => { copied = false; }, 2000);
     } catch (e) { console.error('复制失败:', e); }
@@ -361,25 +335,25 @@
       <Button variant="outline" size="sm" class="cq-button-sm flex-1" onclick={selectTaskfile} disabled={isRunning}>
         <FolderOpen class="cq-icon mr-1" />选择文件
       </Button>
-      <Button variant="outline" size="sm" class="cq-button-sm" onclick={loadTasks} disabled={isRunning || !taskfilePath}>
+      <Button variant="outline" size="sm" class="cq-button-sm" onclick={loadTasks} disabled={isRunning || !ns.taskfilePath}>
         <RefreshCw class="cq-icon" />
       </Button>
     </div>
     <Input 
-      bind:value={taskfilePath} 
+      bind:value={ns.taskfilePath} 
       placeholder="Taskfile.yml 路径" 
       disabled={isRunning} 
       class="cq-text font-mono"
     />
     <div class="flex items-center justify-between cq-text-sm text-muted-foreground">
       <span>
-        {#if taskfilePath}
-          {taskfilePath.split(/[/\\\\]/).pop()}
+        {#if ns.taskfilePath}
+          {ns.taskfilePath.split(/[/\\\\]/).pop()}
         {:else}
           未选择 Taskfile
         {/if}
       </span>
-      {#if taskfilePath}
+      {#if ns.taskfilePath}
         <Button variant="ghost" size="sm" class="h-5 px-1 text-xs" onclick={saveAsDefaultPath}>
           设为默认
         </Button>
@@ -392,35 +366,35 @@
   <div class="flex flex-col cq-gap h-full">
     <div class="flex flex-col cq-gap cq-padding bg-muted/30 cq-rounded">
       <div class="flex items-center cq-gap">
-        {#if phase === 'completed'}
+        {#if ns.phase === 'completed'}
           <CircleCheck class="cq-icon text-green-500 shrink-0" />
           <span class="cq-text text-green-600 font-medium">完成</span>
-        {:else if phase === 'error'}
+        {:else if ns.phase === 'error'}
           <CircleX class="cq-icon text-red-500 shrink-0" />
           <span class="cq-text text-red-600 font-medium">失败</span>
         {:else if isRunning}
           <LoaderCircle class="cq-icon text-primary animate-spin shrink-0" />
-          <div class="flex-1"><Progress value={progress} class="h-1.5" /></div>
+          <div class="flex-1"><Progress value={ns.progress} class="h-1.5" /></div>
         {:else}
           <Rocket class="cq-icon text-muted-foreground/50 shrink-0" />
           <span class="cq-text text-muted-foreground">等待执行</span>
         {/if}
       </div>
-      {#if isRunning && progressText}
-        <div class="cq-text-sm text-muted-foreground truncate">{progressText}</div>
+      {#if isRunning && ns.progressText}
+        <div class="cq-text-sm text-muted-foreground truncate">{ns.progressText}</div>
       {/if}
     </div>
     
-    {#if selectedTask}
+    {#if ns.selectedTask}
       <Input 
-        bind:value={taskArgs} 
+        bind:value={ns.taskArgs} 
         placeholder="任务参数（可选）" 
         disabled={isRunning} 
         class="cq-text"
       />
     {/if}
     
-    {#if phase === 'idle' || phase === 'error'}
+    {#if ns.phase === 'idle' || ns.phase === 'error'}
       <Button class="w-full cq-button flex-1" onclick={handleExecute} disabled={!canExecute}>
         <Play class="cq-icon mr-1" /><span>执行任务</span>
       </Button>
@@ -428,7 +402,7 @@
       <Button class="w-full cq-button flex-1" disabled>
         <LoaderCircle class="cq-icon mr-1 animate-spin" /><span>执行中</span>
       </Button>
-    {:else if phase === 'completed'}
+    {:else if ns.phase === 'completed'}
       <Button class="w-full cq-button flex-1" onclick={handleExecute} disabled={!canExecute}>
         <Play class="cq-icon mr-1" /><span>再次执行</span>
       </Button>
@@ -445,14 +419,14 @@
       <span class="cq-text font-semibold flex items-center gap-1">
         <ListTodo class="cq-icon text-blue-500" />任务列表
       </span>
-      <span class="cq-text-sm text-muted-foreground">{tasks.length} 个</span>
+      <span class="cq-text-sm text-muted-foreground">{ns.tasks.length} 个</span>
     </div>
     <div class="flex-1 overflow-y-auto space-y-1">
-      {#if tasks.length > 0}
-        {#each tasks as task}
+      {#if ns.tasks.length > 0}
+        {#each ns.tasks as task}
           <button
-            class="w-full text-left p-2 rounded-md border transition-all {selectedTask === task.name ? 'bg-primary/10 border-primary/50 shadow-sm' : 'bg-muted/30 border-transparent hover:bg-muted/50 hover:border-muted'}"
-            onclick={() => { selectedTask = task.name; }}
+            class="w-full text-left p-2 rounded-md border transition-all {ns.selectedTask === task.name ? 'bg-primary/10 border-primary/50 shadow-sm' : 'bg-muted/30 border-transparent hover:bg-muted/50 hover:border-muted'}"
+            onclick={() => { ns.selectedTask = task.name; }}
             disabled={isRunning}
           >
             <div class="flex items-center justify-between gap-2">
@@ -472,7 +446,7 @@
             {#if task.desc}
               <div class="text-xs text-muted-foreground mt-1 truncate">{task.desc}</div>
             {/if}
-            {#if selectedTask === task.name && task.cmds && task.cmds.length > 0}
+            {#if ns.selectedTask === task.name && task.cmds && task.cmds.length > 0}
               <div class="mt-2 pt-2 border-t border-border/50">
                 <div class="text-xs text-muted-foreground mb-1">命令:</div>
                 <div class="space-y-0.5 max-h-20 overflow-y-auto">
@@ -491,7 +465,7 @@
         {/each}
       {:else}
         <div class="cq-text text-muted-foreground text-center py-6 bg-muted/20 rounded-md">
-          {#if taskfilePath}
+          {#if ns.taskfilePath}
             <RefreshCw class="w-8 h-8 mx-auto mb-2 opacity-30" />
             <div>点击刷新加载任务</div>
           {:else}
@@ -513,8 +487,8 @@
       </Button>
     </div>
     <div class="flex-1 overflow-y-auto bg-muted/30 cq-rounded cq-padding font-mono cq-text-sm space-y-0.5">
-      {#if logs.length > 0}
-        {#each logs.slice(-10) as logItem}<div class="text-muted-foreground break-all">{logItem}</div>{/each}
+      {#if ns.logs.length > 0}
+        {#each ns.logs.slice(-10) as logItem}<div class="text-muted-foreground break-all">{logItem}</div>{/each}
       {:else}
         <div class="text-muted-foreground text-center py-2">暂无日志</div>
       {/if}
@@ -567,7 +541,7 @@
     nodeId={nodeId} 
     title="lata" 
     icon={Rocket} 
-    status={phase} 
+    status={ns.phase} 
     {borderClass} 
     isFullscreenRender={isFullscreenRender}
     onCompact={() => layoutRenderer?.compact()}

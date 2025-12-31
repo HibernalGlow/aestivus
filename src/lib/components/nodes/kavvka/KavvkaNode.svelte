@@ -16,7 +16,7 @@
   import { NodeLayoutRenderer } from '$lib/components/blocks';
   import { KAVVKA_DEFAULT_GRID_LAYOUT } from './blocks';
   import { api } from '$lib/services/api';
-  import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
+  import { getNodeState, saveNodeState } from '$lib/stores/nodeState.svelte';
   import NodeWrapper from '../NodeWrapper.svelte';
   import { 
     LoaderCircle, Image, FolderOpen, Clipboard,
@@ -44,91 +44,79 @@
     forceMove: boolean;
     keywords: string[];
     scanDepth: number;
+    phase: Phase;
+    logs: string[];
+    resultPaths: string[];
   }
 
   const nodeId = $derived(id);
-  const savedState = $derived(getNodeState<KavvkaState>(nodeId));
   const dataLogs = $derived(data?.logs ?? []);
   const dataHasInputConnection = $derived(data?.hasInputConnection ?? false);
 
   // 默认关键词
   const DEFAULT_KEYWORDS = ['画集', 'CG', '图集', '作品集'];
 
-  // 状态变量
-  let sourcePaths = $state<string[]>([]);      // 处理用的源路径
-  let sourcePathsText = $state('');
-  let scanRoots = $state<string[]>([]);        // 扫描用的根目录
-  let scanRootsText = $state('');
-  let forceMove = $state(false);
-  let keywords = $state<string[]>(DEFAULT_KEYWORDS);
-  let keywordsText = $state('');
-  let scanDepth = $state(3);
-  
-  let phase = $state<Phase>('idle');
-  let logs = $state<string[]>([]);
-  let copied = $state(false);
-  let resultPaths = $state<string[]>([]);
-  let hasInputConnection = $state(false);
-  let layoutRenderer = $state<any>(undefined);
-
-  let initialized = $state(false);
-  
-  $effect(() => {
-    if (initialized) return;
-    
-    if (savedState) {
-      sourcePaths = savedState.sourcePaths ?? [];
-      scanRoots = savedState.scanRoots ?? [];
-      forceMove = savedState.forceMove ?? false;
-      keywords = savedState.keywords ?? DEFAULT_KEYWORDS;
-      scanDepth = savedState.scanDepth ?? 1;
-    }
-    sourcePathsText = sourcePaths.join('\n');
-    scanRootsText = scanRoots.join('\n');
-    keywordsText = keywords.join(', ');
-    initialized = true;
+  // 获取共享的响应式状态
+  const ns = getNodeState<KavvkaState>(id, {
+    sourcePaths: [],
+    scanRoots: [],
+    forceMove: false,
+    keywords: DEFAULT_KEYWORDS,
+    scanDepth: 3,
+    phase: 'idle',
+    logs: [],
+    resultPaths: []
   });
-  
+
+  // 本地 UI 状态（用于文本编辑区的实时输入）
+  let sourcePathsText = $state(ns.sourcePaths.join('\n'));
+  let scanRootsText = $state(ns.scanRoots.join('\n'));
+  let keywordsText = $state(ns.keywords.join(', '));
+  let hasInputConnection = $state(false);
+  let copied = $state(false);
+  let layoutRenderer = $state<any>(undefined);
+  let copiedStates = $state<Record<number, boolean>>({});
+  let copiedAll = $state(false);
+
+  // 同步外部状态
   $effect(() => {
-    logs = [...dataLogs];
+    if (dataLogs.length > 0) ns.logs = [...dataLogs];
     hasInputConnection = dataHasInputConnection;
   });
 
-  function saveState() {
-    if (!initialized) return;
-    setNodeState<KavvkaState>(nodeId, { sourcePaths, scanRoots, forceMove, keywords, scanDepth });
-  }
+  // 同步文本编辑区状态
+  $effect(() => {
+    sourcePathsText = ns.sourcePaths.join('\n');
+    scanRootsText = ns.scanRoots.join('\n');
+    keywordsText = ns.keywords.join(', ');
+  });
 
-  let isRunning = $derived(phase === 'running' || phase === 'scanning');
-  let canExecute = $derived((sourcePaths.length > 0 || hasInputConnection) && !isRunning);
-  let canScan = $derived(scanRoots.length > 0 && !isRunning);
+  let isRunning = $derived(ns.phase === 'running' || ns.phase === 'scanning');
+  let canExecute = $derived((ns.sourcePaths.length > 0 || hasInputConnection) && !isRunning);
+  let canScan = $derived(ns.scanRoots.length > 0 && !isRunning);
   let borderClass = $derived({
     idle: 'border-border',
     scanning: 'border-orange-500 shadow-sm',
     running: 'border-primary shadow-sm',
     completed: 'border-green-500/50',
     error: 'border-destructive/50'
-  }[phase]);
+  }[ns.phase]);
 
-  $effect(() => { if (forceMove !== undefined || scanDepth) saveState(); });
-
-  function log(msg: string) { logs = [...logs.slice(-50), msg]; }
+  function log(msg: string) { ns.logs = [...ns.logs.slice(-50), msg]; }
 
   function updateSourcePaths(text: string) {
     sourcePathsText = text;
-    sourcePaths = text.split('\n').map(s => s.trim()).filter(s => s);
-    saveState();
+    ns.sourcePaths = text.split('\n').map(s => s.trim()).filter(s => s);
   }
 
   function updateScanRoots(text: string) {
     scanRootsText = text;
-    scanRoots = text.split('\n').map(s => s.trim()).filter(s => s);
-    saveState();
+    ns.scanRoots = text.split('\n').map(s => s.trim()).filter(s => s);
   }
 
   function updateKeywords(text: string) {
     keywordsText = text;
-    keywords = text.split(',').map(s => s.trim()).filter(s => s);
+    ns.keywords = text.split(',').map(s => s.trim()).filter(s => s);
   }
 
   // 选择源路径文件夹
@@ -137,9 +125,8 @@
       const { platform } = await import('$lib/api/platform');
       const selected = await platform.openFolderDialog('选择源目录');
       if (selected) {
-        sourcePaths = [...sourcePaths, selected];
-        sourcePathsText = sourcePaths.join('\n');
-        saveState();
+        ns.sourcePaths = [...ns.sourcePaths, selected];
+        sourcePathsText = ns.sourcePaths.join('\n');
       }
     } catch (e) { log(`选择文件夹失败: ${e}`); }
   }
@@ -151,9 +138,8 @@
       const text = await platform.readClipboard();
       if (text) {
         const paths = text.split('\n').map(s => s.trim()).filter(s => s);
-        sourcePaths = [...sourcePaths, ...paths];
-        sourcePathsText = sourcePaths.join('\n');
-        saveState();
+        ns.sourcePaths = [...ns.sourcePaths, ...paths];
+        sourcePathsText = ns.sourcePaths.join('\n');
       }
     } catch (e) { log(`读取剪贴板失败: ${e}`); }
   }
@@ -164,9 +150,8 @@
       const { platform } = await import('$lib/api/platform');
       const selected = await platform.openFolderDialog('选择扫描根目录');
       if (selected) {
-        scanRoots = [...scanRoots, selected];
-        scanRootsText = scanRoots.join('\n');
-        saveState();
+        ns.scanRoots = [...ns.scanRoots, selected];
+        scanRootsText = ns.scanRoots.join('\n');
       }
     } catch (e) { log(`选择文件夹失败: ${e}`); }
   }
@@ -178,9 +163,8 @@
       const text = await platform.readClipboard();
       if (text) {
         const paths = text.split('\n').map(s => s.trim()).filter(s => s);
-        scanRoots = [...scanRoots, ...paths];
-        scanRootsText = scanRoots.join('\n');
-        saveState();
+        ns.scanRoots = [...ns.scanRoots, ...paths];
+        scanRootsText = ns.scanRoots.join('\n');
       }
     } catch (e) { log(`读取剪贴板失败: ${e}`); }
   }
@@ -189,34 +173,33 @@
   async function handleScan() {
     if (!canScan) return;
     
-    phase = 'scanning';
-    log(`🔍 扫描关键词: ${keywords.join(', ')}`);
-    log(`📁 扫描深度: ${scanDepth}`);
+    ns.phase = 'scanning';
+    log(`🔍 扫描关键词: ${ns.keywords.join(', ')}`);
+    log(`📁 扫描深度: ${ns.scanDepth}`);
     
     try {
       const response = await api.executeNode('kavvka', {
         action: 'scan',
-        paths: scanRoots,
-        keywords: keywords,
-        scan_depth: scanDepth
+        paths: ns.scanRoots,
+        keywords: ns.keywords,
+        scan_depth: ns.scanDepth
       }) as any;
       
       if (response.logs) for (const m of response.logs) log(m);
       
       if (response.success) {
-        phase = 'idle';
+        ns.phase = 'idle';
         const matchedPaths = response.data?.matched_paths ?? [];
         // 扫描结果填充到源路径
-        sourcePaths = matchedPaths;
-        sourcePathsText = sourcePaths.join('\n');
-        saveState();
+        ns.sourcePaths = matchedPaths;
+        sourcePathsText = ns.sourcePaths.join('\n');
         log(`✅ 找到 ${matchedPaths.length} 个匹配文件夹，已填充到源路径`);
       } else {
-        phase = 'error';
+        ns.phase = 'error';
         log(`❌ 扫描失败: ${response.message}`);
       }
     } catch (error) {
-      phase = 'error';
+      ns.phase = 'error';
       log(`❌ 扫描失败: ${error}`);
     }
   }
@@ -225,49 +208,48 @@
   async function handleExecute() {
     if (!canExecute) return;
     
-    phase = 'running';
-    resultPaths = [];
-    log(`🚀 开始处理 ${sourcePaths.length} 个路径`);
+    ns.phase = 'running';
+    ns.resultPaths = [];
+    log(`🚀 开始处理 ${ns.sourcePaths.length} 个路径`);
     
     try {
       const response = await api.executeNode('kavvka', {
         action: 'process',
-        paths: sourcePaths,
-        force: forceMove
+        paths: ns.sourcePaths,
+        force: ns.forceMove
       }) as any;
       
       if (response.logs) for (const m of response.logs) log(m);
       
       if (response.success) {
-        phase = 'completed';
-        resultPaths = response.data?.all_combined_paths ?? [];
+        ns.phase = 'completed';
+        ns.resultPaths = response.data?.all_combined_paths ?? [];
         log(`✅ ${response.message}`);
       } else {
-        phase = 'error';
+        ns.phase = 'error';
         log(`❌ 处理失败: ${response.message}`);
       }
     } catch (error) {
-      phase = 'error';
+      ns.phase = 'error';
       log(`❌ 处理失败: ${error}`);
     }
   }
 
   function handleReset() {
-    phase = 'idle';
-    resultPaths = [];
-    logs = [];
+    ns.phase = 'idle';
+    ns.resultPaths = [];
+    ns.logs = [];
   }
 
   function clearSourcePaths() {
-    sourcePaths = [];
+    ns.sourcePaths = [];
     sourcePathsText = '';
-    saveState();
   }
 
   async function copyResults() {
-    if (resultPaths.length === 0) return;
+    if (ns.resultPaths.length === 0) return;
     try {
-      await navigator.clipboard.writeText(resultPaths.join('\n'));
+      await navigator.clipboard.writeText(ns.resultPaths.join('\n'));
       copied = true;
       setTimeout(() => { copied = false; }, 2000);
       log('✅ 路径已复制到剪贴板');
@@ -279,7 +261,7 @@
 
   async function copyLogs() {
     try {
-      await navigator.clipboard.writeText(logs.join('\n'));
+      await navigator.clipboard.writeText(ns.logs.join('\n'));
       copied = true;
       setTimeout(() => { copied = false; }, 2000);
     } catch (e) { console.error('复制失败:', e); }
@@ -289,7 +271,6 @@
   async function copySinglePath(pathStr: string, index: number) {
     try {
       await navigator.clipboard.writeText(pathStr);
-      // 临时显示复制成功状态
       const tempCopied = { ...copiedStates };
       tempCopied[index] = true;
       copiedStates = tempCopied;
@@ -305,18 +286,14 @@
     }
   }
 
-  // 追踪每行的复制状态
-  let copiedStates = $state<Record<number, boolean>>({});
-  let copiedAll = $state(false);
-
   // 复制全部路径
   async function copyAllPaths() {
-    if (resultPaths.length === 0) return;
+    if (ns.resultPaths.length === 0) return;
     try {
-      await navigator.clipboard.writeText(resultPaths.join('\n'));
+      await navigator.clipboard.writeText(ns.resultPaths.join('\n'));
       copiedAll = true;
       setTimeout(() => { copiedAll = false; }, 1500);
-      log(`✅ 已复制全部 ${resultPaths.length} 行路径`);
+      log(`✅ 已复制全部 ${ns.resultPaths.length} 行路径`);
     } catch (e) { 
       console.error('复制失败:', e);
       log(`❌ 复制失败: ${e}`);
@@ -329,7 +306,7 @@
     <div class="flex items-center justify-between cq-mb shrink-0">
       <Label class="cq-text font-medium">源路径（处理用）</Label>
       <div class="flex cq-gap">
-        <Button variant="ghost" size="icon" class="cq-button-icon" onclick={clearSourcePaths} disabled={isRunning || sourcePaths.length === 0} title="清空">
+        <Button variant="ghost" size="icon" class="cq-button-icon" onclick={clearSourcePaths} disabled={isRunning || ns.sourcePaths.length === 0} title="清空">
           <RotateCcw class="cq-icon" />
         </Button>
         <Button variant="outline" size="icon" class="cq-button-icon" onclick={selectSourceFolder} disabled={isRunning}>
@@ -352,7 +329,7 @@
         disabled={isRunning}
         class="flex-1 cq-input font-mono text-xs resize-none min-h-[40px]"
       />
-      <span class="cq-text-sm text-muted-foreground mt-1">{sourcePaths.length} 个路径</span>
+      <span class="cq-text-sm text-muted-foreground mt-1">{ns.sourcePaths.length} 个路径</span>
     {/if}
   </div>
 {/snippet}
@@ -379,7 +356,7 @@
         disabled={isRunning}
         class="flex-1 cq-input font-mono text-xs resize-none min-h-[30px]"
       />
-      <span class="cq-text-sm text-muted-foreground">{scanRoots.length} 个根目录</span>
+      <span class="cq-text-sm text-muted-foreground">{ns.scanRoots.length} 个根目录</span>
     </div>
     
     <div>
@@ -398,7 +375,7 @@
         <Label class="cq-text font-medium">深度</Label>
         <Input 
           type="number"
-          bind:value={scanDepth}
+          bind:value={ns.scanDepth}
           min={1}
           max={10}
           disabled={isRunning}
@@ -406,7 +383,7 @@
         />
       </div>
       <label class="flex items-center cq-gap cursor-pointer mt-4">
-        <Checkbox bind:checked={forceMove} disabled={isRunning} />
+        <Checkbox bind:checked={ns.forceMove} disabled={isRunning} />
         <span class="cq-text">强制移动</span>
       </label>
     </div>
@@ -417,7 +394,7 @@
       onclick={handleScan}
       disabled={!canScan}
     >
-      {#if phase === 'scanning'}<LoaderCircle class="cq-icon mr-1 animate-spin" />{:else}<Search class="cq-icon mr-1" />{/if}
+      {#if ns.phase === 'scanning'}<LoaderCircle class="cq-icon mr-1 animate-spin" />{:else}<Search class="cq-icon mr-1" />{/if}
       <span>扫描 → 填充源路径</span>
     </Button>
   </div>
@@ -430,7 +407,7 @@
         <FolderOpen class="w-3 h-3" />
         <span>处理源路径</span>
       </div>
-      <div class="text-muted-foreground mt-1">{sourcePaths.length} 个路径</div>
+      <div class="text-muted-foreground mt-1">{ns.sourcePaths.length} 个路径</div>
     </div>
     
     <Button 
@@ -438,15 +415,15 @@
       onclick={handleExecute}
       disabled={!canExecute}
     >
-      {#if phase === 'running'}<LoaderCircle class="cq-icon mr-1 animate-spin" />{:else}<Zap class="cq-icon mr-1" />{/if}
-      <span>处理 ({sourcePaths.length})</span>
+      {#if ns.phase === 'running'}<LoaderCircle class="cq-icon mr-1 animate-spin" />{:else}<Zap class="cq-icon mr-1" />{/if}
+      <span>处理 ({ns.sourcePaths.length})</span>
     </Button>
     
     <Button 
       variant="outline" 
       class="w-full cq-button flex-1" 
       onclick={copyResults}
-      disabled={resultPaths.length === 0}
+      disabled={ns.resultPaths.length === 0}
     >
       {#if copied}<Check class="cq-icon mr-1 text-green-500" />{:else}<Copy class="cq-icon mr-1" />{/if}
       <span>复制路径</span>
@@ -463,8 +440,8 @@
     <div class="flex items-center justify-between cq-padding border-b bg-muted/30 shrink-0">
       <span class="font-semibold cq-text">Czkawka 路径</span>
       <div class="flex items-center cq-gap">
-        {#if resultPaths.length > 0}
-          <span class="cq-text-sm text-muted-foreground">{resultPaths.length} 组</span>
+        {#if ns.resultPaths.length > 0}
+          <span class="cq-text-sm text-muted-foreground">{ns.resultPaths.length} 组</span>
           <button
             onclick={copyAllPaths}
             class="p-1 rounded hover:bg-muted transition-colors"
@@ -480,8 +457,8 @@
       </div>
     </div>
     <div class="flex-1 overflow-y-auto cq-padding font-mono cq-text-sm">
-      {#if resultPaths.length > 0}
-        {#each resultPaths as pathStr, i}
+      {#if ns.resultPaths.length > 0}
+        {#each ns.resultPaths as pathStr, i}
           <div class="mb-2 p-2 bg-muted/30 rounded break-all flex items-start justify-between gap-2 group">
             <div class="flex-1">
               <span class="text-muted-foreground">{i + 1}.</span> {pathStr}
@@ -515,8 +492,8 @@
       </Button>
     </div>
     <div class="flex-1 overflow-y-auto bg-muted/30 cq-rounded cq-padding font-mono cq-text-sm space-y-0.5">
-      {#if logs.length > 0}
-        {#each logs.slice(-15) as logItem}<div class="text-muted-foreground break-all">{logItem}</div>{/each}
+      {#if ns.logs.length > 0}
+        {#each ns.logs.slice(-15) as logItem}<div class="text-muted-foreground break-all">{logItem}</div>{/each}
       {:else}
         <div class="text-muted-foreground text-center py-2">暂无日志</div>
       {/if}
@@ -543,7 +520,7 @@
     nodeId={nodeId} 
     title="kavvka" 
     icon={Image} 
-    status={phase} 
+    status={ns.phase} 
     {borderClass} 
     isFullscreenRender={isFullscreenRender}
     onCompact={() => layoutRenderer?.compact()}

@@ -17,7 +17,7 @@
   import { FORMATV_DEFAULT_GRID_LAYOUT } from '$lib/components/blocks/blockRegistry';
   import { api } from '$lib/services/api';
   import { getApiV1Url } from '$lib/stores/backend';
-  import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
+  import { getNodeState, saveNodeState } from '$lib/stores/nodeState.svelte';
   import NodeWrapper from '../NodeWrapper.svelte';
   import { 
     LoaderCircle, FolderOpen, Clipboard, Video,
@@ -80,59 +80,37 @@
     scanResult: ScanResult | null;
     duplicateCount: number;
     fileListData: FileListData | null;
-    targetPath?: string;
-    logs?: string[];
+    targetPath: string;
+    logs: string[];
   }
 
   // 使用 $derived 确保响应式
   const nodeId = $derived(id);
-  const savedState = $derived(getNodeState<FormatVNodeState>(nodeId));
   const configPath = $derived(data?.config?.path ?? 'E:\\1Hub\\EH\\1EHV');
   const dataLogs = $derived(data?.logs ?? []);
   const dataHasInputConnection = $derived(data?.hasInputConnection ?? false);
 
-  // 状态
-  let targetPath = $state('E:\\1Hub\\EH\\1EHV');
-  let phase = $state<Phase>('idle');
-  let logs = $state<string[]>([]);
-  let hasInputConnection = $state(false);
-  let copiedLogs = $state(false);
-  let progress = $state(0);
-  let progressText = $state('');
-  let scanResult = $state<ScanResult | null>(null);
-  let duplicateCount = $state(0);
-  let fileListData = $state<FileListData | null>(null);
-  let layoutRenderer = $state<LayoutRendererInstance | undefined>(undefined);
-  
-  // 选中的文件（用于预览）
-  let selectedFile = $state<string | null>(null);
-
-  // 初始化标记，防止 $effect 覆盖用户输入
-  let initialized = $state(false);
-
-  // 初始化状态（只执行一次）
-  $effect(() => {
-    if (initialized) return;
-    
-    targetPath = savedState?.targetPath ?? configPath;
-    logs = savedState?.logs ?? [...dataLogs];
-    hasInputConnection = dataHasInputConnection;
-    
-    if (savedState) {
-      phase = savedState.phase ?? 'idle';
-      progress = savedState.progress ?? 0;
-      progressText = savedState.progressText ?? '';
-      scanResult = savedState.scanResult ?? null;
-      duplicateCount = savedState.duplicateCount ?? 0;
-      fileListData = savedState.fileListData ?? null;
-    }
-    
-    initialized = true;
+  // 获取共享的响应式状态
+  const ns = getNodeState<FormatVNodeState>(id, {
+    phase: 'idle',
+    progress: 0,
+    progressText: '',
+    scanResult: null,
+    duplicateCount: 0,
+    fileListData: null,
+    targetPath: configPath || 'E:\\1Hub\\EH\\1EHV',
+    logs: []
   });
 
-  // 同步外部连接状态
+  // 本地 UI 状态
+  let hasInputConnection = $state(false);
+  let copiedLogs = $state(false);
+  let layoutRenderer = $state<LayoutRendererInstance | undefined>(undefined);
+  let selectedFile = $state<string | null>(null);
+
+  // 同步外部状态
   $effect(() => {
-    if (!initialized) return;
+    if (dataLogs.length > 0) ns.logs = [...dataLogs];
     hasInputConnection = dataHasInputConnection;
   });
 
@@ -141,25 +119,17 @@
     return `${getApiV1Url()}/file?path=${encodeURIComponent(filePath)}&thumbnail=true`;
   }
 
-  function saveState() {
-    setNodeState<FormatVNodeState>(nodeId, {
-      phase, progress, progressText, scanResult, duplicateCount, fileListData, targetPath, logs
-    });
-  }
-
-  let canExecute = $derived(phase === 'idle' && (targetPath.trim() !== '' || hasInputConnection));
-  let isRunning = $derived(phase === 'scanning' || phase === 'processing');
+  let canExecute = $derived(ns.phase === 'idle' && (ns.targetPath.trim() !== '' || hasInputConnection));
+  let isRunning = $derived(ns.phase === 'scanning' || ns.phase === 'processing');
   let borderClass = $derived({
     idle: 'border-border',
     scanning: 'border-blue-500 shadow-sm',
     processing: 'border-primary shadow-sm',
     completed: 'border-primary/50',
     error: 'border-destructive/50'
-  }[phase]);
+  }[ns.phase]);
 
-  $effect(() => { if (phase || scanResult || fileListData) saveState(); });
-
-  function log(msg: string) { logs = [...logs.slice(-30), msg]; }
+  function log(msg: string) { ns.logs = [...ns.logs.slice(-30), msg]; }
 
   /**
    * 构建完整的文件树结构
@@ -243,47 +213,47 @@
   async function executeAction(action: Action) {
     if (!canExecute && action !== 'scan') return;
     
-    phase = action === 'scan' ? 'scanning' : 'processing';
-    progress = 0;
-    progressText = action === 'scan' ? '扫描中...' : '处理中...';
+    ns.phase = action === 'scan' ? 'scanning' : 'processing';
+    ns.progress = 0;
+    ns.progressText = action === 'scan' ? '扫描中...' : '处理中...';
     
     const actionText = { scan: '扫描', add_nov: '添加 .nov', remove_nov: '移除 .nov', check_duplicates: '检查重复' }[action];
-    log(`🎬 开始${actionText}: ${targetPath}`);
+    log(`🎬 开始${actionText}: ${ns.targetPath}`);
 
     try {
-      progress = 10;
-      const response = await api.executeNode('formatv', { path: targetPath, action }) as any;
+      ns.progress = 10;
+      const response = await api.executeNode('formatv', { path: ns.targetPath, action }) as any;
 
       if (response.success) {
-        phase = 'completed'; progress = 100; progressText = '完成';
+        ns.phase = 'completed'; ns.progress = 100; ns.progressText = '完成';
         if (action === 'scan') {
-          scanResult = {
+          ns.scanResult = {
             normal_count: response.data?.normal_count ?? 0,
             nov_count: response.data?.nov_count ?? 0,
             prefixed_counts: response.data?.prefixed_counts ?? {}
           };
-          fileListData = {
+          ns.fileListData = {
             normal_files: response.data?.normal_files ?? [],
             nov_files: response.data?.nov_files ?? [],
             prefixed_files: response.data?.prefixed_files ?? {}
           };
         } else if (action === 'check_duplicates') {
-          duplicateCount = response.data?.duplicate_count ?? 0;
+          ns.duplicateCount = response.data?.duplicate_count ?? 0;
         }
         log(`✅ ${response.message}`);
       } else {
-        phase = 'error'; progress = 0;
+        ns.phase = 'error'; ns.progress = 0;
         log(`❌ 失败: ${response.message}`);
       }
     } catch (error) {
-      phase = 'error'; progress = 0;
+      ns.phase = 'error'; ns.progress = 0;
       log(`❌ 失败: ${error}`);
     }
   }
 
   function handleReset() {
-    phase = 'idle'; progress = 0; progressText = '';
-    scanResult = null; duplicateCount = 0; fileListData = null; selectedFile = null; logs = [];
+    ns.phase = 'idle'; ns.progress = 0; ns.progressText = '';
+    ns.scanResult = null; ns.duplicateCount = 0; ns.fileListData = null; selectedFile = null; ns.logs = [];
   }
 
   async function copyToClipboard(text: string, setter: (v: boolean) => void) {
@@ -306,7 +276,7 @@
     </div>
     {#if !hasInputConnection}
       <div class="flex cq-gap">
-        <Input bind:value={targetPath} placeholder="输入或选择目录..." disabled={isRunning} class="flex-1 cq-input" />
+        <Input bind:value={ns.targetPath} placeholder="输入或选择目录..." disabled={isRunning} class="flex-1 cq-input" />
         <Button variant="outline" size="icon" class="cq-button-icon shrink-0" onclick={selectFolder} disabled={isRunning}>
           <FolderOpen class="cq-icon" />
         </Button>
@@ -327,19 +297,19 @@
   <div class="flex flex-col cq-gap h-full">
     <!-- 状态指示 -->
     <div class="flex items-center cq-gap cq-padding bg-muted/30 cq-rounded">
-      {#if phase === 'completed'}
+      {#if ns.phase === 'completed'}
         <CircleCheck class="cq-icon text-green-500 shrink-0" />
         <span class="cq-text text-green-600 font-medium">完成</span>
-        <span class="cq-text-sm text-muted-foreground ml-auto">{scanResult?.normal_count ?? 0} 项</span>
-      {:else if phase === 'error'}
+        <span class="cq-text-sm text-muted-foreground ml-auto">{ns.scanResult?.normal_count ?? 0} 项</span>
+      {:else if ns.phase === 'error'}
         <CircleX class="cq-icon text-red-500 shrink-0" />
         <span class="cq-text text-red-600 font-medium">失败</span>
       {:else if isRunning}
         <LoaderCircle class="cq-icon text-primary animate-spin shrink-0" />
         <div class="flex-1">
-          <Progress value={progress} class="h-1.5" />
+          <Progress value={ns.progress} class="h-1.5" />
         </div>
-        <span class="cq-text-sm text-muted-foreground">{progress}%</span>
+        <span class="cq-text-sm text-muted-foreground">{ns.progress}%</span>
       {:else}
         <Video class="cq-icon text-muted-foreground/50 shrink-0" />
         <span class="cq-text text-muted-foreground">等待执行</span>
@@ -347,7 +317,7 @@
     </div>
     <!-- 主按钮 -->
     <Button class="w-full cq-button flex-1" onclick={() => executeAction('scan')} disabled={!canExecute || isRunning}>
-      {#if phase === 'scanning'}<LoaderCircle class="cq-icon mr-1 animate-spin" />{:else}<RefreshCw class="cq-icon mr-1" />{/if}
+      {#if ns.phase === 'scanning'}<LoaderCircle class="cq-icon mr-1 animate-spin" />{:else}<RefreshCw class="cq-icon mr-1" />{/if}
       <span>扫描</span>
     </Button>
     <!-- 辅助按钮 -->
@@ -361,7 +331,7 @@
       <Button variant="secondary" class="flex-1 cq-button-sm" onclick={() => executeAction('check_duplicates')} disabled={!canExecute || isRunning}>
         <Search class="cq-icon" /><span class="cq-wide-only ml-1">重复</span>
       </Button>
-      {#if phase === 'completed' || phase === 'error'}
+      {#if ns.phase === 'completed' || ns.phase === 'error'}
         <Button variant="ghost" size="icon" class="cq-button-icon" onclick={handleReset}>
           <RotateCcw class="cq-icon" />
         </Button>
@@ -413,23 +383,23 @@
 
 <!-- 文件树区块（含统计信息） -->
 {#snippet treeBlock()}
-  {@const fileTree = fileListData ? buildFullFileTree(fileListData) : []}
+  {@const fileTree = ns.fileListData ? buildFullFileTree(ns.fileListData) : []}
   <div class="h-full flex flex-col overflow-hidden">
     <div class="flex items-center justify-between cq-padding border-b bg-muted/30 shrink-0">
       <span class="cq-text font-semibold flex items-center gap-1">
         <Folder class="cq-icon text-yellow-500" />文件树
       </span>
-      {#if scanResult}
+      {#if ns.scanResult}
         <div class="flex items-center gap-2 cq-text-sm">
           <span class="flex items-center gap-1 text-green-600" title="普通视频">
             <span class="w-2 h-2 rounded-full bg-green-500"></span>
-            {scanResult.normal_count}
+            {ns.scanResult.normal_count}
           </span>
           <span class="flex items-center gap-1 text-yellow-600" title=".nov 文件">
             <span class="w-2 h-2 rounded-full bg-yellow-500"></span>
-            {scanResult.nov_count}
+            {ns.scanResult.nov_count}
           </span>
-          {#each Object.entries(scanResult.prefixed_counts) as [name, count]}
+          {#each Object.entries(ns.scanResult.prefixed_counts) as [name, count]}
             {#if count > 0}
               <span class="flex items-center gap-1 text-blue-600" title="[{name}] 前缀">
                 <span class="w-2 h-2 rounded-full bg-blue-500"></span>
@@ -449,7 +419,7 @@
             {@render renderTreeNode(node)}
           {/each}
         </TreeView.Root>
-      {:else if fileListData}
+      {:else if ns.fileListData}
         <div class="text-center text-muted-foreground py-8">没有找到视频文件</div>
       {:else}
         <div class="text-center text-muted-foreground py-8">扫描后显示文件树</div>
@@ -463,13 +433,13 @@
   <div class="h-full flex flex-col">
     <div class="flex items-center justify-between mb-1 shrink-0">
       <span class="cq-text font-semibold">日志</span>
-      <Button variant="ghost" size="icon" class="h-5 w-5" onclick={() => copyToClipboard(logs.join('\n'), v => copiedLogs = v)}>
+      <Button variant="ghost" size="icon" class="h-5 w-5" onclick={() => copyToClipboard(ns.logs.join('\n'), v => copiedLogs = v)}>
         {#if copiedLogs}<Check class="w-3 h-3 text-green-500" />{:else}<Copy class="w-3 h-3" />{/if}
       </Button>
     </div>
     <div class="flex-1 overflow-y-auto bg-muted/30 cq-rounded cq-padding font-mono cq-text-sm space-y-0.5">
-      {#if logs.length > 0}
-        {#each logs.slice(-10) as logItem}
+      {#if ns.logs.length > 0}
+        {#each ns.logs.slice(-10) as logItem}
           <div class="text-muted-foreground break-all">{logItem}</div>
         {/each}
       {:else}
@@ -499,7 +469,7 @@
     nodeId={nodeId} 
     title="formatv" 
     icon={Video} 
-    status={phase} 
+    status={ns.phase} 
     {borderClass} 
     isFullscreenRender={isFullscreenRender}
     onCompact={() => layoutRenderer?.compact()}

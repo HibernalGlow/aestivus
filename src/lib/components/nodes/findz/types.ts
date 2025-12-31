@@ -34,6 +34,7 @@ export interface FindzNodeState {
   byExtension: Record<string, number>;
   targetPath: string;
   whereClause: string;
+  logs: string[];
 }
 
 /** 分组分析数据 */

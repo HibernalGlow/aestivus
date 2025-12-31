@@ -13,7 +13,7 @@
   import { NodeLayoutRenderer } from '$lib/components/blocks';
   import { BANDIA_DEFAULT_GRID_LAYOUT } from './blocks';
   import { api } from '$lib/services/api';
-  import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
+  import { getNodeState, saveNodeState } from '$lib/stores/nodeState.svelte';
   import { getWsBaseUrl } from '$lib/stores/backend';
   import NodeWrapper from '../NodeWrapper.svelte';
   import { 
@@ -55,76 +55,47 @@
   }
 
   const nodeId = $derived(id);
-  const savedState = $derived(getNodeState<BandiaState>(nodeId));
   const configPaths = $derived(data?.config?.paths ?? []);
   const configDeleteAfter = $derived(data?.config?.delete_after ?? true);
   const configUseTrash = $derived(data?.config?.use_trash ?? true);
   const dataLogs = $derived(data?.logs ?? []);
   const dataHasInputConnection = $derived(data?.hasInputConnection ?? false);
 
-  let pathsText = $state('');
-  let deleteAfter = $state(true);
-  let useTrash = $state(true);
-  let phase = $state<Phase>('idle');
-  let logs = $state<string[]>([]);
-  let hasInputConnection = $state(false);
+  // 获取共享的响应式状态（节点模式和全屏模式共用同一个对象）
+  const ns = getNodeState<BandiaState>(id, {
+    phase: 'idle',
+    progress: 0,
+    progressText: '',
+    archivePaths: [],
+    deleteAfter: configDeleteAfter,
+    useTrash: configUseTrash,
+    extractResult: null,
+    logs: [],
+    hasInputConnection: false
+  });
+
+  // 纯 UI 状态（不需要同步）
   let copied = $state(false);
-  let progress = $state(0);
-  let progressText = $state('');
-  let archivePaths = $state<string[]>([]);
-  let extractResult = $state<ExtractResult | null>(null);
   let layoutRenderer = $state<any>(undefined);
   // 当前正在处理的文件索引（用于实时显示）
   let currentFileIndex = $state(-1);
-
-  // 初始化标记
-  let initialized = $state(false);
-  
-  // 初始化 effect - 只执行一次
-  $effect(() => {
-    if (initialized) return;
-    
-    if (savedState) {
-      phase = savedState.phase ?? 'idle';
-      progress = savedState.progress ?? 0;
-      progressText = savedState.progressText ?? '';
-      archivePaths = savedState.archivePaths ?? [];
-      deleteAfter = savedState.deleteAfter ?? configDeleteAfter;
-      useTrash = savedState.useTrash ?? configUseTrash;
-      extractResult = savedState.extractResult ?? null;
-      pathsText = savedState.archivePaths?.join('\n') || configPaths.join('\n');
-    } else {
-      pathsText = configPaths.join('\n');
-      deleteAfter = configDeleteAfter;
-      useTrash = configUseTrash;
-    }
-    
-    initialized = true;
-  });
+  // 文本区域的本地编辑状态
+  let pathsText = $state(ns.archivePaths.length > 0 ? ns.archivePaths.join('\n') : configPaths.join('\n'));
   
   // 持续同步外部数据
   $effect(() => {
-    logs = [...dataLogs];
-    hasInputConnection = dataHasInputConnection;
+    ns.logs = [...dataLogs];
+    ns.hasInputConnection = dataHasInputConnection;
   });
 
-  function saveState() {
-    if (!initialized) return;
-    setNodeState<BandiaState>(nodeId, {
-      phase, progress, progressText, archivePaths, deleteAfter, useTrash, extractResult
-    });
-  }
-
-  let canExtract = $derived(phase === 'idle' && (pathsText.trim() !== '' || hasInputConnection));
-  let isRunning = $derived(phase === 'extracting');
+  let canExtract = $derived(ns.phase === 'idle' && (pathsText.trim() !== '' || ns.hasInputConnection));
+  let isRunning = $derived(ns.phase === 'extracting');
   let borderClass = $derived({
     idle: 'border-border', extracting: 'border-primary shadow-sm',
     completed: 'border-primary/50', error: 'border-destructive/50'
-  }[phase]);
+  }[ns.phase]);
 
-  $effect(() => { if (phase || archivePaths || extractResult) saveState(); });
-
-  function log(msg: string) { logs = [...logs.slice(-30), msg]; }
+  function log(msg: string) { ns.logs = [...ns.logs.slice(-30), msg]; }
 
   function parsePaths(text: string): string[] {
     return text.split('\n')
@@ -160,8 +131,8 @@
     if (!canExtract) return;
     const paths = parsePaths(pathsText);
     if (paths.length === 0) { log('❌ 没有有效的压缩包路径'); return; }
-    archivePaths = paths;
-    phase = 'extracting'; progress = 0; progressText = '正在解压...'; extractResult = null;
+    ns.archivePaths = paths;
+    ns.phase = 'extracting'; ns.progress = 0; ns.progressText = '正在解压...'; ns.extractResult = null;
     currentFileIndex = -1;
     log(`📦 开始解压 ${paths.length} 个压缩包...`);
     
@@ -178,13 +149,13 @@
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === 'progress') {
-            progress = msg.progress;
+            ns.progress = msg.progress;
             // 解析消息格式: "解压 X/Y|filename" 或 "解压 X/Y"
             const parts = msg.message.split('|');
             const progressMsg = parts[0];
             const currentFileName = parts[1] || '';
             
-            progressText = progressMsg;
+            ns.progressText = progressMsg;
             
             // 从进度消息中解析当前文件索引
             const match = progressMsg.match(/解压 (\d+)\/(\d+)/);
@@ -194,7 +165,7 @@
             
             // 如果有文件名，更新显示
             if (currentFileName) {
-              progressText = `${progressMsg}: ${currentFileName}`;
+              ns.progressText = `${progressMsg}: ${currentFileName}`;
             }
           } else if (msg.type === 'log') {
             log(msg.message);
@@ -227,25 +198,25 @@
       
       // 发送执行请求，带上 task_id
       const response = await api.executeNode('bandia', {
-        action: 'extract', paths, delete_after: deleteAfter, use_trash: useTrash
+        action: 'extract', paths, delete_after: ns.deleteAfter, use_trash: ns.useTrash
       }, { taskId, nodeId }) as any;
       
       if (response.success) {
-        phase = 'completed'; progress = 100; progressText = '解压完成';
-        extractResult = {
+        ns.phase = 'completed'; ns.progress = 100; ns.progressText = '解压完成';
+        ns.extractResult = {
           success: true,
           extracted: response.data?.extracted_count ?? 0,
           failed: response.data?.failed_count ?? 0,
           total: response.data?.total_count ?? paths.length
         };
         log(`✅ ${response.message}`);
-        log(`📊 成功: ${extractResult.extracted}, 失败: ${extractResult.failed}`);
+        log(`📊 成功: ${ns.extractResult.extracted}, 失败: ${ns.extractResult.failed}`);
       } else { 
-        phase = 'error'; progress = 0; 
+        ns.phase = 'error'; ns.progress = 0; 
         log(`❌ 解压失败: ${response.message}`); 
       }
     } catch (error) { 
-      phase = 'error'; progress = 0; 
+      ns.phase = 'error'; ns.progress = 0; 
       log(`❌ 解压失败: ${error}`); 
     } finally {
       // 关闭 WebSocket 连接
@@ -256,20 +227,20 @@
   }
 
   function handleReset() {
-    phase = 'idle'; progress = 0; progressText = '';
-    extractResult = null; archivePaths = []; logs = [];
+    ns.phase = 'idle'; ns.progress = 0; ns.progressText = '';
+    ns.extractResult = null; ns.archivePaths = []; ns.logs = [];
     currentFileIndex = -1;
   }
 
   async function copyLogs() {
-    try { await navigator.clipboard.writeText(logs.join('\n')); copied = true; setTimeout(() => { copied = false; }, 2000); }
+    try { await navigator.clipboard.writeText(ns.logs.join('\n')); copied = true; setTimeout(() => { copied = false; }, 2000); }
     catch (e) { console.error('复制失败:', e); }
   }
 </script>
 
 
 {#snippet sourceBlock()}
-  {#if !hasInputConnection}
+  {#if !ns.hasInputConnection}
     <div class="flex flex-col cq-gap h-full">
       <div class="flex cq-gap">
         <Button variant="outline" size="sm" class="cq-button-sm flex-1" onclick={pasteFromClipboard} disabled={isRunning}>
@@ -292,12 +263,12 @@
 {#snippet optionsBlock()}
   <div class="flex flex-col cq-gap">
     <label class="flex items-center cq-gap cursor-pointer">
-      <Checkbox bind:checked={deleteAfter} disabled={isRunning} />
+      <Checkbox bind:checked={ns.deleteAfter} disabled={isRunning} />
       <span class="cq-text">解压后删除源文件</span>
     </label>
-    {#if deleteAfter}
+    {#if ns.deleteAfter}
       <label class="flex items-center cq-gap cursor-pointer ml-4">
-        <Checkbox bind:checked={useTrash} disabled={isRunning} />
+        <Checkbox bind:checked={ns.useTrash} disabled={isRunning} />
         <span class="cq-text flex items-center gap-1"><Trash2 class="cq-icon text-orange-500" />移入回收站</span>
       </label>
     {/if}
@@ -308,12 +279,12 @@
   <div class="flex flex-col cq-gap h-full">
     <div class="flex flex-col cq-gap cq-padding bg-muted/30 cq-rounded">
       <div class="flex items-center cq-gap">
-        {#if extractResult}
-          {#if extractResult.success && extractResult.failed === 0}
+        {#if ns.extractResult}
+          {#if ns.extractResult.success && ns.extractResult.failed === 0}
             <CircleCheck class="cq-icon text-green-500 shrink-0" />
             <span class="cq-text text-green-600 font-medium">完成</span>
-            <span class="cq-text-sm text-muted-foreground ml-auto">{extractResult.extracted} 成功</span>
-          {:else if extractResult.success}
+            <span class="cq-text-sm text-muted-foreground ml-auto">{ns.extractResult.extracted} 成功</span>
+          {:else if ns.extractResult.success}
             <CircleCheck class="cq-icon text-yellow-500 shrink-0" />
             <span class="cq-text text-yellow-600 font-medium">部分完成</span>
           {:else}
@@ -322,28 +293,28 @@
           {/if}
         {:else if isRunning}
           <LoaderCircle class="cq-icon text-primary animate-spin shrink-0" />
-          <div class="flex-1"><Progress value={progress} class="h-1.5" /></div>
-          <span class="cq-text-sm text-muted-foreground">{progress}%</span>
+          <div class="flex-1"><Progress value={ns.progress} class="h-1.5" /></div>
+          <span class="cq-text-sm text-muted-foreground">{ns.progress}%</span>
         {:else}
           <FileArchive class="cq-icon text-muted-foreground/50 shrink-0" />
           <span class="cq-text text-muted-foreground">等待解压</span>
         {/if}
       </div>
-      {#if isRunning && progressText}
-        <div class="cq-text-sm text-muted-foreground truncate" title={progressText}>
-          {progressText}
+      {#if isRunning && ns.progressText}
+        <div class="cq-text-sm text-muted-foreground truncate" title={ns.progressText}>
+          {ns.progressText}
         </div>
       {/if}
     </div>
-    {#if phase === 'idle' || phase === 'error'}
+    {#if ns.phase === 'idle' || ns.phase === 'error'}
       <Button class="w-full cq-button flex-1" onclick={handleExtract} disabled={!canExtract}>
         <Play class="cq-icon mr-1" /><span>开始解压</span>
       </Button>
-    {:else if phase === 'extracting'}
+    {:else if ns.phase === 'extracting'}
       <Button class="w-full cq-button flex-1" disabled>
         <LoaderCircle class="cq-icon mr-1 animate-spin" /><span>解压中</span>
       </Button>
-    {:else if phase === 'completed'}
+    {:else if ns.phase === 'completed'}
       <Button class="w-full cq-button flex-1" onclick={handleReset}>
         <Play class="cq-icon mr-1" /><span>重新开始</span>
       </Button>

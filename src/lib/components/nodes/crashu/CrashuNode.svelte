@@ -17,7 +17,7 @@
   import { NodeLayoutRenderer } from '$lib/components/blocks';
   import { CRASHU_DEFAULT_GRID_LAYOUT } from '$lib/components/blocks/blockRegistry';
   import { api } from '$lib/services/api';
-  import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
+  import { getNodeState, saveNodeState } from '$lib/stores/nodeState.svelte';
   import NodeWrapper from '../NodeWrapper.svelte';
   import { 
     Play, LoaderCircle, FolderOpen, Clipboard, Zap, Target,
@@ -77,7 +77,6 @@
   }
 
   const nodeId = $derived(id);
-  const savedState = $derived(getNodeState<CrashuState>(nodeId));
   const configSourcePaths = $derived(data?.config?.source_paths ?? []);
   const configTargetPath = $derived(data?.config?.target_path ?? '');
   const configTargetNames = $derived(data?.config?.target_names ?? []);
@@ -86,88 +85,56 @@
   const dataLogs = $derived(data?.logs ?? []);
   const dataHasInputConnection = $derived(data?.hasInputConnection ?? false);
 
-  // 状态
-  let sourcePaths = $state<string[]>([]);
-  let sourcePathsText = $state('');
-  let targetPath = $state('');
-  let targetNames = $state<string[]>([]);
-  let targetNamesText = $state('');
-  let similarityThreshold = $state(0.6);
-  let autoMove = $state(false);
-  let phase = $state<Phase>('idle');
-  let logs = $state<string[]>([]);
-  let hasInputConnection = $state(false);
+  // 获取共享的响应式状态（节点模式和全屏模式共用同一个对象）
+  const ns = getNodeState<CrashuState>(id, {
+    phase: 'idle',
+    progress: 0,
+    progressText: '',
+    result: null,
+    sourcePaths: configSourcePaths,
+    targetPath: configTargetPath,
+    targetNames: configTargetNames,
+    similarityThreshold: configSimilarityThreshold,
+    autoMove: configAutoMove,
+    expandedItems: [],
+    logs: [],
+    hasInputConnection: false
+  });
+
+  // 纯 UI 状态（不需要同步）
   let copied = $state(false);
-  let progress = $state(0);
-  let progressText = $state('');
-  let result = $state<CrashuResult | null>(null);
-  let expandedItems = $state<Set<string>>(new Set());
   let layoutRenderer = $state<any>(undefined);
-  let initialized = $state(false);
-  
-  // 初始化
-  $effect(() => {
-    if (initialized) return;
-    
-    if (savedState) {
-      phase = savedState.phase ?? 'idle';
-      progress = savedState.progress ?? 0;
-      progressText = savedState.progressText ?? '';
-      result = savedState.result ?? null;
-      expandedItems = new Set(savedState.expandedItems ?? []);
-      sourcePaths = savedState.sourcePaths ?? configSourcePaths;
-      targetPath = savedState.targetPath || configTargetPath;
-      targetNames = savedState.targetNames ?? configTargetNames;
-      similarityThreshold = savedState.similarityThreshold ?? configSimilarityThreshold;
-      autoMove = savedState.autoMove ?? configAutoMove;
-    } else {
-      sourcePaths = configSourcePaths;
-      targetPath = configTargetPath;
-      targetNames = configTargetNames;
-      similarityThreshold = configSimilarityThreshold;
-      autoMove = configAutoMove;
-    }
-    sourcePathsText = sourcePaths.join('\n');
-    targetNamesText = targetNames.join('\n');
-    initialized = true;
-  });
+  // 文本区域的本地编辑状态
+  let sourcePathsText = $state(ns.sourcePaths.join('\n'));
+  let targetNamesText = $state(ns.targetNames.join('\n'));
+  // expandedItems 需要 Set 格式用于 UI
+  let expandedItems = $state<Set<string>>(new Set(ns.expandedItems));
   
   $effect(() => {
-    logs = [...dataLogs];
-    hasInputConnection = dataHasInputConnection;
+    ns.logs = [...dataLogs];
+    ns.hasInputConnection = dataHasInputConnection;
   });
 
-  function saveState() { 
-    if (!initialized) return;
-    setNodeState<CrashuState>(nodeId, { 
-      phase, progress, progressText, result, 
-      sourcePaths, targetPath, targetNames,
-      similarityThreshold, autoMove, 
-      expandedItems: Array.from(expandedItems)
-    }); 
-  }
+  let canExecute = $derived(ns.phase === 'idle' && (ns.sourcePaths.length > 0 || ns.hasInputConnection) && (ns.targetPath.trim() !== '' || ns.targetNames.length > 0));
+  let isRunning = $derived(ns.phase === 'scanning');
+  let borderClass = $derived({ idle: 'border-border', scanning: 'border-primary shadow-sm', completed: 'border-primary/50', error: 'border-destructive/50' }[ns.phase]);
 
-  let canExecute = $derived(phase === 'idle' && (sourcePaths.length > 0 || hasInputConnection) && (targetPath.trim() !== '' || targetNames.length > 0));
-  let isRunning = $derived(phase === 'scanning');
-  let borderClass = $derived({ idle: 'border-border', scanning: 'border-primary shadow-sm', completed: 'border-primary/50', error: 'border-destructive/50' }[phase]);
-
-  $effect(() => { if (phase || result) saveState(); });
-
-  function log(msg: string) { logs = [...logs.slice(-30), msg]; }
+  function log(msg: string) { ns.logs = [...ns.logs.slice(-30), msg]; }
   function toggleItem(key: string) { 
     if (expandedItems.has(key)) expandedItems.delete(key); 
     else expandedItems.add(key); 
-    expandedItems = new Set(expandedItems); 
+    expandedItems = new Set(expandedItems);
+    ns.expandedItems = Array.from(expandedItems);
   }
 
   function updateSourcePaths(text: string) {
     sourcePathsText = text;
-    sourcePaths = text.split('\n').map(s => s.trim()).filter(s => s);
+    ns.sourcePaths = text.split('\n').map(s => s.trim()).filter(s => s);
   }
 
   function updateTargetNames(text: string) {
     targetNamesText = text;
-    targetNames = text.split('\n').map(s => s.trim()).filter(s => s);
+    ns.targetNames = text.split('\n').map(s => s.trim()).filter(s => s);
   }
 
   async function selectSourceFolder() { 
@@ -175,8 +142,8 @@
       const { platform } = await import('$lib/api/platform'); 
       const selected = await platform.openFolderDialog('选择源目录'); 
       if (selected) {
-        sourcePaths = [...sourcePaths, selected];
-        sourcePathsText = sourcePaths.join('\n');
+        ns.sourcePaths = [...ns.sourcePaths, selected];
+        sourcePathsText = ns.sourcePaths.join('\n');
       }
     } catch (e) { log(`选择文件夹失败: ${e}`); } 
   }
@@ -185,7 +152,7 @@
     try { 
       const { platform } = await import('$lib/api/platform'); 
       const selected = await platform.openFolderDialog('选择目标目录'); 
-      if (selected) targetPath = selected;
+      if (selected) ns.targetPath = selected;
     } catch (e) { log(`选择文件夹失败: ${e}`); } 
   }
 
@@ -195,36 +162,36 @@
       const text = await platform.readClipboard(); 
       if (text) {
         const paths = text.split('\n').map(s => s.trim()).filter(s => s);
-        sourcePaths = [...sourcePaths, ...paths];
-        sourcePathsText = sourcePaths.join('\n');
+        ns.sourcePaths = [...ns.sourcePaths, ...paths];
+        sourcePathsText = ns.sourcePaths.join('\n');
       }
     } catch (e) { log(`读取剪贴板失败: ${e}`); } 
   }
 
   async function handleExecute() {
     if (!canExecute) return;
-    phase = 'scanning'; progress = 0; progressText = '正在扫描...';
-    result = null; expandedItems.clear();
+    ns.phase = 'scanning'; ns.progress = 0; ns.progressText = '正在扫描...';
+    ns.result = null; expandedItems.clear(); ns.expandedItems = [];
     log(`💥 开始执行 crashu`);
-    log(`📂 源目录: ${sourcePaths.length} 个`);
-    log(`🎯 目标: ${targetPath || targetNames.join(', ')}`);
-    log(`📋 相似度阈值: ${(similarityThreshold * 100).toFixed(0)}%`);
+    log(`📂 源目录: ${ns.sourcePaths.length} 个`);
+    log(`🎯 目标: ${ns.targetPath || ns.targetNames.join(', ')}`);
+    log(`📋 相似度阈值: ${(ns.similarityThreshold * 100).toFixed(0)}%`);
     
     try {
-      progress = 30; progressText = '正在匹配文件夹名称...';
+      ns.progress = 30; ns.progressText = '正在匹配文件夹名称...';
       const response = await api.executeNode('crashu', { 
-        source_paths: sourcePaths,
-        target_path: targetPath,
-        target_names: targetNames,
-        similarity_threshold: similarityThreshold, 
-        auto_move: autoMove 
+        source_paths: ns.sourcePaths,
+        target_path: ns.targetPath,
+        target_names: ns.targetNames,
+        similarity_threshold: ns.similarityThreshold, 
+        auto_move: ns.autoMove 
       }) as any;
       
       if (response.logs) for (const m of response.logs) log(m);
       
       if (response.success) {
-        phase = 'completed'; progress = 100; progressText = '检测完成';
-        result = {
+        ns.phase = 'completed'; ns.progress = 100; ns.progressText = '检测完成';
+        ns.result = {
           total_scanned: response.data?.total_scanned ?? 0,
           similar_found: response.data?.similar_found ?? 0,
           moved_count: response.data?.moved_count ?? 0,
@@ -232,31 +199,31 @@
         };
         log(`✅ ${response.message}`);
       } else { 
-        phase = 'error'; progress = 0; 
+        ns.phase = 'error'; ns.progress = 0; 
         log(`❌ 执行失败: ${response.message}`); 
       }
     } catch (error) { 
-      phase = 'error'; progress = 0; 
+      ns.phase = 'error'; ns.progress = 0; 
       log(`❌ 执行失败: ${error}`); 
     }
   }
 
   function handleReset() { 
-    phase = 'idle'; progress = 0; progressText = ''; 
-    result = null; logs = []; expandedItems.clear(); 
+    ns.phase = 'idle'; ns.progress = 0; ns.progressText = ''; 
+    ns.result = null; ns.logs = []; expandedItems.clear(); ns.expandedItems = [];
   }
   
   async function copyLogs() { 
     try { 
-      await navigator.clipboard.writeText(logs.join('\n')); 
+      await navigator.clipboard.writeText(ns.logs.join('\n')); 
       copied = true; 
       setTimeout(() => { copied = false; }, 2000); 
     } catch (e) { console.error('复制失败:', e); } 
   }
 
   async function copyResults() {
-    if (!result?.similar_folders.length) return;
-    const text = result.similar_folders.map(f => 
+    if (!ns.result?.similar_folders.length) return;
+    const text = ns.result.similar_folders.map(f => 
       `${f.path} -> ${f.target} (${(f.similarity * 100).toFixed(0)}%)`
     ).join('\n');
     try {
@@ -283,7 +250,7 @@
         </Button>
       </div>
     </div>
-    {#if hasInputConnection}
+    {#if ns.hasInputConnection}
       <div class="text-muted-foreground cq-padding bg-muted cq-rounded flex items-center cq-gap cq-text">
         <span>←</span><span>输入来自上游节点</span>
       </div>
@@ -295,7 +262,7 @@
         disabled={isRunning}
         class="flex-1 cq-input font-mono text-xs resize-none min-h-[60px]"
       />
-      <span class="cq-text-sm text-muted-foreground mt-1">{sourcePaths.length} 个目录</span>
+      <span class="cq-text-sm text-muted-foreground mt-1">{ns.sourcePaths.length} 个目录</span>
     {/if}
   </div>
 {/snippet}
@@ -314,7 +281,7 @@
         </Button>
       </div>
       <Input 
-        bind:value={targetPath} 
+        bind:value={ns.targetPath} 
         placeholder="自动获取子文件夹名称..." 
         disabled={isRunning} 
         class="cq-input"
@@ -328,7 +295,7 @@
         value={targetNamesText}
         oninput={(e) => updateTargetNames(e.currentTarget.value)}
         placeholder="每行一个目标名称..."
-        disabled={isRunning || targetPath.trim() !== ''}
+        disabled={isRunning || ns.targetPath.trim() !== ''}
         class="flex-1 cq-input font-mono text-xs resize-none min-h-[40px]"
       />
     </div>
@@ -341,12 +308,12 @@
     <div class="cq-space-sm">
       <div class="flex items-center justify-between cq-text">
         <span>相似度阈值</span>
-        <span class="font-mono text-primary">{(similarityThreshold * 100).toFixed(0)}%</span>
+        <span class="font-mono text-primary">{(ns.similarityThreshold * 100).toFixed(0)}%</span>
       </div>
       <Slider 
         type="single" 
-        value={similarityThreshold} 
-        onValueChange={(v: number) => similarityThreshold = v} 
+        value={ns.similarityThreshold} 
+        onValueChange={(v: number) => ns.similarityThreshold = v} 
         min={0.3} max={1} step={0.05} 
         disabled={isRunning} 
         class="w-full" 
@@ -356,7 +323,7 @@
       </div>
     </div>
     <label class="flex items-center cq-gap cursor-pointer">
-      <Checkbox id="auto-move-{nodeId}" bind:checked={autoMove} disabled={isRunning} />
+      <Checkbox id="auto-move-{nodeId}" bind:checked={ns.autoMove} disabled={isRunning} />
       <span class="cq-text flex items-center gap-1">
         <ArrowRight class="cq-icon" />自动移动匹配文件夹
       </span>
@@ -368,17 +335,17 @@
 {#snippet operationBlock()}
   <div class="flex flex-col cq-gap h-full">
     <div class="flex items-center cq-gap cq-padding bg-muted/30 cq-rounded">
-      {#if phase === 'completed'}
+      {#if ns.phase === 'completed'}
         <CircleCheck class="cq-icon text-green-500 shrink-0" />
         <span class="cq-text text-green-600 font-medium">完成</span>
-        <span class="cq-text-sm text-muted-foreground ml-auto">{result?.similar_found ?? 0} 个匹配</span>
-      {:else if phase === 'error'}
+        <span class="cq-text-sm text-muted-foreground ml-auto">{ns.result?.similar_found ?? 0} 个匹配</span>
+      {:else if ns.phase === 'error'}
         <Zap class="cq-icon text-red-500 shrink-0" />
         <span class="cq-text text-red-600 font-medium">失败</span>
       {:else if isRunning}
         <LoaderCircle class="cq-icon text-primary animate-spin shrink-0" />
-        <div class="flex-1"><Progress value={progress} class="h-1.5" /></div>
-        <span class="cq-text-sm text-muted-foreground">{progress}%</span>
+        <div class="flex-1"><Progress value={ns.progress} class="h-1.5" /></div>
+        <span class="cq-text-sm text-muted-foreground">{ns.progress}%</span>
       {:else}
         <Zap class="cq-icon text-muted-foreground/50 shrink-0" />
         <span class="cq-text text-muted-foreground">等待执行</span>
@@ -388,7 +355,7 @@
       {#if isRunning}<LoaderCircle class="cq-icon mr-1 animate-spin" />{:else}<Zap class="cq-icon mr-1" />{/if}
       <span>检测相似</span>
     </Button>
-    {#if phase === 'completed' || phase === 'error'}
+    {#if ns.phase === 'completed' || ns.phase === 'error'}
       <Button variant="outline" class="w-full cq-button-sm" onclick={handleReset}>
         <Play class="cq-icon mr-1" />重新开始
       </Button>
@@ -398,23 +365,23 @@
 
 <!-- 统计区块 -->
 {#snippet statsBlock()}
-  {#if result}
+  {#if ns.result}
     <div class="grid grid-cols-3 cq-gap">
       <div class="cq-stat-card bg-blue-500/10">
         <div class="flex flex-col items-center">
-          <span class="cq-stat-value text-blue-600 tabular-nums">{result.total_scanned}</span>
+          <span class="cq-stat-value text-blue-600 tabular-nums">{ns.result.total_scanned}</span>
           <span class="cq-stat-label text-muted-foreground">目标数</span>
         </div>
       </div>
       <div class="cq-stat-card bg-green-500/10">
         <div class="flex flex-col items-center">
-          <span class="cq-stat-value text-green-600 tabular-nums">{result.similar_found}</span>
+          <span class="cq-stat-value text-green-600 tabular-nums">{ns.result.similar_found}</span>
           <span class="cq-stat-label text-muted-foreground">匹配</span>
         </div>
       </div>
       <div class="cq-stat-card bg-orange-500/10">
         <div class="flex flex-col items-center">
-          <span class="cq-stat-value text-orange-600 tabular-nums">{result.moved_count}</span>
+          <span class="cq-stat-value text-orange-600 tabular-nums">{ns.result.moved_count}</span>
           <span class="cq-stat-label text-muted-foreground">已移动</span>
         </div>
       </div>
@@ -431,17 +398,17 @@
       <div class="flex items-center cq-gap">
         <Target class="cq-icon text-green-500" />
         <span class="font-semibold cq-text">匹配结果</span>
-        {#if result}<Badge variant="secondary" class="cq-text-sm">{result.similar_found}</Badge>{/if}
+        {#if ns.result}<Badge variant="secondary" class="cq-text-sm">{ns.result.similar_found}</Badge>{/if}
       </div>
-      {#if result?.similar_folders.length}
+      {#if ns.result?.similar_folders.length}
         <Button variant="ghost" size="icon" class="h-5 w-5" onclick={copyResults}>
           {#if copied}<Check class="w-3 h-3 text-green-500" />{:else}<Copy class="w-3 h-3" />{/if}
         </Button>
       {/if}
     </div>
     <div class="flex-1 overflow-y-auto cq-padding">
-      {#if result && result.similar_folders.length > 0}
-        {#each result.similar_folders as folder}
+      {#if ns.result && ns.result.similar_folders.length > 0}
+        {#each ns.result.similar_folders as folder}
           {@const isExpanded = expandedItems.has(folder.path)}
           <div class="mb-2">
             <button 

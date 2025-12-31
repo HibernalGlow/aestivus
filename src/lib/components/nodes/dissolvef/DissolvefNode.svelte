@@ -15,7 +15,7 @@
   import { NodeLayoutRenderer } from '$lib/components/blocks';
   import { DISSOLVEF_DEFAULT_GRID_LAYOUT } from './blocks';
   import { api } from '$lib/services/api';
-  import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
+  import { getNodeState, saveNodeState } from '$lib/stores/nodeState.svelte';
   import { getWsBaseUrl } from '$lib/stores/backend';
   import NodeWrapper from '../NodeWrapper.svelte';
   import { 
@@ -90,99 +90,60 @@
   }
 
   const nodeId = $derived(id);
-  const savedState = $derived(getNodeState<DissolvefState>(nodeId));
   const configPath = $derived(data?.config?.path ?? '');
   const dataLogs = $derived(data?.logs ?? []);
   const dataHasInputConnection = $derived(data?.hasInputConnection ?? false);
 
-  let pathText = $state('');
-  let nestedMode = $state(true);
-  let mediaMode = $state(true);
-  let archiveMode = $state(true);
-  let directMode = $state(false);
-  let previewMode = $state(false);
-  let excludeKeywords = $state('');
-  let fileConflict = $state('auto');
-  let dirConflict = $state('auto');
-  let enableSimilarity = $state(true);
-  let similarityThreshold = $state([0.6]);
-  let phase = $state<Phase>('idle');
-  let logs = $state<string[]>([]);
-  let hasInputConnection = $state(false);
-  let copied = $state(false);
-  let progress = $state(0);
-  let progressText = $state('');
-  let result = $state<DissolveResult | null>(null);
-  let layoutRenderer = $state<any>(undefined);
-  let operationHistory = $state<OperationRecord[]>([]);
-  let lastOperationId = $state('');
-
-  // 初始化标记
-  let initialized = $state(false);
-  
-  // 初始化 effect - 只执行一次
-  $effect(() => {
-    if (initialized) return;
-    
-    if (savedState) {
-      phase = savedState.phase ?? 'idle';
-      progress = savedState.progress ?? 0;
-      progressText = savedState.progressText ?? '';
-      pathText = savedState.pathText || configPath || '';
-      nestedMode = savedState.nestedMode ?? true;
-      mediaMode = savedState.mediaMode ?? true;
-      archiveMode = savedState.archiveMode ?? true;
-      directMode = savedState.directMode ?? false;
-      previewMode = savedState.previewMode ?? false;
-      excludeKeywords = savedState.excludeKeywords ?? '';
-      fileConflict = savedState.fileConflict ?? 'auto';
-      dirConflict = savedState.dirConflict ?? 'auto';
-      enableSimilarity = savedState.enableSimilarity ?? true;
-      similarityThreshold = [savedState.similarityThreshold ?? 0.6];
-      result = savedState.result ?? null;
-      operationHistory = savedState.operationHistory ?? [];
-      lastOperationId = savedState.lastOperationId ?? '';
-    } else {
-      pathText = configPath || '';
-    }
-    
-    initialized = true;
+  // 获取共享的响应式状态（节点模式和全屏模式共用同一个对象）
+  const ns = getNodeState<DissolvefState>(id, {
+    phase: 'idle',
+    progress: 0,
+    progressText: '',
+    pathText: configPath || '',
+    nestedMode: true,
+    mediaMode: true,
+    archiveMode: true,
+    directMode: false,
+    previewMode: false,
+    excludeKeywords: '',
+    fileConflict: 'auto',
+    dirConflict: 'auto',
+    enableSimilarity: true,
+    similarityThreshold: 0.6,
+    result: null,
+    operationHistory: [],
+    lastOperationId: '',
+    logs: [],
+    hasInputConnection: false
   });
+
+  // 纯 UI 状态（不需要同步）
+  let copied = $state(false);
+  let layoutRenderer = $state<any>(undefined);
+  // similarityThreshold slider 需要数组格式
+  let similarityThresholdArr = $derived([ns.similarityThreshold]);
   
   // 持续同步外部数据
   $effect(() => {
-    logs = [...dataLogs];
-    hasInputConnection = dataHasInputConnection;
+    ns.logs = [...dataLogs];
+    ns.hasInputConnection = dataHasInputConnection;
   });
 
-  function saveState() {
-    if (!initialized) return;
-    setNodeState<DissolvefState>(nodeId, {
-      phase, progress, progressText, pathText,
-      nestedMode, mediaMode, archiveMode, directMode, previewMode,
-      excludeKeywords, fileConflict, dirConflict,
-      enableSimilarity, similarityThreshold: similarityThreshold[0],
-      result, operationHistory, lastOperationId
-    });
-  }
-
-  let canExecute = $derived(phase === 'idle' && (pathText.trim() !== '' || hasInputConnection));
-  let isRunning = $derived(phase === 'running');
+  let canExecute = $derived(ns.phase === 'idle' && (ns.pathText.trim() !== '' || ns.hasInputConnection));
+  let isRunning = $derived(ns.phase === 'running');
   let borderClass = $derived({
     idle: 'border-border', running: 'border-primary shadow-sm',
     completed: 'border-primary/50', error: 'border-destructive/50'
-  }[phase]);
+  }[ns.phase]);
 
-  $effect(() => { if (phase || result || operationHistory) saveState(); });
-
-  function log(msg: string) { logs = [...logs.slice(-30), msg]; }
+  function log(msg: string) { ns.logs = [...ns.logs.slice(-30), msg]; }
 
   async function pasteFromClipboard() {
     try {
       const { platform } = await import('$lib/api/platform');
       const text = await platform.readClipboard();
       if (text) {
-        pathText = text.trim().replace(/^["']|["']$/g, '');
+        ns.pathText = text.trim().replace(/^["']|["']$/g, '');
         log(`📋 从剪贴板读取路径`);
       }
     } catch (e) { log(`❌ 读取剪贴板失败: ${e}`); }
@@ -193,7 +154,7 @@
       const { platform } = await import('$lib/api/platform');
       const selected = await platform.openFolderDialog('选择要处理的文件夹');
       if (selected) {
-        pathText = selected;
+        ns.pathText = selected;
         log(`📁 选择了文件夹: ${selected.split(/[/\\]/).pop()}`);
       }
     } catch (e) { log(`❌ 选择文件夹失败: ${e}`); }
@@ -201,10 +162,10 @@
 
   async function handleExecute() {
     if (!canExecute) return;
-    if (!pathText.trim()) { log('❌ 请输入路径'); return; }
+    if (!ns.pathText.trim()) { log('❌ 请输入路径'); return; }
     
-    phase = 'running'; progress = 0; progressText = '正在处理...'; result = null;
-    log(`📂 开始${previewMode ? '预览' : ''}解散文件夹...`);
+    ns.phase = 'running'; ns.progress = 0; ns.progressText = '正在处理...'; ns.result = null;
+    log(`📂 开始${ns.previewMode ? '预览' : ''}解散文件夹...`);
     
     const taskId = `dissolvef-${nodeId}-${Date.now()}`;
     let ws: WebSocket | null = null;
@@ -217,8 +178,8 @@
         try {
           const msg = JSON.parse(event.data);
           if (msg.type === 'progress') {
-            progress = msg.progress;
-            progressText = msg.message;
+            ns.progress = msg.progress;
+            ns.progressText = msg.message;
           } else if (msg.type === 'log') {
             log(msg.message);
           }
@@ -233,22 +194,22 @@
       
       const response = await api.executeNode('dissolvef', {
         action: 'dissolve',
-        path: pathText.trim(),
-        nested: nestedMode,
-        media: mediaMode,
-        archive: archiveMode,
-        direct: directMode,
-        preview: previewMode,
-        exclude: excludeKeywords || undefined,
-        file_conflict: fileConflict,
-        dir_conflict: dirConflict,
-        enable_similarity: enableSimilarity,
-        similarity_threshold: similarityThreshold[0]
+        path: ns.pathText.trim(),
+        nested: ns.nestedMode,
+        media: ns.mediaMode,
+        archive: ns.archiveMode,
+        direct: ns.directMode,
+        preview: ns.previewMode,
+        exclude: ns.excludeKeywords || undefined,
+        file_conflict: ns.fileConflict,
+        dir_conflict: ns.dirConflict,
+        enable_similarity: ns.enableSimilarity,
+        similarity_threshold: ns.similarityThreshold
       }, { taskId, nodeId }) as any;
       
       if (response.success) {
-        phase = 'completed'; progress = 100; progressText = '处理完成';
-        result = {
+        ns.phase = 'completed'; ns.progress = 100; ns.progressText = '处理完成';
+        ns.result = {
           success: true,
           nested_count: response.data?.nested_count ?? 0,
           media_count: response.data?.media_count ?? 0,
@@ -261,24 +222,24 @@
         
         // 保存操作记录
         const opId = response.data?.operation_id;
-        if (opId && !previewMode) {
-          lastOperationId = opId;
-          const totalCount = (result.nested_count || 0) + (result.archive_count || 0) + (result.media_count || 0);
-          operationHistory = [{
+        if (opId && !ns.previewMode) {
+          ns.lastOperationId = opId;
+          const totalCount = (ns.result.nested_count || 0) + (ns.result.archive_count || 0) + (ns.result.media_count || 0);
+          ns.operationHistory = [{
             id: opId,
             timestamp: new Date().toLocaleTimeString(),
-            mode: directMode ? 'direct' : (nestedMode ? 'nested' : (archiveMode ? 'archive' : 'media')),
-            path: pathText.split(/[/\\]/).pop() || pathText,
+            mode: ns.directMode ? 'direct' : (ns.nestedMode ? 'nested' : (ns.archiveMode ? 'archive' : 'media')),
+            path: ns.pathText.split(/[/\\]/).pop() || ns.pathText,
             count: totalCount,
             canUndo: true
-          }, ...operationHistory].slice(0, 10);
+          }, ...ns.operationHistory].slice(0, 10);
         }
       } else { 
-        phase = 'error'; progress = 0; 
+        ns.phase = 'error'; ns.progress = 0; 
         log(`❌ 处理失败: ${response.message}`); 
       }
     } catch (error) { 
-      phase = 'error'; progress = 0; 
+      ns.phase = 'error'; ns.progress = 0; 
       log(`❌ 处理失败: ${error}`); 
     } finally {
       if (ws && ws.readyState === WebSocket.OPEN) ws.close();
@@ -286,7 +247,7 @@
   }
 
   async function handleUndo(opId?: string) {
-    const targetId = opId || lastOperationId;
+    const targetId = opId || ns.lastOperationId;
     if (!targetId) { log('❌ 无可撤销操作'); return; }
     
     log('🔄 撤销中...');
@@ -298,11 +259,11 @@
       
       if (response.success) {
         log(`✅ ${response.message}`);
-        operationHistory = operationHistory.map(op => 
+        ns.operationHistory = ns.operationHistory.map(op => 
           op.id === targetId ? { ...op, canUndo: false } : op
         );
-        if (targetId === lastOperationId) lastOperationId = '';
-        phase = 'idle';
+        if (targetId === ns.lastOperationId) ns.lastOperationId = '';
+        ns.phase = 'idle';
       } else {
         log(`❌ ${response.message}`);
       }
@@ -312,13 +273,13 @@
   }
 
   function handleReset() {
-    phase = 'idle'; progress = 0; progressText = '';
-    result = null; logs = [];
+    ns.phase = 'idle'; ns.progress = 0; ns.progressText = '';
+    ns.result = null; ns.logs = [];
   }
 
   async function copyLogs() {
     try { 
-      await navigator.clipboard.writeText(logs.join('\n')); 
+      await navigator.clipboard.writeText(ns.logs.join('\n')); 
       copied = true; 
       setTimeout(() => { copied = false; }, 2000); 
     } catch (e) { console.error('复制失败:', e); }
@@ -334,7 +295,7 @@
 
 
 {#snippet sourceBlock()}
-  {#if !hasInputConnection}
+  {#if !ns.hasInputConnection}
     <div class="flex flex-col cq-gap h-full">
       <div class="flex cq-gap">
         <Button variant="outline" size="sm" class="cq-button-sm flex-1" onclick={pasteFromClipboard} disabled={isRunning}>
@@ -344,7 +305,7 @@
           <FolderOpen class="cq-icon mr-1" />选择
         </Button>
       </div>
-      <Input bind:value={pathText} placeholder="输入文件夹路径" disabled={isRunning} class="cq-text font-mono" />
+      <Input bind:value={ns.pathText} placeholder="输入文件夹路径" disabled={isRunning} class="cq-text font-mono" />
     </div>
   {:else}
     <div class="text-muted-foreground cq-padding bg-muted cq-rounded flex items-center cq-gap cq-text">
@@ -356,20 +317,20 @@
 {#snippet modeBlock()}
   <div class="flex flex-col cq-gap">
     <span class="cq-text-sm text-muted-foreground mb-1">选择解散模式</span>
-    <div class="flex items-center cq-gap cursor-pointer" onclick={() => { if (!isRunning && !directMode) nestedMode = !nestedMode; }}>
-      <Checkbox checked={nestedMode} disabled={isRunning || directMode} />
+    <div class="flex items-center cq-gap cursor-pointer" onclick={() => { if (!isRunning && !ns.directMode) ns.nestedMode = !ns.nestedMode; }}>
+      <Checkbox checked={ns.nestedMode} disabled={isRunning || ns.directMode} />
       <span class="cq-text">嵌套文件夹</span>
     </div>
-    <div class="flex items-center cq-gap cursor-pointer" onclick={() => { if (!isRunning && !directMode) mediaMode = !mediaMode; }}>
-      <Checkbox checked={mediaMode} disabled={isRunning || directMode} />
+    <div class="flex items-center cq-gap cursor-pointer" onclick={() => { if (!isRunning && !ns.directMode) ns.mediaMode = !ns.mediaMode; }}>
+      <Checkbox checked={ns.mediaMode} disabled={isRunning || ns.directMode} />
       <span class="cq-text">单媒体文件夹</span>
     </div>
-    <div class="flex items-center cq-gap cursor-pointer" onclick={() => { if (!isRunning && !directMode) archiveMode = !archiveMode; }}>
-      <Checkbox checked={archiveMode} disabled={isRunning || directMode} />
+    <div class="flex items-center cq-gap cursor-pointer" onclick={() => { if (!isRunning && !ns.directMode) ns.archiveMode = !ns.archiveMode; }}>
+      <Checkbox checked={ns.archiveMode} disabled={isRunning || ns.directMode} />
       <span class="cq-text">单压缩包文件夹</span>
     </div>
-    <div class="flex items-center cq-gap cursor-pointer" onclick={() => { if (!isRunning) { directMode = !directMode; if (directMode) { nestedMode = false; mediaMode = false; archiveMode = false; } } }}>
-      <Checkbox checked={directMode} disabled={isRunning} />
+    <div class="flex items-center cq-gap cursor-pointer" onclick={() => { if (!isRunning) { ns.directMode = !ns.directMode; if (ns.directMode) { ns.nestedMode = false; ns.mediaMode = false; ns.archiveMode = false; } } }}>
+      <Checkbox checked={ns.directMode} disabled={isRunning} />
       <span class="cq-text text-orange-500">直接解散</span>
     </div>
   </div>
@@ -377,35 +338,35 @@
 
 {#snippet optionsBlock()}
   <div class="flex flex-col cq-gap">
-    <div class="flex items-center cq-gap cursor-pointer" onclick={() => { if (!isRunning) previewMode = !previewMode; }}>
-      <Checkbox checked={previewMode} disabled={isRunning} />
+    <div class="flex items-center cq-gap cursor-pointer" onclick={() => { if (!isRunning) ns.previewMode = !ns.previewMode; }}>
+      <Checkbox checked={ns.previewMode} disabled={isRunning} />
       <span class="cq-text">预览模式</span>
     </div>
-    <Input bind:value={excludeKeywords} placeholder="排除关键词(逗号分隔)" disabled={isRunning} class="cq-text-sm" />
+    <Input bind:value={ns.excludeKeywords} placeholder="排除关键词(逗号分隔)" disabled={isRunning} class="cq-text-sm" />
     
     <!-- 相似度设置 -->
-    {#if !directMode && (nestedMode || archiveMode)}
+    {#if !ns.directMode && (ns.nestedMode || ns.archiveMode)}
       <div class="flex flex-col cq-gap mt-1 pt-1 border-t border-border/50">
-        <div class="flex items-center cq-gap cursor-pointer" onclick={() => { if (!isRunning) enableSimilarity = !enableSimilarity; }}>
-          <Checkbox checked={enableSimilarity} disabled={isRunning} />
+        <div class="flex items-center cq-gap cursor-pointer" onclick={() => { if (!isRunning) ns.enableSimilarity = !ns.enableSimilarity; }}>
+          <Checkbox checked={ns.enableSimilarity} disabled={isRunning} />
           <span class="cq-text">相似度限制</span>
         </div>
-        {#if enableSimilarity}
+        {#if ns.enableSimilarity}
           <div class="flex items-center cq-gap">
-            <Slider type="multiple" bind:value={similarityThreshold} min={0} max={1} step={0.1} disabled={isRunning} class="flex-1" />
-            <span class="cq-text-sm text-muted-foreground w-10 text-right">{Math.round(similarityThreshold[0] * 100)}%</span>
+            <Slider type="multiple" value={similarityThresholdArr} onValueChange={(v) => ns.similarityThreshold = v[0]} min={0} max={1} step={0.1} disabled={isRunning} class="flex-1" />
+            <span class="cq-text-sm text-muted-foreground w-10 text-right">{Math.round(ns.similarityThreshold * 100)}%</span>
           </div>
           <span class="cq-text-sm text-muted-foreground">父文件夹与子项名称相似度需超过此值</span>
         {/if}
       </div>
     {/if}
     
-    {#if directMode}
+    {#if ns.directMode}
       <div class="flex flex-col cq-gap mt-1">
         <span class="cq-text-sm text-muted-foreground">文件冲突</span>
-        <Select.Root type="single" bind:value={fileConflict}>
+        <Select.Root type="single" bind:value={ns.fileConflict}>
           <Select.Trigger class="cq-button-sm">
-            <span>{conflictOptions.find(o => o.value === fileConflict)?.label ?? '自动'}</span>
+            <span>{conflictOptions.find(o => o.value === ns.fileConflict)?.label ?? '自动'}</span>
           </Select.Trigger>
           <Select.Content>
             {#each conflictOptions as opt}
@@ -414,9 +375,9 @@
           </Select.Content>
         </Select.Root>
         <span class="cq-text-sm text-muted-foreground">目录冲突</span>
-        <Select.Root type="single" bind:value={dirConflict}>
+        <Select.Root type="single" bind:value={ns.dirConflict}>
           <Select.Trigger class="cq-button-sm">
-            <span>{conflictOptions.find(o => o.value === dirConflict)?.label ?? '自动'}</span>
+            <span>{conflictOptions.find(o => o.value === ns.dirConflict)?.label ?? '自动'}</span>
           </Select.Trigger>
           <Select.Content>
             {#each conflictOptions as opt}
@@ -432,12 +393,12 @@
 {#snippet operationBlock()}
   <div class="flex flex-col cq-gap h-full">
     <div class="flex items-center cq-gap cq-padding bg-muted/30 cq-rounded">
-      {#if result}
-        {#if result.success}
+      {#if ns.result}
+        {#if ns.result.success}
           <CircleCheck class="cq-icon text-green-500 shrink-0" />
           <span class="cq-text text-green-600 font-medium">完成</span>
-          {#if result.skipped_count > 0}
-            <span class="cq-text-sm text-muted-foreground ml-auto">跳过 {result.skipped_count}</span>
+          {#if ns.result.skipped_count > 0}
+            <span class="cq-text-sm text-muted-foreground ml-auto">跳过 {ns.result.skipped_count}</span>
           {/if}
         {:else}
           <CircleX class="cq-icon text-red-500 shrink-0" />
@@ -445,22 +406,22 @@
         {/if}
       {:else if isRunning}
         <LoaderCircle class="cq-icon text-primary animate-spin shrink-0" />
-        <div class="flex-1"><Progress value={progress} class="h-1.5" /></div>
-        <span class="cq-text-sm text-muted-foreground">{progress}%</span>
+        <div class="flex-1"><Progress value={ns.progress} class="h-1.5" /></div>
+        <span class="cq-text-sm text-muted-foreground">{ns.progress}%</span>
       {:else}
         <FolderInput class="cq-icon text-muted-foreground/50 shrink-0" />
         <span class="cq-text text-muted-foreground">等待执行</span>
       {/if}
     </div>
-    {#if phase === 'idle' || phase === 'error'}
+    {#if ns.phase === 'idle' || ns.phase === 'error'}
       <Button class="w-full cq-button flex-1" onclick={handleExecute} disabled={!canExecute}>
-        <Play class="cq-icon mr-1" /><span>{previewMode ? '预览' : '执行'}</span>
+        <Play class="cq-icon mr-1" /><span>{ns.previewMode ? '预览' : '执行'}</span>
       </Button>
-    {:else if phase === 'running'}
+    {:else if ns.phase === 'running'}
       <Button class="w-full cq-button flex-1" disabled>
         <LoaderCircle class="cq-icon mr-1 animate-spin" /><span>处理中</span>
       </Button>
-    {:else if phase === 'completed'}
+    {:else if ns.phase === 'completed'}
       <Button class="w-full cq-button flex-1" onclick={handleReset}>
         <Play class="cq-icon mr-1" /><span>重新开始</span>
       </Button>
@@ -477,24 +438,24 @@
       <span class="cq-text font-semibold">处理结果</span>
     </div>
     <div class="flex-1 overflow-y-auto cq-padding bg-muted/30 cq-rounded">
-      {#if result}
+      {#if ns.result}
         <div class="space-y-1 cq-text-sm">
-          {#if !directMode}
-            {#if nestedMode}
-              <div class="flex justify-between"><span>嵌套文件夹</span><span class="text-green-600">{result.nested_count}</span></div>
+          {#if !ns.directMode}
+            {#if ns.nestedMode}
+              <div class="flex justify-between"><span>嵌套文件夹</span><span class="text-green-600">{ns.result.nested_count}</span></div>
             {/if}
-            {#if mediaMode}
-              <div class="flex justify-between"><span>单媒体文件夹</span><span class="text-green-600">{result.media_count}</span></div>
+            {#if ns.mediaMode}
+              <div class="flex justify-between"><span>单媒体文件夹</span><span class="text-green-600">{ns.result.media_count}</span></div>
             {/if}
-            {#if archiveMode}
-              <div class="flex justify-between"><span>单压缩包文件夹</span><span class="text-green-600">{result.archive_count}</span></div>
+            {#if ns.archiveMode}
+              <div class="flex justify-between"><span>单压缩包文件夹</span><span class="text-green-600">{ns.result.archive_count}</span></div>
             {/if}
-            {#if result.skipped_count > 0}
-              <div class="flex justify-between text-muted-foreground"><span>跳过（相似度不足）</span><span>{result.skipped_count}</span></div>
+            {#if ns.result.skipped_count > 0}
+              <div class="flex justify-between text-muted-foreground"><span>跳过（相似度不足）</span><span>{ns.result.skipped_count}</span></div>
             {/if}
           {:else}
-            <div class="flex justify-between"><span>移动文件</span><span class="text-green-600">{result.direct_files}</span></div>
-            <div class="flex justify-between"><span>移动目录</span><span class="text-green-600">{result.direct_dirs}</span></div>
+            <div class="flex justify-between"><span>移动文件</span><span class="text-green-600">{ns.result.direct_files}</span></div>
+            <div class="flex justify-between"><span>移动目录</span><span class="text-green-600">{ns.result.direct_dirs}</span></div>
           {/if}
         </div>
       {:else}
@@ -513,8 +474,8 @@
       </Button>
     </div>
     <div class="flex-1 overflow-y-auto bg-muted/30 cq-rounded cq-padding font-mono cq-text-sm space-y-0.5" style="min-height: 60px;">
-      {#if logs.length > 0}
-        {#each logs as logItem}<div class="text-muted-foreground break-all">{logItem}</div>{/each}
+      {#if ns.logs.length > 0}
+        {#each ns.logs as logItem}<div class="text-muted-foreground break-all">{logItem}</div>{/each}
       {:else}
         <div class="text-muted-foreground text-center py-2">暂无日志</div>
       {/if}
@@ -529,8 +490,8 @@
       <span class="cq-text font-semibold">操作历史</span>
     </div>
     <div class="flex-1 overflow-y-auto">
-      {#if operationHistory.length > 0}
-        {#each operationHistory as op}
+      {#if ns.operationHistory.length > 0}
+        {#each ns.operationHistory as op}
           <div class="flex items-center justify-between cq-padding bg-muted/30 cq-rounded mb-1 cq-text-sm">
             <div class="flex flex-col min-w-0 flex-1">
               <span class="truncate">{op.path}</span>

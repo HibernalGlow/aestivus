@@ -14,7 +14,7 @@
   import { NodeLayoutRenderer } from '$lib/components/blocks';
   import { ENGINEV_DEFAULT_GRID_LAYOUT } from '$lib/components/blocks/blockRegistry';
   import { api } from '$lib/services/api';
-  import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
+  import { getNodeState } from '$lib/stores/nodeState.svelte';
   import NodeWrapper from '../NodeWrapper.svelte';
   import { 
     LoaderCircle, FolderOpen, Clipboard, Download,
@@ -38,100 +38,92 @@
   
   // 使用 $derived 确保响应式
   const nodeId = $derived(id);
-  const savedState = $derived(getNodeState<EngineVState>(nodeId));
   const DEFAULT_WORKSHOP_PATH = 'E:\\SteamLibrary\\steamapps\\workshop\\content\\431960';
   const apiBase = getApiV1Url();
   const configPath = $derived(data?.config?.path ?? DEFAULT_WORKSHOP_PATH);
   const dataLogs = $derived(data?.logs ?? []);
   
-  let phase = $state<Phase>('idle');
-  let logs = $state<string[]>([]);
+  // 共享状态接口
+  interface EngineVNodeState {
+    phase: Phase;
+    logs: string[];
+    workshopPath: string;
+    wallpapers: WallpaperItem[];
+    filteredWallpapers: WallpaperItem[];
+    stats: EngineVStats;
+    filters: FilterOptions;
+    renameConfig: RenameConfig;
+    selectedIds: string[];
+    viewMode: 'grid' | 'list';
+  }
+  
+  // 初始状态
+  const defaultState: EngineVNodeState = {
+    phase: 'idle',
+    logs: [...dataLogs],
+    workshopPath: configPath,
+    wallpapers: [],
+    filteredWallpapers: [],
+    stats: { ...DEFAULT_STATS },
+    filters: { ...DEFAULT_FILTERS },
+    renameConfig: { ...DEFAULT_RENAME_CONFIG },
+    selectedIds: [],
+    viewMode: 'grid'
+  };
+  
+  const ns = getNodeState<EngineVNodeState>(nodeId, defaultState);
+  
   let copied = $state(false);
-  let workshopPath = $state(DEFAULT_WORKSHOP_PATH);
-
-  let wallpapers = $state<WallpaperItem[]>([]);
-  let filteredWallpapers = $state<WallpaperItem[]>([]);
-  let stats = $state<EngineVStats>({ ...DEFAULT_STATS });
-  let filters = $state<FilterOptions>({ ...DEFAULT_FILTERS });
-  let renameConfig = $state<RenameConfig>({ ...DEFAULT_RENAME_CONFIG });
-  let selectedIds = $state<Set<string>>(new Set());
-  let viewMode = $state<'grid' | 'list'>('grid');
-
   let layoutRenderer = $state<any>(undefined);
-
-  // 初始化标记，防止 $effect 覆盖用户输入
-  let initialized = $state(false);
-
-  // 初始化状态（只执行一次）
-  $effect(() => {
-    if (initialized) return;
-    
-    workshopPath = savedState?.workshopPath ?? configPath;
-    logs = savedState?.logs ?? [...dataLogs];
-    
-    if (savedState) {
-      phase = savedState.phase ?? 'idle';
-      wallpapers = savedState.wallpapers ?? [];
-      filteredWallpapers = savedState.filteredWallpapers ?? [];
-      stats = savedState.stats ?? { ...DEFAULT_STATS };
-      filters = savedState.filters ?? { ...DEFAULT_FILTERS };
-      renameConfig = savedState.renameConfig ?? { ...DEFAULT_RENAME_CONFIG };
-      selectedIds = new Set(savedState.selectedIds ?? []);
-      viewMode = savedState.viewMode ?? 'grid';
-    }
-    
-    initialized = true;
-  });
   
-  function saveState() { setNodeState<EngineVState>(nodeId, { phase, logs, workshopPath, wallpapers, filteredWallpapers, stats, filters, renameConfig, selectedIds, viewMode }); }
+  // 派生状态 - 使用 Set 便于操作
+  let selectedIdsSet = $derived(new Set(ns.selectedIds));
   
-  let isRunning = $derived(phase === 'scanning' || phase === 'renaming');
-  let borderClass = $derived(getPhaseBorderClass(phase));
+  let isRunning = $derived(ns.phase === 'scanning' || ns.phase === 'renaming');
+  let borderClass = $derived(getPhaseBorderClass(ns.phase));
   
-  $effect(() => { if (phase || wallpapers || filteredWallpapers || stats) saveState(); });
-
-  function log(msg: string) { logs = [...logs.slice(-30), msg]; }
+  function log(msg: string) { ns.logs = [...ns.logs.slice(-30), msg]; }
 
   async function selectFolder() {
-    try { const { platform } = await import('$lib/api/platform'); const s = await platform.openFolderDialog('选择 Wallpaper Engine 工坊目录'); if (s) workshopPath = s; }
+    try { const { platform } = await import('$lib/api/platform'); const s = await platform.openFolderDialog('选择 Wallpaper Engine 工坊目录'); if (s) ns.workshopPath = s; }
     catch (e) { log(`选择失败: ${e}`); }
   }
 
-  async function pastePath() { try { workshopPath = (await navigator.clipboard.readText()).trim(); } catch (e) { log(`粘贴失败: ${e}`); } }
+  async function pastePath() { try { ns.workshopPath = (await navigator.clipboard.readText()).trim(); } catch (e) { log(`粘贴失败: ${e}`); } }
 
   async function handleScan() {
-    if (!workshopPath.trim()) { log('❌ 请输入工坊路径'); return; }
-    phase = 'scanning'; log(`🔍 扫描: ${workshopPath}`);
+    if (!ns.workshopPath.trim()) { log('❌ 请输入工坊路径'); return; }
+    ns.phase = 'scanning'; log(`🔍 扫描: ${ns.workshopPath}`);
     try {
-      const r = await api.executeNode('enginev', { action: 'scan', workshop_path: workshopPath }) as any;
+      const r = await api.executeNode('enginev', { action: 'scan', workshop_path: ns.workshopPath }) as any;
       if (r.success && r.data) {
-        wallpapers = r.data.wallpapers || [];
-        filteredWallpapers = [...wallpapers];
-        stats = calculateStats(wallpapers, filteredWallpapers);
-        phase = 'ready';
-        log(`✅ 扫描完成: ${wallpapers.length} 个壁纸`);
-      } else { phase = 'error'; log(`❌ ${r.message}`); }
-    } catch (e) { phase = 'error'; log(`❌ ${e}`); }
+        ns.wallpapers = r.data.wallpapers || [];
+        ns.filteredWallpapers = [...ns.wallpapers];
+        ns.stats = calculateStats(ns.wallpapers, ns.filteredWallpapers);
+        ns.phase = 'ready';
+        log(`✅ 扫描完成: ${ns.wallpapers.length} 个壁纸`);
+      } else { ns.phase = 'error'; log(`❌ ${r.message}`); }
+    } catch (e) { ns.phase = 'error'; log(`❌ ${e}`); }
   }
 
-  function applyFilters() { filteredWallpapers = filterWallpapers(wallpapers, filters); stats = calculateStats(wallpapers, filteredWallpapers); log(`🔍 过滤: ${filteredWallpapers.length}/${wallpapers.length}`); }
-  function clearFilters() { filters = { ...DEFAULT_FILTERS }; filteredWallpapers = [...wallpapers]; stats = calculateStats(wallpapers, filteredWallpapers); log('🗑️ 已清空过滤条件'); }
+  function applyFilters() { ns.filteredWallpapers = filterWallpapers(ns.wallpapers, ns.filters); ns.stats = calculateStats(ns.wallpapers, ns.filteredWallpapers); log(`🔍 过滤: ${ns.filteredWallpapers.length}/${ns.wallpapers.length}`); }
+  function clearFilters() { ns.filters = { ...DEFAULT_FILTERS }; ns.filteredWallpapers = [...ns.wallpapers]; ns.stats = calculateStats(ns.wallpapers, ns.filteredWallpapers); log('🗑️ 已清空过滤条件'); }
 
   async function handleRename() {
-    const targets = selectedIds.size > 0 ? filteredWallpapers.filter(w => selectedIds.has(w.workshop_id)) : filteredWallpapers;
+    const targets = selectedIdsSet.size > 0 ? ns.filteredWallpapers.filter(w => selectedIdsSet.has(w.workshop_id)) : ns.filteredWallpapers;
     if (targets.length === 0) { log('❌ 无可重命名项'); return; }
     
-    phase = 'renaming'; 
-    log(`${renameConfig.dryRun ? '🔍 模拟' : '▶️ 执行'}重命名 ${targets.length} 项...`);
+    ns.phase = 'renaming'; 
+    log(`${ns.renameConfig.dryRun ? '🔍 模拟' : '▶️ 执行'}重命名 ${targets.length} 项...`);
     try {
-      const r = await api.executeNode('enginev', { action: 'rename', workshop_ids: targets.map(w => w.workshop_id), template: renameConfig.template, desc_max_length: renameConfig.descMaxLength, name_max_length: renameConfig.nameMaxLength, dry_run: renameConfig.dryRun, copy_mode: renameConfig.copyMode, target_path: renameConfig.targetPath }) as any;
-      if (r.success) { phase = 'completed'; log(`✅ 成功 ${r.data?.success_count || 0} 失败 ${r.data?.failed_count || 0}`); }
-      else { phase = 'error'; log(`❌ ${r.message}`); }
-    } catch (e) { phase = 'error'; log(`❌ ${e}`); }
+      const r = await api.executeNode('enginev', { action: 'rename', workshop_ids: targets.map(w => w.workshop_id), template: ns.renameConfig.template, desc_max_length: ns.renameConfig.descMaxLength, name_max_length: ns.renameConfig.nameMaxLength, dry_run: ns.renameConfig.dryRun, copy_mode: ns.renameConfig.copyMode, target_path: ns.renameConfig.targetPath }) as any;
+      if (r.success) { ns.phase = 'completed'; log(`✅ 成功 ${r.data?.success_count || 0} 失败 ${r.data?.failed_count || 0}`); }
+      else { ns.phase = 'error'; log(`❌ ${r.message}`); }
+    } catch (e) { ns.phase = 'error'; log(`❌ ${e}`); }
   }
 
   async function exportData(format: 'json' | 'paths') {
-    const targets = selectedIds.size > 0 ? filteredWallpapers.filter(w => selectedIds.has(w.workshop_id)) : filteredWallpapers;
+    const targets = selectedIdsSet.size > 0 ? ns.filteredWallpapers.filter(w => selectedIdsSet.has(w.workshop_id)) : ns.filteredWallpapers;
     if (targets.length === 0) { log('❌ 无可导出项'); return; }
     try {
       const content = format === 'json' ? JSON.stringify(targets, null, 2) : targets.map(w => w.path).join('\n');
@@ -144,17 +136,21 @@
     } catch (e) { log(`导出失败: ${e}`); }
   }
 
-  function toggleSelect(workshopId: string) { if (selectedIds.has(workshopId)) selectedIds.delete(workshopId); else selectedIds.add(workshopId); selectedIds = new Set(selectedIds); }
-  function selectAll() { selectedIds = new Set(filteredWallpapers.map(w => w.workshop_id)); }
-  function clearSelection() { selectedIds = new Set(); }
-  function clear() { wallpapers = []; filteredWallpapers = []; selectedIds = new Set(); stats = { ...DEFAULT_STATS }; phase = 'idle'; log('🗑️ 已清空'); }
-  async function copyLogs() { try { await navigator.clipboard.writeText(logs.join('\n')); copied = true; setTimeout(() => copied = false, 2000); } catch {} }
+  function toggleSelect(workshopId: string) { 
+    const newSet = new Set(ns.selectedIds);
+    if (newSet.has(workshopId)) newSet.delete(workshopId); else newSet.add(workshopId); 
+    ns.selectedIds = [...newSet]; 
+  }
+  function selectAll() { ns.selectedIds = ns.filteredWallpapers.map(w => w.workshop_id); }
+  function clearSelection() { ns.selectedIds = []; }
+  function clear() { ns.wallpapers = []; ns.filteredWallpapers = []; ns.selectedIds = []; ns.stats = { ...DEFAULT_STATS }; ns.phase = 'idle'; log('🗑️ 已清空'); }
+  async function copyLogs() { try { await navigator.clipboard.writeText(ns.logs.join('\n')); copied = true; setTimeout(() => copied = false, 2000); } catch {} }
 </script>
 
 <!-- 路径输入区块 -->
 {#snippet pathBlock()}
   <div class="flex cq-gap cq-mb">
-    <Input bind:value={workshopPath} placeholder="Wallpaper Engine 工坊路径..." disabled={isRunning} class="flex-1 cq-input" />
+    <Input bind:value={ns.workshopPath} placeholder="Wallpaper Engine 工坊路径..." disabled={isRunning} class="flex-1 cq-input" />
     <Button variant="outline" size="icon" class="cq-button-icon shrink-0" onclick={selectFolder} disabled={isRunning}>
       <FolderOpen class="cq-icon" />
     </Button>
@@ -163,7 +159,7 @@
     </Button>
   </div>
   <Button variant="outline" class="w-full cq-button" onclick={handleScan} disabled={isRunning}>
-    {#if isRunning && phase === 'scanning'}<LoaderCircle class="cq-icon mr-2 animate-spin" />{:else}<RefreshCw class="cq-icon mr-2" />{/if}
+    {#if isRunning && ns.phase === 'scanning'}<LoaderCircle class="cq-icon mr-2 animate-spin" />{:else}<RefreshCw class="cq-icon mr-2" />{/if}
     扫描工坊
   </Button>
 {/snippet}
@@ -171,15 +167,15 @@
 <!-- 过滤条件区块 -->
 {#snippet filterBlock()}
   <div class="cq-space">
-    <Input bind:value={filters.title} placeholder="搜索标题..." class="cq-input" onchange={applyFilters} />
+    <Input bind:value={ns.filters.title} placeholder="搜索标题..." class="cq-input" onchange={applyFilters} />
     <div class="grid grid-cols-2 cq-gap">
-      <select bind:value={filters.contentrating} onchange={applyFilters} class="cq-select rounded-md border bg-background px-2">
+      <select bind:value={ns.filters.contentrating} onchange={applyFilters} class="cq-select rounded-md border bg-background px-2">
         <option value="">全部评级</option>
         <option value="Everyone">全年龄</option>
         <option value="Mature">成熟</option>
         <option value="Adult">成人</option>
       </select>
-      <select bind:value={filters.type} onchange={applyFilters} class="cq-select rounded-md border bg-background px-2">
+      <select bind:value={ns.filters.type} onchange={applyFilters} class="cq-select rounded-md border bg-background px-2">
         <option value="">全部类型</option>
         <option value="Video">视频</option>
         <option value="Scene">场景</option>
@@ -199,24 +195,24 @@
 
 <!-- 统计区块 -->
 {#snippet statsBlock()}
-  {@const filterPercent = stats.total > 0 ? ((stats.filtered / stats.total) * 100).toFixed(0) : '0'}
-  {@const selectPercent = stats.filtered > 0 ? ((selectedIds.size / stats.filtered) * 100).toFixed(0) : '0'}
+  {@const filterPercent = ns.stats.total > 0 ? ((ns.stats.filtered / ns.stats.total) * 100).toFixed(0) : '0'}
+  {@const selectPercent = ns.stats.filtered > 0 ? ((selectedIdsSet.size / ns.stats.filtered) * 100).toFixed(0) : '0'}
   <div class="grid grid-cols-3 cq-gap">
     <div class="cq-stat-card bg-muted/40">
       <div class="flex flex-col items-center">
-        <span class="cq-stat-value tabular-nums">{stats.total}</span>
+        <span class="cq-stat-value tabular-nums">{ns.stats.total}</span>
         <span class="cq-stat-label text-muted-foreground">总计</span>
       </div>
     </div>
     <div class="cq-stat-card bg-blue-500/10">
       <div class="flex flex-col items-center">
-        <span class="cq-stat-value text-blue-500 tabular-nums">{stats.filtered}</span>
+        <span class="cq-stat-value text-blue-500 tabular-nums">{ns.stats.filtered}</span>
         <span class="cq-stat-label text-muted-foreground">{filterPercent}%</span>
       </div>
     </div>
     <div class="cq-stat-card bg-purple-500/10">
       <div class="flex flex-col items-center">
-        <span class="cq-stat-value text-purple-500 tabular-nums">{selectedIds.size}</span>
+        <span class="cq-stat-value text-purple-500 tabular-nums">{selectedIdsSet.size}</span>
         <span class="cq-stat-label text-muted-foreground">{selectPercent}%</span>
       </div>
     </div>
@@ -227,16 +223,16 @@
 {#snippet operationBlock()}
   <div class="flex flex-col cq-gap h-full">
     <!-- 主按钮 -->
-    <Button class="w-full cq-button flex-1" onclick={handleRename} disabled={isRunning || stats.filtered === 0}>
-      {#if phase === 'renaming'}<LoaderCircle class="cq-icon mr-1 animate-spin" />{:else}<Pencil class="cq-icon mr-1" />{/if}
+    <Button class="w-full cq-button flex-1" onclick={handleRename} disabled={isRunning || ns.stats.filtered === 0}>
+      {#if ns.phase === 'renaming'}<LoaderCircle class="cq-icon mr-1 animate-spin" />{:else}<Pencil class="cq-icon mr-1" />{/if}
       <span>重命名</span>
     </Button>
     <!-- 导出按钮 -->
     <div class="flex cq-gap">
-      <Button variant="outline" class="flex-1 cq-button-sm" onclick={() => exportData('json')} disabled={stats.filtered === 0}>
+      <Button variant="outline" class="flex-1 cq-button-sm" onclick={() => exportData('json')} disabled={ns.stats.filtered === 0}>
         <Download class="cq-icon mr-1" />JSON
       </Button>
-      <Button variant="outline" class="flex-1 cq-button-sm" onclick={() => exportData('paths')} disabled={stats.filtered === 0}>
+      <Button variant="outline" class="flex-1 cq-button-sm" onclick={() => exportData('paths')} disabled={ns.stats.filtered === 0}>
         <Download class="cq-icon mr-1" />路径
       </Button>
     </div>
@@ -254,20 +250,20 @@
   <div class="cq-space">
     <div>
       <span class="cq-text text-muted-foreground mb-1 block">命名模板</span>
-      <Input bind:value={renameConfig.template} placeholder={placeholderText} class="cq-input" />
+      <Input bind:value={ns.renameConfig.template} placeholder={placeholderText} class="cq-input" />
     </div>
     <div class="flex flex-wrap cq-gap cq-text">
       <label class="flex items-center gap-1.5">
-        <Checkbox bind:checked={renameConfig.dryRun} />
+        <Checkbox bind:checked={ns.renameConfig.dryRun} />
         <span>模拟执行</span>
       </label>
       <label class="flex items-center gap-1.5">
-        <Checkbox bind:checked={renameConfig.copyMode} />
+        <Checkbox bind:checked={ns.renameConfig.copyMode} />
         <span>复制模式</span>
       </label>
     </div>
-    {#if renameConfig.copyMode}
-      <Input bind:value={renameConfig.targetPath} placeholder="目标路径..." class="cq-input" />
+    {#if ns.renameConfig.copyMode}
+      <Input bind:value={ns.renameConfig.targetPath} placeholder="目标路径..." class="cq-input" />
     {/if}
     <div class="cq-text-sm text-muted-foreground">{helpText}</div>
   </div>
@@ -281,17 +277,17 @@
       <div class="flex items-center gap-2">
         <Button variant="ghost" size="sm" class="h-7 px-2 cq-text-sm" onclick={selectAll}>全选</Button>
         <Button variant="ghost" size="sm" class="h-7 px-2 cq-text-sm" onclick={clearSelection}>清除</Button>
-        <Button variant="ghost" size="icon" class="h-7 w-7" onclick={() => viewMode = viewMode === 'grid' ? 'list' : 'grid'}>
-          {#if viewMode === 'grid'}<List class="cq-icon" />{:else}<Grid3X3 class="cq-icon" />{/if}
+        <Button variant="ghost" size="icon" class="h-7 w-7" onclick={() => ns.viewMode = ns.viewMode === 'grid' ? 'list' : 'grid'}>
+          {#if ns.viewMode === 'grid'}<List class="cq-icon" />{:else}<Grid3X3 class="cq-icon" />{/if}
         </Button>
       </div>
     </div>
     <div class="flex-1 overflow-y-auto cq-padding">
-      {#if filteredWallpapers.length > 0}
-        {#if viewMode === 'grid'}
+      {#if ns.filteredWallpapers.length > 0}
+        {#if ns.viewMode === 'grid'}
           <div class="grid grid-cols-3 cq-gap">
-            {#each filteredWallpapers.slice(0, 50) as wallpaper}
-              {@const isSelected = selectedIds.has(wallpaper.workshop_id)}
+            {#each ns.filteredWallpapers.slice(0, 50) as wallpaper}
+              {@const isSelected = selectedIdsSet.has(wallpaper.workshop_id)}
               {@const ratingInfo = getRatingInfo(wallpaper.content_rating)}
               {@const previewUrl = getPreviewUrl(wallpaper, apiBase)}
               <button class="cq-rounded border text-left transition-all hover:bg-muted/50 overflow-hidden {isSelected ? 'border-primary bg-primary/10 ring-2 ring-primary/30' : 'border-border'}" onclick={() => toggleSelect(wallpaper.workshop_id)}>
@@ -309,8 +305,8 @@
           </div>
         {:else}
           <div class="cq-space-sm">
-            {#each filteredWallpapers.slice(0, 100) as wallpaper}
-              {@const isSelected = selectedIds.has(wallpaper.workshop_id)}
+            {#each ns.filteredWallpapers.slice(0, 100) as wallpaper}
+              {@const isSelected = selectedIdsSet.has(wallpaper.workshop_id)}
               {@const ratingInfo = getRatingInfo(wallpaper.content_rating)}
               {@const previewUrl = getPreviewUrl(wallpaper, apiBase)}
               <button class="w-full cq-padding cq-rounded border text-left flex items-center cq-gap transition-all hover:bg-muted/50 {isSelected ? 'border-primary bg-primary/10' : 'border-border'}" onclick={() => toggleSelect(wallpaper.workshop_id)}>
@@ -324,7 +320,7 @@
             {/each}
           </div>
         {/if}
-        {#if filteredWallpapers.length > (viewMode === 'grid' ? 50 : 100)}<div class="text-center cq-text text-muted-foreground py-4">显示前 {viewMode === 'grid' ? 50 : 100} 项，共 {filteredWallpapers.length} 项</div>{/if}
+        {#if ns.filteredWallpapers.length > (ns.viewMode === 'grid' ? 50 : 100)}<div class="text-center cq-text text-muted-foreground py-4">显示前 {ns.viewMode === 'grid' ? 50 : 100} 项，共 {ns.filteredWallpapers.length} 项</div>{/if}
       {:else}<div class="text-center text-muted-foreground py-8 cq-text">扫描后显示壁纸列表</div>{/if}
     </div>
   </div>
@@ -340,8 +336,8 @@
       </Button>
     </div>
     <div class="flex-1 overflow-y-auto bg-muted/30 cq-rounded cq-padding font-mono cq-text-sm space-y-0.5">
-      {#if logs.length > 0}
-        {#each logs.slice(-10) as logItem}<div class="text-muted-foreground break-all">{logItem}</div>{/each}
+      {#if ns.logs.length > 0}
+        {#each ns.logs.slice(-10) as logItem}<div class="text-muted-foreground break-all">{logItem}</div>{/each}
       {:else}
         <div class="text-muted-foreground text-center py-2">暂无日志</div>
       {/if}
@@ -372,7 +368,7 @@
     nodeId={nodeId} 
     title="enginev" 
     icon={Image} 
-    status={phase} 
+    status={ns.phase} 
     {borderClass} 
     isFullscreenRender={isFullscreenRender}
     onCompact={() => layoutRenderer?.compact()}

@@ -15,7 +15,7 @@
   import { NodeLayoutRenderer } from '$lib/components/blocks';
   import { MOVEA_DEFAULT_GRID_LAYOUT } from './blocks';
   import { api } from '$lib/services/api';
-  import { getNodeState, setNodeState } from '$lib/stores/nodeStateStore';
+  import { getNodeState, saveNodeState } from '$lib/stores/nodeState.svelte';
   import NodeWrapper from '../NodeWrapper.svelte';
   import { 
     Package, FolderSearch, Play, RotateCcw, Copy, Check,
@@ -53,21 +53,23 @@
   }
 
   const nodeId = $derived(id);
-  const savedState = $derived(getNodeState<MoveaState>(nodeId));
   const dataLogs = $derived(data?.logs ?? []);
 
-  // 状态变量
-  let rootPath = $state('E:\\1Hub\\EH\\1EHV');
-  let regexPatterns = $state('');
-  let allowMoveToUnnumbered = $state(false);
-  let enableFolderMoving = $state(true);
-  
-  let phase = $state<Phase>('idle');
-  let logs = $state<string[]>([]);
+  // 获取共享的响应式状态（节点模式和全屏模式共用同一个对象）
+  const ns = getNodeState<MoveaState>(id, {
+    rootPath: 'E:\\1Hub\\EH\\1EHV',
+    regexPatterns: '',
+    allowMoveToUnnumbered: false,
+    enableFolderMoving: true,
+    logs: []
+  });
+
+  // 纯 UI 状态（不需要同步）
   let copied = $state(false);
   let layoutRenderer = $state<any>(undefined);
+  let phase = $state<Phase>('idle');
   
-  // 扫描结果
+  // 扫描结果（运行时状态，不需要持久化）
   let scanResults = $state<Record<string, ScanResultItem>>({});
   let totalFolders = $state(0);
   let totalArchives = $state(0);
@@ -82,29 +84,8 @@
   
   // 跳过标记
   let skipAll = $state<Record<string, boolean>>({});
-
-  let initialized = $state(false);
   
-  $effect(() => {
-    if (initialized) return;
-    
-    if (savedState) {
-      rootPath = savedState.rootPath ?? 'E:\\1Hub\\EH\\1EHV';
-      regexPatterns = savedState.regexPatterns ?? '';
-      allowMoveToUnnumbered = savedState.allowMoveToUnnumbered ?? false;
-      enableFolderMoving = savedState.enableFolderMoving ?? true;
-    }
-    initialized = true;
-  });
-  
-  $effect(() => { logs = [...dataLogs]; });
-
-  function saveState() {
-    if (!initialized) return;
-    setNodeState<MoveaState>(nodeId, { 
-      rootPath, regexPatterns, allowMoveToUnnumbered, enableFolderMoving 
-    });
-  }
+  $effect(() => { ns.logs = [...dataLogs]; });
 
   // 派生状态
   let isScanning = $derived(phase === 'scanning');
@@ -125,13 +106,11 @@
     error: 'border-destructive/50'
   }[phase]);
 
-  $effect(() => { if (rootPath || regexPatterns) saveState(); });
-
-  function log(msg: string) { logs = [...logs.slice(-100), msg]; }
+  function log(msg: string) { ns.logs = [...ns.logs.slice(-100), msg]; }
 
   // 扫描目录
   async function handleScan() {
-    if (!rootPath) {
+    if (!ns.rootPath) {
       log('❌ 请输入根路径');
       return;
     }
@@ -140,15 +119,15 @@
     scanResults = {};
     movePlan = {};
     skipAll = {};
-    log(`📂 开始扫描: ${rootPath}`);
+    log(`📂 开始扫描: ${ns.rootPath}`);
     
     try {
       const response = await api.executeNode('movea', {
         action: 'scan',
-        root_path: rootPath,
-        regex_patterns: regexPatterns.split('\n').filter(s => s.trim()),
-        allow_move_to_unnumbered: allowMoveToUnnumbered,
-        enable_folder_moving: enableFolderMoving
+        root_path: ns.rootPath,
+        regex_patterns: ns.regexPatterns.split('\n').filter(s => s.trim()),
+        allow_move_to_unnumbered: ns.allowMoveToUnnumbered,
+        enable_folder_moving: ns.enableFolderMoving
       }) as any;
       
       if (response.logs) for (const m of response.logs) log(m);
@@ -188,7 +167,7 @@
       }
       
       // 可移动文件夹
-      if (enableFolderMoving) {
+      if (ns.enableFolderMoving) {
         for (const folder of data.movable_folders) {
           plan[level1Name][`folder_${folder}`] = defaultTarget;
         }
@@ -212,7 +191,7 @@
     try {
       const response = await api.executeNode('movea', {
         action: 'move_single',
-        root_path: rootPath,
+        root_path: ns.rootPath,
         level1_name: level1Name,
         move_plan: plan
       }) as any;
@@ -305,12 +284,12 @@
     movePlan = {};
     skipAll = {};
     currentPage = 0;
-    logs = [];
+    ns.logs = [];
   }
 
   async function copyLogs() {
     try {
-      await navigator.clipboard.writeText(logs.join('\n'));
+      await navigator.clipboard.writeText(ns.logs.join('\n'));
       copied = true;
       setTimeout(() => { copied = false; }, 2000);
     } catch (e) { console.error('复制失败:', e); }
@@ -333,7 +312,7 @@
     <div class="flex flex-col cq-gap">
       <Label class="cq-text font-medium">根目录路径</Label>
       <Input 
-        bind:value={rootPath}
+        bind:value={ns.rootPath}
         placeholder="E:\1Hub\EH\1EHV"
         disabled={isScanning || isMoving}
         class="cq-input font-mono text-xs"
@@ -343,7 +322,7 @@
     <div class="flex flex-col cq-gap">
       <Label class="cq-text font-medium">正则表达式（每行一个）</Label>
       <textarea 
-        bind:value={regexPatterns}
+        bind:value={ns.regexPatterns}
         placeholder="用于匹配压缩包到文件夹..."
         disabled={isScanning || isMoving}
         class="flex-1 cq-input font-mono text-xs resize-none min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2"
@@ -354,8 +333,8 @@
       <div class="flex items-center cq-gap">
         <Checkbox 
           id="allowUnnumbered"
-          checked={allowMoveToUnnumbered}
-          onCheckedChange={(v) => allowMoveToUnnumbered = !!v}
+          checked={ns.allowMoveToUnnumbered}
+          onCheckedChange={(v) => ns.allowMoveToUnnumbered = !!v}
           disabled={isScanning || isMoving}
         />
         <Label for="allowUnnumbered" class="cq-text-sm">允许无编号文件夹作为目标</Label>
@@ -364,8 +343,8 @@
       <div class="flex items-center cq-gap">
         <Checkbox 
           id="enableFolder"
-          checked={enableFolderMoving}
-          onCheckedChange={(v) => enableFolderMoving = !!v}
+          checked={ns.enableFolderMoving}
+          onCheckedChange={(v) => ns.enableFolderMoving = !!v}
           disabled={isScanning || isMoving}
         />
         <Label for="enableFolder" class="cq-text-sm">启用文件夹移动</Label>
@@ -379,7 +358,7 @@
     <Button 
       class="w-full cq-button" 
       onclick={handleScan}
-      disabled={isScanning || isMoving || !rootPath}
+      disabled={isScanning || isMoving || !ns.rootPath}
     >
       {#if isScanning}
         <Loader2 class="cq-icon mr-1 animate-spin" />

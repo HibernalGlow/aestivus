@@ -357,6 +357,9 @@ class WeiboSpiderAdapter(BaseAdapter):
             if input_data.output_dir:
                 os.environ['OUTPUT_DIR'] = input_data.output_dir
             
+            # 设置 tqdm 禁用，避免异步环境下的 I/O 错误
+            os.environ['TQDM_DISABLE'] = '1'
+            
             wb = spider_module.Spider(config)
             total_users = len(wb.user_config_list)
             crawled_users = 0
@@ -396,8 +399,14 @@ class WeiboSpiderAdapter(BaseAdapter):
                         on_log(f"✅ 用户 {getattr(wb.user, 'nickname', user_uri)} 完成")
                         
                 except Exception as e:
+                    import traceback
+                    error_detail = traceback.format_exc()
                     if on_log:
                         on_log(f"❌ 用户 {user_uri} 失败: {e}")
+                        # 只记录关键错误信息
+                        for line in error_detail.split('\n')[-5:]:
+                            if line.strip():
+                                on_log(f"  {line.strip()}")
                     continue
             
             if on_progress:

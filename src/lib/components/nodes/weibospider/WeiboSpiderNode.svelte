@@ -141,13 +141,16 @@
 
   // 加载配置
   async function loadConfig(configPath?: string) {
+    console.log('[WeiboSpider] loadConfig called, configPath:', configPath);
+    log('📂 开始加载配置...');
     try {
-      log('📂 加载配置...');
       const params: any = { action: 'load_config' };
       if (configPath || ns.configPath) {
         params.config_path = configPath || ns.configPath;
       }
+      console.log('[WeiboSpider] calling api.executeNode with params:', params);
       const response = await api.executeNode('weibospider', params) as any;
+      console.log('[WeiboSpider] response:', response);
       
       if (response.success && response.data) {
         const config = response.data;
@@ -161,10 +164,11 @@
         ns.cookie = config.cookie || '';
         log('✅ 配置加载成功');
       } else {
-        log(`❌ ${response.message}`);
+        log(`❌ ${response?.message || '未知错误'}`);
       }
     } catch (e: any) {
-      log(`❌ 加载失败: ${e}`);
+      console.error('[WeiboSpider] loadConfig error:', e);
+      log(`❌ 加载失败: ${e?.message || e}`);
     }
   }
 
@@ -319,7 +323,14 @@
 
   // 开始爬取
   async function handleStart() {
-    if (isRunning || ns.userIds.length === 0) return;
+    console.log('[WeiboSpider] handleStart called');
+    console.log('[WeiboSpider] isRunning:', isRunning, 'userIds:', ns.userIds);
+    
+    if (isRunning || ns.userIds.length === 0) {
+      console.log('[WeiboSpider] blocked: isRunning or no userIds');
+      log('⚠️ 无法开始：正在运行或没有用户ID');
+      return;
+    }
     
     ns.phase = 'running';
     ns.progress = 0;
@@ -329,9 +340,11 @@
     log('🕷️ 开始爬取微博...');
     
     const taskId = `weibospider-${id}-${Date.now()}`;
+    console.log('[WeiboSpider] taskId:', taskId);
     
     try {
       const wsUrl = `${getWsBaseUrl()}/v1/ws/tasks/${taskId}`;
+      console.log('[WeiboSpider] wsUrl:', wsUrl);
       ws = new WebSocket(wsUrl);
       
       ws.onmessage = (event) => {
@@ -348,13 +361,21 @@
         }
       };
       
+      ws.onerror = (e) => {
+        console.error('[WeiboSpider] WebSocket error:', e);
+      };
+      
       await new Promise<void>((resolve) => {
         const timeout = setTimeout(resolve, 1000);
-        ws!.onopen = () => { clearTimeout(timeout); resolve(); };
+        ws!.onopen = () => { 
+          console.log('[WeiboSpider] WebSocket connected');
+          clearTimeout(timeout); 
+          resolve(); 
+        };
         ws!.onerror = () => { clearTimeout(timeout); resolve(); };
       });
       
-      const response = await api.executeNode('weibospider', {
+      const params = {
         action: 'crawl',
         user_ids: ns.userIds,
         filter_original: ns.filterOriginal,
@@ -365,7 +386,12 @@
         write_mode: ns.writeMode,
         output_dir: ns.outputDir,
         cookie: ns.cookie
-      }, { taskId, nodeId: id }) as any;
+      };
+      console.log('[WeiboSpider] crawl params:', JSON.stringify(params));
+      log('📡 发送请求到后端...');
+      
+      const response = await api.executeNode('weibospider', params, { taskId, nodeId: id }) as any;
+      console.log('[WeiboSpider] crawl response:', response);
       
       if (response.success) {
         ns.phase = 'completed';
@@ -375,11 +401,12 @@
         log(`✅ ${response.message}`);
       } else {
         ns.phase = 'error';
-        log(`❌ ${response.message}`);
+        log(`❌ ${response?.message || '未知错误'}`);
       }
     } catch (error: any) {
+      console.error('[WeiboSpider] handleStart error:', error);
       ns.phase = 'error';
-      log(`❌ 执行失败: ${error}`);
+      log(`❌ 执行失败: ${error?.message || error}`);
     } finally {
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.close();

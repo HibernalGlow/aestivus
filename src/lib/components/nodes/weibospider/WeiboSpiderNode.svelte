@@ -372,7 +372,7 @@
     />
     <div class="flex cq-gap">
       <Button variant="outline" size="sm" class="cq-button-sm flex-1" onclick={getBrowserCookie} disabled={isRunning}>
-        🌐 打开登录窗口
+        🌐 从浏览器获取
       </Button>
       <Button variant="outline" size="sm" class="cq-button-sm" onclick={validateCookie} disabled={isRunning || !ns.cookie}>
         验证

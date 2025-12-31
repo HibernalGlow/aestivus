@@ -50,6 +50,7 @@
     outputDir: string;
     cookie: string;
     cookieValid: boolean;
+    browser: 'edge' | 'chrome' | 'firefox';
     phase: Phase;
     logs: string[];
     progress: number;
@@ -57,6 +58,13 @@
     crawledUsers: number;
     crawledWeibos: number;
   }
+
+  // 浏览器选项
+  const browserOptions = [
+    { value: 'edge', label: 'Edge', icon: '🌐' },
+    { value: 'chrome', label: 'Chrome', icon: '🔵' },
+    { value: 'firefox', label: 'Firefox', icon: '🦊' }
+  ] as const;
 
   // 获取默认日期（一年前）
   function getDefaultSinceDate(): string {
@@ -78,6 +86,7 @@
     outputDir: '',
     cookie: '',
     cookieValid: false,
+    browser: 'edge',
     phase: 'idle',
     logs: [],
     progress: 0,
@@ -173,10 +182,10 @@
   // 从浏览器获取 Cookie
   async function getBrowserCookie() {
     try {
-      log('🌐 从浏览器获取 Cookie...');
+      log(`🌐 从 ${ns.browser} 浏览器获取 Cookie...`);
       const response = await api.executeNode('weibospider', { 
         action: 'get_browser_cookie',
-        browser: 'edge'
+        browser: ns.browser
       }) as any;
       
       if (response.success && response.data?.cookie) {
@@ -370,9 +379,18 @@
       class="cq-text flex-1 font-mono text-xs min-h-[60px]"
       disabled={isRunning}
     />
-    <div class="flex cq-gap">
+    <div class="flex cq-gap items-center">
+      <select 
+        bind:value={ns.browser}
+        disabled={isRunning}
+        class="cq-text h-8 px-2 rounded border border-input bg-background text-sm"
+      >
+        {#each browserOptions as opt}
+          <option value={opt.value}>{opt.icon} {opt.label}</option>
+        {/each}
+      </select>
       <Button variant="outline" size="sm" class="cq-button-sm flex-1" onclick={getBrowserCookie} disabled={isRunning}>
-        🌐 从浏览器获取
+        获取 Cookie
       </Button>
       <Button variant="outline" size="sm" class="cq-button-sm" onclick={validateCookie} disabled={isRunning || !ns.cookie}>
         验证

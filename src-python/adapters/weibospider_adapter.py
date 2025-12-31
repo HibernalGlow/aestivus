@@ -20,7 +20,7 @@ from .base import BaseAdapter, AdapterOutput
 
 class WeiboSpiderInput(BaseModel):
     """weiboSpider 输入参数"""
-    action: str = Field(default="status", description="操作类型: status, crawl, validate_cookie, load_config, save_config")
+    action: str = Field(default="status", description="操作类型: status, crawl, validate_cookie, load_config, save_config, get_browser_cookie")
     
     # 用户配置
     user_ids: List[str] = Field(default_factory=list, description="要爬取的用户ID列表")
@@ -40,6 +40,7 @@ class WeiboSpiderInput(BaseModel):
     
     # Cookie
     cookie: str = Field(default="", description="微博Cookie")
+    browser: str = Field(default="edge", description="浏览器类型: chrome, edge, firefox")
     
     # 等待配置
     random_wait_pages: List[int] = Field(default=[1, 5], description="随机等待页数范围")
@@ -134,6 +135,8 @@ class WeiboSpiderAdapter(BaseAdapter):
             return await self._save_config(input_data, modules, on_log)
         elif action == "validate_cookie":
             return await self._validate_cookie(input_data, modules, on_log)
+        elif action == "get_browser_cookie":
+            return await self._get_browser_cookie(input_data, modules, on_log)
         elif action == "crawl":
             return await self._crawl(input_data, modules, on_progress, on_log)
         else:
@@ -296,6 +299,168 @@ class WeiboSpiderAdapter(BaseAdapter):
             message="Cookie 有效" if is_valid else "Cookie 无效或已过期",
             cookie_valid=is_valid
         )
+    
+    async def _get_browser_cookie(
+        self,
+        input_data: WeiboSpiderInput,
+        modules: Dict,
+        on_log: Optional[Callable[[str], None]] = None
+    ) -> WeiboSpiderOutput:
+        """打开 WebView 窗口登录微博并获取 Cookie（使用子进程）"""
+        if on_log:
+            on_log("🌐 打开登录窗口...")
+        
+        try:
+            import multiprocessing
+            import tempfile
+            
+            # 创建临时文件用于进程间通信
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                result_file = f.name
+                json.dump({"value": "", "valid": False}, f)
+            
+            def webview_login_process(result_path: str):
+                """在独立进程中运行 WebView 登录窗口"""
+                import webview
+                import threading
+                import time
+                import json as pjson
+                
+                result = {"value": "", "valid": False, "done": False}
+                
+                def check_cookies(window):
+                    """后台线程检查登录状态"""
+                    max_wait = 300
+                    waited = 0
+                    
+                    while waited < max_wait and not result["done"]:
+                        time.sleep(2)
+                        waited += 2
+                        
+                        try:
+                            cookies = window.get_cookies()
+                            if cookies:
+                                parts = []
+                                has_login = False
+                                
+                                for c in cookies:
+                                    if hasattr(c, 'output'):
+                                        s = c.output(header='').strip()
+                                        if '=' in s:
+                                            nv = s.split(';')[0].strip()
+                                            parts.append(nv)
+                                            if 'MLOGIN=1' in nv or nv.startswith('SUB='):
+                                                has_login = True
+                                
+                                if has_login:
+                                    result["value"] = '; '.join(parts)
+                                    result["valid"] = True
+                                    result["done"] = True
+                                    window.destroy()
+                                    return
+                        except:
+                            pass
+                    
+                    result["done"] = True
+                    try:
+                        window.destroy()
+                    except:
+                        pass
+                
+                def on_loaded():
+                    """窗口加载完成后启动检查线程"""
+                    t = threading.Thread(target=check_cookies, args=(window,))
+                    t.daemon = True
+                    t.start()
+                
+                def on_closed():
+                    """窗口关闭时保存结果"""
+                    result["done"] = True
+                    with open(result_path, 'w', encoding='utf-8') as rf:
+                        pjson.dump(result, rf)
+                
+                window = webview.create_window(
+                    '微博登录 - 登录后窗口会自动关闭',
+                    'https://passport.weibo.cn/signin/login',
+                    width=420,
+                    height=650
+                )
+                window.events.loaded += on_loaded
+                window.events.closed += on_closed
+                
+                webview.start(private_mode=False)
+                
+                # 确保结果被写入
+                with open(result_path, 'w', encoding='utf-8') as rf:
+                    pjson.dump(result, rf)
+            
+            # 在子进程中运行 WebView
+            proc = multiprocessing.Process(
+                target=webview_login_process,
+                args=(result_file,)
+            )
+            proc.start()
+            
+            if on_log:
+                on_log("📱 登录窗口已打开，请登录微博...")
+            
+            # 等待进程结束
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(None, proc.join, 320)  # 最多等待 320 秒
+            
+            # 读取结果
+            try:
+                with open(result_file, 'r', encoding='utf-8') as f:
+                    result = json.load(f)
+            finally:
+                # 清理临时文件
+                try:
+                    os.unlink(result_file)
+                except:
+                    pass
+            
+            if result.get("valid") and result.get("value"):
+                cookie_string = result["value"]
+                
+                if on_log:
+                    on_log("✅ 登录成功，Cookie 已获取")
+                
+                # 保存到配置文件
+                weibo_path = modules.get("path")
+                config_file = weibo_path / "config.json" if weibo_path else None
+                if config_file and config_file.exists():
+                    with open(config_file, 'r', encoding='utf-8') as f:
+                        config = json.load(f)
+                    config["cookie"] = cookie_string
+                    with open(config_file, 'w', encoding='utf-8') as f:
+                        json.dump(config, f, indent=4, ensure_ascii=False)
+                    if on_log:
+                        on_log("✅ Cookie 已保存到配置文件")
+                
+                return WeiboSpiderOutput(
+                    success=True,
+                    message="登录成功，Cookie 已获取",
+                    cookie_valid=True,
+                    data={"cookie": cookie_string}
+                )
+            else:
+                if on_log:
+                    on_log("❌ 未能获取 Cookie，请登录后等待自动关闭")
+                return WeiboSpiderOutput(
+                    success=False,
+                    message="未能获取 Cookie，请确保已登录",
+                    cookie_valid=False
+                )
+            
+        except Exception as e:
+            error_msg = str(e)
+            if on_log:
+                on_log(f"❌ 打开登录窗口失败: {error_msg}")
+            return WeiboSpiderOutput(
+                success=False,
+                message=f"打开登录窗口失败: {error_msg}",
+                cookie_valid=False
+            )
     
     async def _crawl(
         self,

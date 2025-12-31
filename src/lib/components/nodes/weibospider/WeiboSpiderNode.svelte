@@ -170,6 +170,27 @@
     }
   }
 
+  // 从浏览器获取 Cookie
+  async function getBrowserCookie() {
+    try {
+      log('🌐 从浏览器获取 Cookie...');
+      const response = await api.executeNode('weibospider', { 
+        action: 'get_browser_cookie',
+        browser: 'edge'
+      }) as any;
+      
+      if (response.success && response.data?.cookie) {
+        ns.cookie = response.data.cookie;
+        ns.cookieValid = response.cookie_valid ?? false;
+        log('✅ Cookie 获取成功');
+      } else {
+        log(`❌ ${response.message}`);
+      }
+    } catch (e: any) {
+      log(`❌ 获取失败: ${e}`);
+    }
+  }
+
   // 开始爬取
   async function handleStart() {
     if (isRunning || ns.userIds.length === 0) return;
@@ -341,20 +362,22 @@
         {:else if ns.cookie}
           <span class="cq-text-sm text-yellow-500 flex items-center"><CircleX class="w-3 h-3 mr-1" />未验证</span>
         {/if}
-        <Button variant="outline" size="sm" class="cq-button-sm" onclick={validateCookie} disabled={isRunning || !ns.cookie}>
-          验证
-        </Button>
       </div>
     </div>
     <Textarea 
       bind:value={ns.cookie} 
-      placeholder="粘贴微博 Cookie..." 
-      class="cq-text flex-1 font-mono text-xs min-h-[80px]"
+      placeholder="粘贴微博 Cookie 或点击下方按钮自动获取..." 
+      class="cq-text flex-1 font-mono text-xs min-h-[60px]"
       disabled={isRunning}
     />
-    <span class="cq-text-sm text-muted-foreground">
-      从浏览器获取 weibo.cn 的 Cookie
-    </span>
+    <div class="flex cq-gap">
+      <Button variant="outline" size="sm" class="cq-button-sm flex-1" onclick={getBrowserCookie} disabled={isRunning}>
+        🌐 打开登录窗口
+      </Button>
+      <Button variant="outline" size="sm" class="cq-button-sm" onclick={validateCookie} disabled={isRunning || !ns.cookie}>
+        验证
+      </Button>
+    </div>
   </div>
 {/snippet}
 

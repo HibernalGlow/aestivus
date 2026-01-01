@@ -273,8 +273,9 @@
 
 <!-- 壁纸列表区块 -->
 {#snippet galleryBlock()}
+  <!-- 自适应时：节点模式用更小的 minmax 以适应窄宽度 -->
   {@const gridStyle = ns.gridColumns === 0 
-    ? 'grid-template-columns: repeat(auto-fill, minmax(150px, 1fr))' 
+    ? `grid-template-columns: repeat(auto-fill, minmax(${isFullscreenRender ? '150px' : '80px'}, 1fr))` 
     : `grid-template-columns: repeat(${ns.gridColumns}, 1fr)`}
   <div class="h-full flex flex-col overflow-hidden">
     <div class="flex items-center justify-between cq-padding border-b bg-muted/30 shrink-0">

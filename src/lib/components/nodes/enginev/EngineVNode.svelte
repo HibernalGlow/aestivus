@@ -55,6 +55,7 @@
     renameConfig: RenameConfig;
     selectedIds: string[];
     viewMode: 'grid' | 'list';
+    gridColumns: number; // 0 = 自适应
   }
   
   // 初始状态
@@ -68,7 +69,8 @@
     filters: { ...DEFAULT_FILTERS },
     renameConfig: { ...DEFAULT_RENAME_CONFIG },
     selectedIds: [],
-    viewMode: 'grid'
+    viewMode: 'grid',
+    gridColumns: 0 // 默认自适应
   };
   
   const ns = getNodeState<EngineVNodeState>(nodeId, defaultState);
@@ -271,10 +273,20 @@
 
 <!-- 壁纸列表区块 -->
 {#snippet galleryBlock()}
+  {@const gridStyle = ns.gridColumns === 0 
+    ? 'grid-template-columns: repeat(auto-fill, minmax(150px, 1fr))' 
+    : `grid-template-columns: repeat(${ns.gridColumns}, 1fr)`}
   <div class="h-full flex flex-col overflow-hidden">
     <div class="flex items-center justify-between cq-padding border-b bg-muted/30 shrink-0">
       <span class="font-semibold cq-text flex items-center gap-2"><Grid3X3 class="cq-icon text-purple-500" />壁纸列表</span>
       <div class="flex items-center gap-2">
+        <!-- 列数调整滑块 -->
+        {#if ns.viewMode === 'grid'}
+          <div class="flex items-center gap-1.5">
+            <span class="cq-text-sm text-muted-foreground">{ns.gridColumns === 0 ? '自适应' : `${ns.gridColumns}列`}</span>
+            <input type="range" min="0" max="8" bind:value={ns.gridColumns} class="w-16 h-1 accent-primary cursor-pointer" title="0=自适应, 1-8=固定列数" />
+          </div>
+        {/if}
         <Button variant="ghost" size="sm" class="h-7 px-2 cq-text-sm" onclick={selectAll}>全选</Button>
         <Button variant="ghost" size="sm" class="h-7 px-2 cq-text-sm" onclick={clearSelection}>清除</Button>
         <Button variant="ghost" size="icon" class="h-7 w-7" onclick={() => ns.viewMode = ns.viewMode === 'grid' ? 'list' : 'grid'}>
@@ -285,7 +297,7 @@
     <div class="flex-1 overflow-y-auto cq-padding">
       {#if ns.filteredWallpapers.length > 0}
         {#if ns.viewMode === 'grid'}
-          <div class="grid grid-cols-3 cq-gap">
+          <div class="grid cq-gap" style={gridStyle}>
             {#each ns.filteredWallpapers.slice(0, 50) as wallpaper}
               {@const isSelected = selectedIdsSet.has(wallpaper.workshop_id)}
               {@const ratingInfo = getRatingInfo(wallpaper.content_rating)}

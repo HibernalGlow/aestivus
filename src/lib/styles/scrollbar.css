@@ -1,0 +1,87 @@
+/* 
+ * 自定义滚动条样式 - 与 shadcn 主题统一
+ * 支持亮色/暗色主题自动切换
+ */
+
+/* 滚动条整体宽度 */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+/* 滚动条轨道 */
+::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: var(--radius);
+}
+
+/* 滚动条滑块 */
+::-webkit-scrollbar-thumb {
+  background: var(--muted-foreground);
+  opacity: 0.3;
+  border-radius: var(--radius);
+  border: 2px solid transparent;
+  background-clip: content-box;
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--foreground);
+  opacity: 0.5;
+  background-clip: content-box;
+}
+
+/* 滚动条角落 */
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox 滚动条样式 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--muted-foreground) transparent;
+}
+
+/* 细滚动条变体 - 用于小容器 */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+/* 自动隐藏滚动条 - 悬停时显示 */
+.scrollbar-auto {
+  scrollbar-width: thin;
+}
+
+.scrollbar-auto::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+
+.scrollbar-auto:hover::-webkit-scrollbar-thumb {
+  background: var(--muted-foreground);
+  background-clip: content-box;
+}
+
+/* 强调色滚动条 - 用于主要区域 */
+.scrollbar-accent::-webkit-scrollbar-thumb {
+  background: var(--primary);
+  opacity: 0.6;
+  background-clip: content-box;
+}
+
+.scrollbar-accent::-webkit-scrollbar-thumb:hover {
+  background: var(--primary);
+  opacity: 0.8;
+  background-clip: content-box;
+}
+
+
+/* 完全隐藏滚动条 */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}

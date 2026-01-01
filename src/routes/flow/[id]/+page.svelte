@@ -14,6 +14,7 @@
   import { getNodeTypes } from '$lib/stores/nodeRegistry';
   import { sidebarStore } from '$lib/stores/sidebar.svelte';
   import { Dock } from '$lib/components/ui/dock';
+  import { settingsManager } from '$lib/settings/settingsManager';
 
   const flowId = $derived(page.params.id);
   
@@ -29,6 +30,18 @@
   
   // 获取节点类型组件
   const nodeTypes = getNodeTypes();
+  
+  // Dock 启用状态
+  let dockEnabled = $state(settingsManager.getSettings().panels.dockEnabled);
+  
+  // 监听设置变化
+  $effect(() => {
+    const callback = (s: any) => {
+      dockEnabled = s.panels.dockEnabled;
+    };
+    settingsManager.addListener(callback);
+    return () => settingsManager.removeListener(callback);
+  });
 
   onMount(() => {
     if (flowId && flowId !== 'new') {
@@ -119,7 +132,9 @@
   {/if}
 
   <!-- 浮动 Dock 栏 -->
-  <Dock />
+  {#if dockEnabled}
+    <Dock />
+  {/if}
 
 </div>
 

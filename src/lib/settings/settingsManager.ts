@@ -160,6 +160,8 @@ export interface NeoViewSettings {
     autoHideToolbar: boolean;
     /** 标题栏是否固定（不自动隐藏） */
     titleBarPinned: boolean;
+    /** 是否启用浮动 Dock 栏 */
+    dockEnabled: boolean;
     /** 侧边栏/面板透明度 0-100 */
     sidebarOpacity: number;
     /** 顶部工具栏透明度 0-100 */
@@ -360,6 +362,7 @@ const defaultSettings: NeoViewSettings = {
     bottomPanelVisible: false,
     autoHideToolbar: true,
     titleBarPinned: true,
+    dockEnabled: false,
     sidebarOpacity: 85,
     topToolbarOpacity: 85,
     bottomBarOpacity: 85,

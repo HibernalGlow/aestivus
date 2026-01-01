@@ -574,6 +574,22 @@
 		{/if}
 	</div>
 
+	<!-- 浮动 Dock 栏 -->
+	<div class="space-y-3">
+		<div class="flex items-center justify-between">
+			<div>
+				<Label class="text-sm font-semibold">浮动 Dock 栏</Label>
+				<p class="text-muted-foreground text-xs">macOS 风格的底部快捷栏，可拖拽节点添加</p>
+			</div>
+			<Switch 
+				checked={settingsManager.getSettings().panels.dockEnabled} 
+				onCheckedChange={(checked) => {
+					settingsManager.updateNestedSettings('panels', { dockEnabled: checked });
+				}} 
+			/>
+		</div>
+	</div>
+
 	<!-- 自定义字体 -->
 	<div class="space-y-3">
 		<div class="flex items-center justify-between">

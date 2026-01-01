@@ -72,3 +72,43 @@ export function generateDownloadFilename(segmentIndex: number): string {
   const timestamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
   return `trename_seg${segmentIndex + 1}_${timestamp}.json`;
 }
+
+/**
+ * 解析多路径输入
+ * 支持格式：
+ * - 单路径: C:\path\to\folder
+ * - 带引号多路径: "C:\path1" "C:\path2"
+ * - 混合格式: "C:\path with space" C:\simple\path
+ * @returns 解析后的路径数组
+ */
+export function parseMultiPaths(input: string): string[] {
+  if (!input || !input.trim()) return [];
+  
+  const paths: string[] = [];
+  const trimmed = input.trim();
+  
+  // 检查是否包含引号（多路径模式）
+  if (trimmed.includes('"')) {
+    // 使用正则匹配引号内的路径和非引号路径
+    const regex = /"([^"]+)"|(\S+)/g;
+    let match;
+    while ((match = regex.exec(trimmed)) !== null) {
+      const path = (match[1] || match[2]).trim();
+      if (path && !paths.includes(path)) {
+        paths.push(path);
+      }
+    }
+  } else {
+    // 单路径模式
+    paths.push(trimmed);
+  }
+  
+  return paths;
+}
+
+/**
+ * 检查输入是否为多路径格式
+ */
+export function isMultiPathInput(input: string): boolean {
+  return input.includes('"') && parseMultiPaths(input).length > 1;
+}

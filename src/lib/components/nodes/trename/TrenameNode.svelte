@@ -23,7 +23,8 @@
   import {
     type TreeNode, type TrenameState, type Phase, type OperationRecord,
     isDir, getNodeStatus, parseTree, getPhaseBorderClass,
-    DEFAULT_STATS, DEFAULT_EXCLUDE_EXTS, generateDownloadFilename
+    DEFAULT_STATS, DEFAULT_EXCLUDE_EXTS, generateDownloadFilename,
+    parseMultiPaths, isMultiPathInput
   } from './utils';
 
   interface Props {
@@ -123,15 +124,26 @@
 
   async function handleScan(merge = false) {
     if (!ns.scanPath.trim()) { log('❌ 请输入路径'); return; }
-    ns.phase = 'scanning'; log(`🔍 ${merge ? '合并' : '替换'}扫描: ${ns.scanPath}`);
+    
+    // 解析多路径输入
+    const paths = parseMultiPaths(ns.scanPath);
+    if (paths.length === 0) { log('❌ 无有效路径'); return; }
+    
+    // 多路径自动使用合并模式
+    const shouldMerge = merge || paths.length > 1;
+    
+    ns.phase = 'scanning'; 
+    log(`🔍 ${shouldMerge ? '合并' : '替换'}扫描: ${paths.length} 个路径`);
+    
     try {
       const r = await api.executeNode('trename', {
-        action: 'scan', paths: [ns.scanPath], include_hidden: ns.includeHidden,
+        action: 'scan', paths: paths, include_hidden: ns.includeHidden,
         exclude_exts: ns.excludeExts, max_lines: ns.maxLines, compact: ns.useCompact
       }) as any;
       if (r.success && r.data) {
         const segs = r.data.segments || [];
-        if (merge && ns.segments.length > 0) {
+        if (shouldMerge && ns.segments.length > 0 && merge) {
+          // 仅在显式合并时追加
           ns.segments = [...ns.segments, ...segs];
           ns.stats.total += r.data.total_items || 0;
           ns.stats.pending += r.data.pending_count || 0;
@@ -143,7 +155,7 @@
         }
         if (segs.length > 0) ns.treeData = parseTree(segs[0]);
         ns.currentSegment = 0; ns.conflicts = []; ns.phase = 'ready';
-        log(`✅ ${r.data.total_items} 项, ${segs.length} 段`);
+        log(`✅ ${r.data.total_items} 项, ${segs.length} 段${paths.length > 1 ? ` (${paths.length} 路径)` : ''}`);
       } else { ns.phase = 'error'; log(`❌ ${r.message}`); }
     } catch (e) { ns.phase = 'error'; log(`❌ ${e}`); }
   }
@@ -273,8 +285,10 @@
 
 <!-- 路径输入区块 -->
 {#snippet pathBlock()}
+  {@const pathCount = parseMultiPaths(ns.scanPath).length}
+  {@const isMulti = pathCount > 1}
   <div class="flex cq-gap cq-mb">
-    <Input bind:value={ns.scanPath} placeholder="输入目录路径..." disabled={isRunning} class="flex-1 cq-input" />
+    <Input bind:value={ns.scanPath} placeholder={'输入路径... 支持 "路径1" "路径2" 格式'} disabled={isRunning} class="flex-1 cq-input" />
     <Button variant="outline" size="icon" class="cq-button-icon shrink-0" onclick={selectFolder} disabled={isRunning}>
       <FolderOpen class="cq-icon" />
     </Button>
@@ -282,9 +296,12 @@
       <Clipboard class="cq-icon" />
     </Button>
   </div>
+  {#if isMulti}
+    <div class="cq-text-sm text-muted-foreground mb-2">📁 检测到 {pathCount} 个路径，将自动合并扫描</div>
+  {/if}
   <div class="cq-wide-only-flex cq-gap">
     <Button variant="outline" class="flex-1 cq-button" onclick={() => handleScan(false)} disabled={isRunning}>
-      {#if isRunning && ns.phase === 'scanning'}<LoaderCircle class="cq-icon mr-2 animate-spin" />{:else}<RefreshCw class="cq-icon mr-2" />{/if}替换扫描
+      {#if isRunning && ns.phase === 'scanning'}<LoaderCircle class="cq-icon mr-2 animate-spin" />{:else}<RefreshCw class="cq-icon mr-2" />{/if}{isMulti ? '扫描' : '替换扫描'}
     </Button>
     <Button variant="outline" class="flex-1 cq-button" onclick={() => handleScan(true)} disabled={isRunning}>
       <Download class="cq-icon mr-2" />合并扫描

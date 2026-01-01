@@ -446,24 +446,38 @@
         {#if copied}<Check class="w-3 h-3 text-green-500" />{:else}<Copy class="w-3 h-3" />{/if}
       </Button>
     </div>
-    <div class="flex-1 overflow-y-auto bg-muted/30 cq-rounded cq-padding font-mono cq-text-sm space-y-0.5 mb-2" style="max-height: 80px;">
+    <div class="flex-1 overflow-y-auto bg-muted/30 cq-rounded cq-padding font-mono cq-text-sm space-y-0.5">
       {#if ns.logs.length > 0}
-        {#each ns.logs.slice(-8) as logItem}<div class="text-muted-foreground break-all">{logItem}</div>{/each}
+        {#each ns.logs.slice(-15) as logItem}<div class="text-muted-foreground break-all">{logItem}</div>{/each}
       {:else}
         <div class="text-muted-foreground text-center py-2">暂无日志</div>
       {/if}
     </div>
-    <div class="flex items-center gap-2 mb-1 shrink-0"><Undo2 class="cq-icon" /><span class="cq-text font-semibold">操作历史</span></div>
+  </div>
+{/snippet}
+
+<!-- 操作历史区块 -->
+{#snippet historyBlock()}
+  <div class="h-full flex flex-col">
+    <div class="flex items-center gap-2 mb-1 shrink-0">
+      <Undo2 class="cq-icon" />
+      <span class="cq-text font-semibold">操作历史</span>
+    </div>
     <div class="flex-1 overflow-y-auto">
       {#if ns.operationHistory.length > 0}
         {#each ns.operationHistory as op}
           <div class="flex items-center justify-between cq-padding bg-muted/30 cq-rounded mb-1 cq-text-sm">
             <span>{op.time} - {op.count}项</span>
-            {#if op.canUndo}<Button variant="ghost" size="sm" class="h-5 px-2 cq-text-sm" onclick={() => handleUndo(op.id)}>撤销</Button>
-            {:else}<span class="text-muted-foreground">已撤销</span>{/if}
+            {#if op.canUndo}
+              <Button variant="ghost" size="sm" class="h-5 px-2 cq-text-sm" onclick={() => handleUndo(op.id)}>撤销</Button>
+            {:else}
+              <span class="text-muted-foreground">已撤销</span>
+            {/if}
           </div>
         {/each}
-      {:else}<div class="cq-text-sm text-muted-foreground text-center py-2">暂无记录</div>{/if}
+      {:else}
+        <div class="cq-text-sm text-muted-foreground text-center py-2">暂无记录</div>
+      {/if}
     </div>
   </div>
 {/snippet}
@@ -478,6 +492,7 @@
   {:else if blockId === 'options'}{@render optionsBlock()}
   {:else if blockId === 'tree'}{@render treeBlock()}
   {:else if blockId === 'log'}{@render logBlock()}
+  {:else if blockId === 'history'}{@render historyBlock()}
   {/if}
 {/snippet}
 

@@ -28,6 +28,7 @@ class TrenameInput(AdapterInput):
     paths: List[str] = Field(default_factory=list, description="要扫描的目录路径列表")
     include_hidden: bool = Field(default=False, description="包含隐藏文件")
     exclude_exts: str = Field(default=".json,.txt,.html,.htm,.md,.log", description="排除的扩展名")
+    exclude_patterns: str = Field(default="", description="排除模式，逗号分隔。预设: processed, numbered")
     max_lines: int = Field(default=1000, description="分段行数")
     compact: bool = Field(default=True, description="紧凑格式（推荐）")
     # import/rename 参数
@@ -150,9 +151,15 @@ class TrenameAdapter(BaseAdapter):
                     if ext.strip()
                 }
             
+            # 解析排除模式
+            exclude_patterns = []
+            if input_data.exclude_patterns:
+                exclude_patterns = [p.strip() for p in input_data.exclude_patterns.split(",") if p.strip()]
+            
             scanner = FileScanner(
                 ignore_hidden=not input_data.include_hidden,
                 exclude_exts=exclude_exts,
+                exclude_patterns=exclude_patterns,
             )
             
             # 扫描所有目录

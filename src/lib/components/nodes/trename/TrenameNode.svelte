@@ -46,6 +46,7 @@
     scanPath: string;
     includeHidden: boolean;
     excludeExts: string;
+    excludePatterns: string;
     maxLines: number;
     useCompact: boolean;
     basePath: string;
@@ -66,6 +67,7 @@
     scanPath: configPath || '',
     includeHidden: false,
     excludeExts: DEFAULT_EXCLUDE_EXTS,
+    excludePatterns: '',
     maxLines: 1000,
     useCompact: true,
     basePath: '',
@@ -138,7 +140,8 @@
     try {
       const r = await api.executeNode('trename', {
         action: 'scan', paths: paths, include_hidden: ns.includeHidden,
-        exclude_exts: ns.excludeExts, max_lines: ns.maxLines, compact: ns.useCompact
+        exclude_exts: ns.excludeExts, exclude_patterns: ns.excludePatterns,
+        max_lines: ns.maxLines, compact: ns.useCompact
       }) as any;
       if (r.success && r.data) {
         const segs = r.data.segments || [];
@@ -434,6 +437,50 @@
   </div>
 {/snippet}
 
+<!-- 排除模式区块 -->
+{#snippet excludeBlock()}
+  <div class="flex flex-col cq-gap h-full">
+    <div class="cq-text font-semibold mb-1">排除模式</div>
+    <div class="flex flex-wrap cq-gap cq-text mb-2">
+      <Button 
+        variant={ns.excludePatterns.includes('processed') ? 'default' : 'outline'} 
+        size="sm" 
+        class="cq-button-sm"
+        onclick={() => {
+          if (ns.excludePatterns.includes('processed')) {
+            ns.excludePatterns = ns.excludePatterns.replace(/,?processed/g, '').replace(/^,/, '');
+          } else {
+            ns.excludePatterns = ns.excludePatterns ? ns.excludePatterns + ',processed' : 'processed';
+          }
+        }}
+      >
+        已处理 (xx·xx)
+      </Button>
+      <Button 
+        variant={ns.excludePatterns.includes('numbered') ? 'default' : 'outline'} 
+        size="sm" 
+        class="cq-button-sm"
+        onclick={() => {
+          if (ns.excludePatterns.includes('numbered')) {
+            ns.excludePatterns = ns.excludePatterns.replace(/,?numbered/g, '').replace(/^,/, '');
+          } else {
+            ns.excludePatterns = ns.excludePatterns ? ns.excludePatterns + ',numbered' : 'numbered';
+          }
+        }}
+      >
+        已编号 (123.)
+      </Button>
+    </div>
+    <label class="flex items-center gap-1 cq-text">
+      <span class="text-muted-foreground whitespace-nowrap">自定义:</span>
+      <Input bind:value={ns.excludePatterns} class="cq-input flex-1" placeholder="processed,numbered 或正则" />
+    </label>
+    <div class="cq-text-sm text-muted-foreground mt-1">
+      预设: processed=已处理格式, numbered=编号格式
+    </div>
+  </div>
+{/snippet}
+
 <!-- 文件树区块 -->
 {#snippet treeBlock()}
   <div class="h-full flex flex-col overflow-hidden">
@@ -507,6 +554,7 @@
   {:else if blockId === 'stats'}{@render statsBlock()}
   {:else if blockId === 'importExport'}{@render importExportBlock()}
   {:else if blockId === 'options'}{@render optionsBlock()}
+  {:else if blockId === 'exclude'}{@render excludeBlock()}
   {:else if blockId === 'tree'}{@render treeBlock()}
   {:else if blockId === 'log'}{@render logBlock()}
   {:else if blockId === 'history'}{@render historyBlock()}

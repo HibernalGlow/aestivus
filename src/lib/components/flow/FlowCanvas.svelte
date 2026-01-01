@@ -49,7 +49,7 @@
     if (!data) return;
 
     try {
-      const { type, label } = JSON.parse(data);
+      const { type, label, nodeId: providedNodeId } = JSON.parse(data);
 
       // 获取容器的边界
       const bounds = containerRef?.getBoundingClientRect();
@@ -61,8 +61,11 @@
         y: event.clientY - bounds.top
       };
 
+      // 使用传入的 nodeId 或生成新的
+      const nodeId = providedNodeId || `node-${nodeIdCounter++}-${Date.now()}`;
+
       const node = {
-        id: `node-${nodeIdCounter++}-${Date.now()}`,
+        id: nodeId,
         type,
         position,
         data: { label, status: 'idle' as const }

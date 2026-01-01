@@ -6,6 +6,7 @@
   import { NODE_DEFINITIONS } from '$lib/stores/nodeRegistry';
   import { flowStore } from '$lib/stores';
   import { fullscreenNodeStore } from '$lib/stores/fullscreenNode.svelte';
+  import { dockStore } from '$lib/stores/dockStore.svelte';
   import {
     Clipboard, Folder, FileInput, Package, Search,
     FolderSync, FileText, Video, Terminal, GripVertical, Download, Upload,
@@ -198,11 +199,18 @@
   // 原生拖拽：开始
   function handleDragStart(e: DragEvent, folderId: string, item: NodeItem) {
     if (!e.dataTransfer) return;
-    // 设置数据供画布使用
-    e.dataTransfer.setData('application/json', JSON.stringify({ type: item.type, label: item.label }));
+    // 创建节点并获取 ID（用于 Dock 拖拽）
+    const nodeId = `node-${nodeIdCounter++}-${Date.now()}`;
+    // 设置数据供画布和 Dock 使用
+    e.dataTransfer.setData('application/json', JSON.stringify({ 
+      type: item.type, 
+      label: item.label,
+      nodeId,
+      icon: item.icon
+    }));
     e.dataTransfer.setData('text/plain', `sort:${folderId}:${item.id}`);
     e.dataTransfer.effectAllowed = 'copyMove';
-    dragState = { folderId, itemId: item.id, overItemId: null };
+    dragState = { folderId, itemId: item.id, overItemId: null, overFolderId: null };
   }
 
   // 原生拖拽：经过（支持跨文件夹）

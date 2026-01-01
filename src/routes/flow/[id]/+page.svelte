@@ -10,8 +10,10 @@
   import LogViewer from '$lib/components/execution/LogViewer.svelte';
   import { themeStore } from '$lib/stores/theme.svelte';
   import { fullscreenNodeStore } from '$lib/stores/fullscreenNode.svelte';
+  import { dockStore } from '$lib/stores/dockStore.svelte';
   import { getNodeTypes } from '$lib/stores/nodeRegistry';
   import { sidebarStore } from '$lib/stores/sidebar.svelte';
+  import { Dock } from '$lib/components/ui/dock';
 
   const flowId = $derived(page.params.id);
   
@@ -63,8 +65,16 @@
   function handleKeyDown(e: KeyboardEvent) {
     if (e.key === 'Escape' && $fullscreenNodeStore.isOpen) {
       fullscreenNodeStore.close();
+      dockStore.deactivate();
     }
   }
+  
+  // 同步 fullscreenNodeStore 和 dockStore
+  $effect(() => {
+    if (!$fullscreenNodeStore.isOpen && $dockStore.activeItemId) {
+      dockStore.deactivate();
+    }
+  });
 </script>
 
 <svelte:window onkeydown={handleKeyDown} />
@@ -99,6 +109,9 @@
       <LogViewer />
     </div>
   {/if}
+
+  <!-- 浮动 Dock 栏 -->
+  <Dock />
 
 </div>
 

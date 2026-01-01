@@ -40,12 +40,12 @@
     mouseX.set(Infinity);
   }
 
-  // 点击图标 - 全屏显示
+  // 点击图标 - 全屏显示（复用 fullscreenNodeStore）
   function handleItemClick(item: DockItem) {
-    if ($dockStore.activeItemId === item.nodeId) {
+    if ($fullscreenNodeStore.isOpen && $fullscreenNodeStore.nodeId === item.nodeId) {
       // 已激活则关闭
-      dockStore.deactivate();
       fullscreenNodeStore.close();
+      dockStore.deactivate();
     } else {
       // 激活并全屏显示
       dockStore.activateItem(item.nodeId);

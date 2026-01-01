@@ -69,10 +69,18 @@
     }
   }
   
-  // 同步 fullscreenNodeStore 和 dockStore
+  // 监听 fullscreenNodeStore 变化，同步 dockStore 状态
   $effect(() => {
-    if (!$fullscreenNodeStore.isOpen && $dockStore.activeItemId) {
-      dockStore.deactivate();
+    if (!$fullscreenNodeStore.isOpen) {
+      // 全屏关闭时，同步关闭 dock 激活状态
+      if ($dockStore.activeItemId) {
+        dockStore.deactivate();
+      }
+    } else if ($fullscreenNodeStore.nodeId) {
+      // 全屏打开时，如果是 dock 中的项目则激活
+      if (dockStore.hasItem($fullscreenNodeStore.nodeId)) {
+        dockStore.activateItem($fullscreenNodeStore.nodeId);
+      }
     }
   });
 </script>

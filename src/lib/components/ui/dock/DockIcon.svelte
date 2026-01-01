@@ -3,7 +3,6 @@
    * DockIcon - Dock 栏单个图标组件
    * 支持 macOS 风格的悬停放大动画
    */
-  import { Motion, useSpring } from 'svelte-motion';
   import type { MotionValue } from 'svelte-motion';
   import * as Icons from '@lucide/svelte';
 
@@ -27,19 +26,23 @@
 
   let ref: HTMLDivElement;
 
-  // 图标大小配置
-  const BASE_SIZE = 48;
-  const MAX_SIZE = 72;
-  const DISTANCE = 150;
+  // 图标大小配置（缩小尺寸）
+  const BASE_SIZE = 36;
+  const MAX_SIZE = 48;
+  const DISTANCE = 100;
 
-  // 计算与鼠标的距离
-  let distance = $state(DISTANCE);
+  // 计算与鼠标的距离，初始设为无穷大确保显示基础尺寸
+  let distance = $state(Infinity);
 
   $effect(() => {
     if (!ref) return;
     
     // 使用 subscribe 方法订阅 MotionValue 变化
     const unsubscribe = mouseX.subscribe((latestX: number) => {
+      if (!isFinite(latestX)) {
+        distance = Infinity;
+        return;
+      }
       const rect = ref.getBoundingClientRect();
       const centerX = rect.left + rect.width / 2;
       distance = Math.abs(latestX - centerX);
@@ -50,28 +53,22 @@
 
   // 基于距离计算大小
   let size = $derived.by(() => {
-    if (distance > DISTANCE) return BASE_SIZE;
+    if (!isFinite(distance) || distance > DISTANCE) return BASE_SIZE;
     const scale = 1 - (distance / DISTANCE);
     return BASE_SIZE + (MAX_SIZE - BASE_SIZE) * scale;
   });
 
-  // 使用 spring 动画
-  let springSize = useSpring(BASE_SIZE, { stiffness: 300, damping: 25 });
-  
-  $effect(() => {
-    springSize.set(size);
-  });
+  // 直接使用计算的尺寸，不用 spring 避免初始化问题
+  let displaySize = $derived(size);
 
   // 获取图标组件
   let IconComponent = $derived((Icons as any)[icon] || Icons.Box);
 </script>
 
-<Motion let:motion>
-  <div
-    bind:this={ref}
-    use:motion
-    class="relative flex items-center justify-center cursor-pointer group"
-    style="width: {$springSize}px; height: {$springSize}px;"
+<div
+  bind:this={ref}
+  class="relative flex items-center justify-center cursor-pointer group"
+  style="width: {displaySize}px; height: {displaySize}px; transition: width 0.15s, height 0.15s;"
     onclick={onclick}
     oncontextmenu={oncontextmenu}
     role="button"
@@ -107,4 +104,3 @@
       {label}
     </div>
   </div>
-</Motion>

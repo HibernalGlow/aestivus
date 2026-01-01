@@ -245,12 +245,13 @@
 </script>
 
 <!-- 全屏时原节点变淡，页面级别会渲染全屏版本 -->
+<!-- 边框颜色变化功能已关闭，统一使用默认边框 -->
 <div
   class="{shouldFade
     ? 'opacity-30 pointer-events-none'
     : ''} {isFullscreenRender
     ? 'h-full flex flex-col'
-    : 'h-full flex flex-col min-w-[160px]'} border rounded-lg shadow-lg overflow-hidden {borderClass}"
+    : 'h-full flex flex-col min-w-[160px]'} border rounded-lg shadow-lg overflow-hidden border-border"
   style={nodeStyle}
 >
   <!-- 标题栏 -->

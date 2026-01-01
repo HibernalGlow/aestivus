@@ -423,7 +423,7 @@ export const NODE_REGISTRY: NodeRegistryEntry[] = [
   {
     type: 'weibospider',
     category: 'tool',
-    label: '微博爬虫',
+    label: 'weibospider',
     description: '爬取微博用户数据，支持下载图片和视频',
     icon: 'Users',
     inputs: ['any'],

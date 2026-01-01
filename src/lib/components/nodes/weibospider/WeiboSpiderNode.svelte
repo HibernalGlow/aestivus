@@ -642,7 +642,7 @@
 
   <NodeWrapper 
     nodeId={id} 
-    title="微博爬虫" 
+    title="weibospider" 
     icon={Users} 
     status={ns.phase} 
     {borderClass} 

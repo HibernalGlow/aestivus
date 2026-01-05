@@ -24,6 +24,8 @@ class BandiaInput(BaseModel):
     delete_after: bool = Field(default=True, description="解压成功后删除源文件")
     use_trash: bool = Field(default=True, description="使用回收站而非物理删除")
     overwrite_mode: str = Field(default="overwrite", description="冲突处理: overwrite/skip/rename")
+    parallel: bool = Field(default=False, description="是否启用并行解压")
+    workers: Optional[int] = Field(default=None, description="并行工作线程数")
 
 
 class BandiaOutput(AdapterOutput):
@@ -96,7 +98,9 @@ class BandiaAdapter(BaseAdapter):
             delete=input_data.delete_after,
             use_trash=input_data.use_trash,
             overwrite_mode=input_data.overwrite_mode,
-            callback=callback
+            callback=callback,
+            parallel=input_data.parallel,
+            workers=input_data.workers
         )
         
         # 转换结果
@@ -105,6 +109,7 @@ class BandiaAdapter(BaseAdapter):
                 'path': str(r.path),
                 'success': r.success,
                 'duration': r.duration,
+                'file_size': r.file_size,
                 'error': r.error
             }
             for r in result.results

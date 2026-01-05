@@ -4,28 +4,41 @@
    * 使用 Bandizip 批量解压压缩包
    * 支持 WebSocket 实时进度和日志更新
    */
-  import { Handle, Position, NodeResizer } from '@xyflow/svelte';
-  import { Button } from '$lib/components/ui/button';
-  import { Checkbox } from '$lib/components/ui/checkbox';
-  import { Progress } from '$lib/components/ui/progress';
-  import { Textarea } from '$lib/components/ui/textarea';
+  import { Handle, Position, NodeResizer } from "@xyflow/svelte";
+  import { Button } from "$lib/components/ui/button";
+  import { Checkbox } from "$lib/components/ui/checkbox";
+  import { Progress } from "$lib/components/ui/progress";
+  import { Textarea } from "$lib/components/ui/textarea";
 
-  import { NodeLayoutRenderer } from '$lib/components/blocks';
-  import { BANDIA_DEFAULT_GRID_LAYOUT } from './blocks';
-  import { api } from '$lib/services/api';
-  import { getNodeState, saveNodeState } from '$lib/stores/nodeState.svelte';
-  import { getWsBaseUrl } from '$lib/stores/backend';
-  import NodeWrapper from '../NodeWrapper.svelte';
-  import { 
-    Play, LoaderCircle, Clipboard, FileArchive,
-    CircleCheck, CircleX, Trash2, Copy, Check, RotateCcw, FolderOpen
-  } from '@lucide/svelte';
+  import { NodeLayoutRenderer } from "$lib/components/blocks";
+  import { BANDIA_DEFAULT_GRID_LAYOUT } from "./blocks";
+  import { api } from "$lib/services/api";
+  import { getNodeState, saveNodeState } from "$lib/stores/nodeState.svelte";
+  import { getWsBaseUrl } from "$lib/stores/backend";
+  import NodeWrapper from "../NodeWrapper.svelte";
+  import {
+    Play,
+    LoaderCircle,
+    Clipboard,
+    FileArchive,
+    CircleCheck,
+    CircleX,
+    Trash2,
+    Copy,
+    Check,
+    RotateCcw,
+    FolderOpen,
+  } from "@lucide/svelte";
 
   interface Props {
     id: string;
     data?: {
-      config?: { paths?: string[]; delete_after?: boolean; use_trash?: boolean };
-      status?: 'idle' | 'running' | 'completed' | 'error';
+      config?: {
+        paths?: string[];
+        delete_after?: boolean;
+        use_trash?: boolean;
+      };
+      status?: "idle" | "running" | "completed" | "error";
       hasInputConnection?: boolean;
       logs?: string[];
       label?: string;
@@ -35,7 +48,7 @@
 
   let { id, data = {}, isFullscreenRender = false }: Props = $props();
 
-  type Phase = 'idle' | 'extracting' | 'completed' | 'error';
+  type Phase = "idle" | "extracting" | "completed" | "error";
 
   interface BandiaState {
     phase: Phase;
@@ -44,6 +57,10 @@
     archivePaths: string[];
     deleteAfter: boolean;
     useTrash: boolean;
+    parallel: boolean; // 启用并行解压
+    workers: number; // 并行工作线程数
+    activeIndices: number[]; // 正在解压的文件索引列表 (用于并行高亮)
+    completedIndices: number[]; // 已解压完成的文件索引列表
     extractResult: ExtractResult | null;
     logs: string[];
     hasInputConnection: boolean;
@@ -54,6 +71,7 @@
     extracted: number;
     failed: number;
     total: number;
+    totalSize?: number; // 总文件大小 (bytes)
   }
 
   const nodeId = $derived(id);
@@ -65,15 +83,19 @@
 
   // 获取共享的响应式状态（节点模式和全屏模式共用同一个对象）
   const ns = getNodeState<BandiaState>(id, {
-    phase: 'idle',
+    phase: "idle",
     progress: 0,
-    progressText: '',
+    progressText: "",
     archivePaths: [],
     deleteAfter: configDeleteAfter,
     useTrash: configUseTrash,
+    parallel: false,
+    workers: 2,
+    activeIndices: [],
+    completedIndices: [],
     extractResult: null,
     logs: [],
-    hasInputConnection: false
+    hasInputConnection: false,
   });
 
   // 纯 UI 状态（不需要同步）
@@ -82,107 +104,174 @@
   // 当前正在处理的文件索引（用于实时显示）
   let currentFileIndex = $state(-1);
   // 文本区域的本地编辑状态
-  let pathsText = $state(ns.archivePaths.length > 0 ? ns.archivePaths.join('\n') : configPaths.join('\n'));
-  
+  let pathsText = $state(
+    ns.archivePaths.length > 0
+      ? ns.archivePaths.join("\n")
+      : configPaths.join("\n")
+  );
+
   // 持续同步外部数据
   $effect(() => {
     ns.logs = [...dataLogs];
     ns.hasInputConnection = dataHasInputConnection;
   });
 
-  let canExtract = $derived(ns.phase === 'idle' && (pathsText.trim() !== '' || ns.hasInputConnection));
-  let isRunning = $derived(ns.phase === 'extracting');
-  let borderClass = $derived({
-    idle: 'border-border', extracting: 'border-primary shadow-sm',
-    completed: 'border-primary/50', error: 'border-destructive/50'
-  }[ns.phase]);
+  let canExtract = $derived(
+    ns.phase === "idle" && (pathsText.trim() !== "" || ns.hasInputConnection)
+  );
+  let isRunning = $derived(ns.phase === "extracting");
+  let borderClass = $derived(
+    {
+      idle: "border-border",
+      extracting: "border-primary shadow-sm",
+      completed: "border-primary/50",
+      error: "border-destructive/50",
+    }[ns.phase]
+  );
 
-  function log(msg: string) { ns.logs = [...ns.logs.slice(-30), msg]; }
+  function log(msg: string) {
+    ns.logs = [...ns.logs.slice(-30), msg];
+  }
 
   function parsePaths(text: string): string[] {
-    return text.split('\n')
-      .map(line => line.trim().replace(/^["']|["']$/g, ''))
-      .filter(line => line && /\.(zip|7z|rar|tar|gz|bz2|xz)$/i.test(line));
+    return text
+      .split("\n")
+      .map((line) => line.trim().replace(/^["']|["']$/g, ""))
+      .filter((line) => line && /\.(zip|7z|rar|tar|gz|bz2|xz)$/i.test(line));
   }
 
   async function pasteFromClipboard() {
     try {
-      const { platform } = await import('$lib/api/platform');
+      const { platform } = await import("$lib/api/platform");
       const text = await platform.readClipboard();
       if (text) {
         pathsText = text.trim();
         log(`📋 从剪贴板读取 ${parsePaths(pathsText).length} 个压缩包路径`);
       }
-    } catch (e) { log(`❌ 读取剪贴板失败: ${e}`); }
+    } catch (e) {
+      log(`❌ 读取剪贴板失败: ${e}`);
+    }
   }
 
   async function selectFiles() {
     try {
-      const { platform } = await import('$lib/api/platform');
-      const selected = await platform.openFileDialog('选择压缩包', [
-        { name: '压缩文件', extensions: ['zip', '7z', 'rar', 'tar', 'gz', 'bz2', 'xz'] }
+      const { platform } = await import("$lib/api/platform");
+      const selected = await platform.openFileDialog("选择压缩包", [
+        {
+          name: "压缩文件",
+          extensions: ["zip", "7z", "rar", "tar", "gz", "bz2", "xz"],
+        },
       ]);
       if (selected) {
-        pathsText = pathsText ? pathsText + '\n' + selected : selected;
+        pathsText = pathsText ? pathsText + "\n" + selected : selected;
         log(`📁 选择了文件: ${selected.split(/[/\\]/).pop()}`);
       }
-    } catch (e) { log(`❌ 选择文件失败: ${e}`); }
+    } catch (e) {
+      log(`❌ 选择文件失败: ${e}`);
+    }
   }
 
   async function handleExtract() {
     if (!canExtract) return;
     const paths = parsePaths(pathsText);
-    if (paths.length === 0) { log('❌ 没有有效的压缩包路径'); return; }
+    if (paths.length === 0) {
+      log("❌ 没有有效的压缩包路径");
+      return;
+    }
     ns.archivePaths = paths;
-    ns.phase = 'extracting'; ns.progress = 0; ns.progressText = '正在解压...'; ns.extractResult = null;
+    ns.phase = "extracting";
+    ns.progress = 0;
+    ns.progressText = "正在解压...";
+    ns.extractResult = null;
     currentFileIndex = -1;
     log(`📦 开始解压 ${paths.length} 个压缩包...`);
-    
+
     // 生成任务 ID 用于 WebSocket 连接
     const taskId = `bandia-${nodeId}-${Date.now()}`;
     let ws: WebSocket | null = null;
-    
+
     try {
       // 建立 WebSocket 连接接收实时进度和日志
       const wsUrl = `${getWsBaseUrl()}/v1/ws/tasks/${taskId}`;
       ws = new WebSocket(wsUrl);
-      
+
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
-          if (msg.type === 'progress') {
+          if (msg.type === "progress") {
             ns.progress = msg.progress;
-            // 解析消息格式: "解压 X/Y|filename" 或 "解压 X/Y"
-            const parts = msg.message.split('|');
-            const progressMsg = parts[0];
-            const currentFileName = parts[1] || '';
-            
-            ns.progressText = progressMsg;
-            
-            // 从进度消息中解析当前文件索引
-            const match = progressMsg.match(/解压 (\d+)\/(\d+)/);
+
+            // 进度消息格式改进: "解压 X/Y|filename" 或 "STARTED:idx|filename"
+            const parts = msg.message.split("|");
+            const statusMsg = parts[0];
+            const currentFileName = parts[1] || "";
+
+            if (statusMsg.startsWith("STARTED:")) {
+              const startIdx = parseInt(statusMsg.split(":")[1]);
+              if (!ns.activeIndices.includes(startIdx)) {
+                ns.activeIndices = [...ns.activeIndices, startIdx];
+              }
+              if (currentFileName) log(`🔄 正在解压: ${currentFileName}`);
+              return;
+            }
+
+            if (statusMsg.startsWith("FINISHED:")) {
+              const finishedIdx = parseInt(statusMsg.split(":")[1]);
+              ns.activeIndices = ns.activeIndices.filter(
+                (i) => i !== finishedIdx
+              );
+              if (!ns.completedIndices.includes(finishedIdx)) {
+                ns.completedIndices = [...ns.completedIndices, finishedIdx];
+              }
+              // 处理进度文本
+              const pMsg = parts[1] || "";
+              if (pMsg) ns.progressText = pMsg;
+              return;
+            }
+
+            ns.progressText = statusMsg;
+
+            // 从进度消息中解析已处理数量: "解压 2/10"
+            const match = statusMsg.match(/解压 (\d+)\/(\d+)/);
             if (match) {
-              currentFileIndex = parseInt(match[1]) - 1;
+              const processedCount = parseInt(match[1]);
+              currentFileIndex = processedCount - 1;
+
+              // 维护并行活动列表：如果 X 完成了，从活动列表中移除对应项是不太准确的
+              // 这里的策略是：X 完成的消息到达时，我们可以根据文件名或索引清理
+              // 实际上后端目前完成时发送的是 "解压 X/Y"，我们可以认为 [0...X-1] 已经完成
+              ns.activeIndices = ns.activeIndices.filter(
+                (i) => i >= processedCount
+              );
+
+              if (
+                processedCount > 0 &&
+                !ns.completedIndices.includes(currentFileIndex)
+              ) {
+                ns.completedIndices = [
+                  ...ns.completedIndices,
+                  currentFileIndex,
+                ];
+              }
             }
-            
-            // 如果有文件名，更新显示
+
             if (currentFileName) {
-              ns.progressText = `${progressMsg}: ${currentFileName}`;
+              ns.progressText = `${statusMsg}: ${currentFileName}`;
             }
-          } else if (msg.type === 'log') {
+          } else if (msg.type === "log") {
             log(msg.message);
-          } else if (msg.type === 'status' && msg.status === 'error') {
+          } else if (msg.type === "status" && msg.status === "error") {
             log(`❌ ${msg.message}`);
           }
         } catch (e) {
-          console.error('解析 WebSocket 消息失败:', e);
+          console.error("解析 WebSocket 消息失败:", e);
         }
       };
-      
+
       ws.onerror = (e) => {
-        console.error('WebSocket 错误:', e);
+        console.error("WebSocket 错误:", e);
       };
-      
+
       // 等待 WebSocket 连接建立
       await new Promise<void>((resolve) => {
         const timeout = setTimeout(() => {
@@ -197,29 +286,44 @@
           resolve(); // 连接失败也继续执行
         };
       });
-      
-      // 发送执行请求，带上 task_id
-      const response = await api.executeNode('bandia', {
-        action: 'extract', paths, delete_after: ns.deleteAfter, use_trash: ns.useTrash
-      }, { taskId, nodeId }) as any;
-      
+
+      // 发送执行请求，带上 task_id 和 parallel 参数
+      const response = (await api.executeNode(
+        "bandia",
+        {
+          action: "extract",
+          paths,
+          delete_after: ns.deleteAfter,
+          use_trash: ns.useTrash,
+          parallel: ns.parallel,
+          workers: ns.workers,
+        },
+        { taskId, nodeId }
+      )) as any;
+
       if (response.success) {
-        ns.phase = 'completed'; ns.progress = 100; ns.progressText = '解压完成';
+        ns.phase = "completed";
+        ns.progress = 100;
+        ns.progressText = "解压完成";
         ns.extractResult = {
           success: true,
           extracted: response.data?.extracted_count ?? 0,
           failed: response.data?.failed_count ?? 0,
-          total: response.data?.total_count ?? paths.length
+          total: response.data?.total_count ?? paths.length,
         };
         log(`✅ ${response.message}`);
-        log(`📊 成功: ${ns.extractResult.extracted}, 失败: ${ns.extractResult.failed}`);
-      } else { 
-        ns.phase = 'error'; ns.progress = 0; 
-        log(`❌ 解压失败: ${response.message}`); 
+        log(
+          `📊 成功: ${ns.extractResult.extracted}, 失败: ${ns.extractResult.failed}`
+        );
+      } else {
+        ns.phase = "error";
+        ns.progress = 0;
+        log(`❌ 解压失败: ${response.message}`);
       }
-    } catch (error) { 
-      ns.phase = 'error'; ns.progress = 0; 
-      log(`❌ 解压失败: ${error}`); 
+    } catch (error) {
+      ns.phase = "error";
+      ns.progress = 0;
+      log(`❌ 解压失败: ${error}`);
     } finally {
       // 关闭 WebSocket 连接
       if (ws && ws.readyState === WebSocket.OPEN) {
@@ -229,34 +333,67 @@
   }
 
   function handleReset() {
-    ns.phase = 'idle'; ns.progress = 0; ns.progressText = '';
-    ns.extractResult = null; ns.archivePaths = []; ns.logs = [];
+    ns.phase = "idle";
+    ns.progress = 0;
+    ns.progressText = "";
+    ns.extractResult = null;
+    ns.archivePaths = [];
+    ns.logs = [];
     currentFileIndex = -1;
+    ns.activeIndices = [];
+    ns.completedIndices = [];
   }
 
   async function copyLogs() {
-    try { await navigator.clipboard.writeText(ns.logs.join('\n')); copied = true; setTimeout(() => { copied = false; }, 2000); }
-    catch (e) { console.error('复制失败:', e); }
+    try {
+      await navigator.clipboard.writeText(ns.logs.join("\n"));
+      copied = true;
+      setTimeout(() => {
+        copied = false;
+      }, 2000);
+    } catch (e) {
+      console.error("复制失败:", e);
+    }
   }
 </script>
-
 
 {#snippet sourceBlock()}
   {#if !ns.hasInputConnection}
     <div class="flex flex-col cq-gap h-full">
       <div class="flex cq-gap">
-        <Button variant="outline" size="sm" class="cq-button-sm flex-1" onclick={pasteFromClipboard} disabled={isRunning}>
+        <Button
+          variant="outline"
+          size="sm"
+          class="cq-button-sm flex-1"
+          onclick={pasteFromClipboard}
+          disabled={isRunning}
+        >
           <Clipboard class="cq-icon mr-1" />剪贴板
         </Button>
-        <Button variant="outline" size="sm" class="cq-button-sm flex-1" onclick={selectFiles} disabled={isRunning}>
+        <Button
+          variant="outline"
+          size="sm"
+          class="cq-button-sm flex-1"
+          onclick={selectFiles}
+          disabled={isRunning}
+        >
           <FolderOpen class="cq-icon mr-1" />选择文件
         </Button>
       </div>
-      <Textarea bind:value={pathsText} placeholder="粘贴压缩包路径（每行一个）&#10;支持: .zip .7z .rar .tar .gz .bz2 .xz" disabled={isRunning} class="flex-1 cq-text font-mono resize-none min-h-[60px]" />
-      <div class="cq-text-sm text-muted-foreground">已识别 {parsePaths(pathsText).length} 个压缩包</div>
+      <Textarea
+        bind:value={pathsText}
+        placeholder="粘贴压缩包路径（每行一个）&#10;支持: .zip .7z .rar .tar .gz .bz2 .xz"
+        disabled={isRunning}
+        class="flex-1 cq-text font-mono resize-none min-h-[60px]"
+      />
+      <div class="cq-text-sm text-muted-foreground">
+        已识别 {parsePaths(pathsText).length} 个压缩包
+      </div>
     </div>
   {:else}
-    <div class="text-muted-foreground cq-padding bg-muted cq-rounded flex items-center cq-gap cq-text">
+    <div
+      class="text-muted-foreground cq-padding bg-muted cq-rounded flex items-center cq-gap cq-text"
+    >
       <span>←</span><span>输入来自上游节点</span>
     </div>
   {/if}
@@ -271,8 +408,28 @@
     {#if ns.deleteAfter}
       <label class="flex items-center cq-gap cursor-pointer ml-4">
         <Checkbox bind:checked={ns.useTrash} disabled={isRunning} />
-        <span class="cq-text flex items-center gap-1"><Trash2 class="cq-icon text-orange-500" />移入回收站</span>
+        <span class="cq-text flex items-center gap-1"
+          ><Trash2 class="cq-icon text-orange-500" />移入回收站</span
+        >
       </label>
+    {/if}
+    <div class="border-t border-border my-1"></div>
+    <label class="flex items-center cq-gap cursor-pointer">
+      <Checkbox bind:checked={ns.parallel} disabled={isRunning} />
+      <span class="cq-text">启用并行解压 ⚡</span>
+    </label>
+    {#if ns.parallel}
+      <div class="flex items-center cq-gap ml-4">
+        <span class="cq-text-sm text-muted-foreground">工作线程:</span>
+        <input
+          type="number"
+          min="1"
+          max="8"
+          bind:value={ns.workers}
+          disabled={isRunning}
+          class="w-14 h-6 px-1 cq-text-sm border rounded bg-background text-center"
+        />
+      </div>
     {/if}
   </div>
 {/snippet}
@@ -285,7 +442,9 @@
           {#if ns.extractResult.success && ns.extractResult.failed === 0}
             <CircleCheck class="cq-icon text-green-500 shrink-0" />
             <span class="cq-text text-green-600 font-medium">完成</span>
-            <span class="cq-text-sm text-muted-foreground ml-auto">{ns.extractResult.extracted} 成功</span>
+            <span class="cq-text-sm text-muted-foreground ml-auto"
+              >{ns.extractResult.extracted} 成功</span
+            >
           {:else if ns.extractResult.success}
             <CircleCheck class="cq-icon text-yellow-500 shrink-0" />
             <span class="cq-text text-yellow-600 font-medium">部分完成</span>
@@ -295,7 +454,9 @@
           {/if}
         {:else if isRunning}
           <LoaderCircle class="cq-icon text-primary animate-spin shrink-0" />
-          <div class="flex-1"><Progress value={ns.progress} class="h-1.5" /></div>
+          <div class="flex-1">
+            <Progress value={ns.progress} class="h-1.5" />
+          </div>
           <span class="cq-text-sm text-muted-foreground">{ns.progress}%</span>
         {:else}
           <FileArchive class="cq-icon text-muted-foreground/50 shrink-0" />
@@ -303,25 +464,37 @@
         {/if}
       </div>
       {#if isRunning && ns.progressText}
-        <div class="cq-text-sm text-muted-foreground truncate" title={ns.progressText}>
+        <div
+          class="cq-text-sm text-muted-foreground truncate"
+          title={ns.progressText}
+        >
           {ns.progressText}
         </div>
       {/if}
     </div>
-    {#if ns.phase === 'idle' || ns.phase === 'error'}
-      <Button class="w-full cq-button flex-1" onclick={handleExtract} disabled={!canExtract}>
+    {#if ns.phase === "idle" || ns.phase === "error"}
+      <Button
+        class="w-full cq-button flex-1"
+        onclick={handleExtract}
+        disabled={!canExtract}
+      >
         <Play class="cq-icon mr-1" /><span>开始解压</span>
       </Button>
-    {:else if ns.phase === 'extracting'}
+    {:else if ns.phase === "extracting"}
       <Button class="w-full cq-button flex-1" disabled>
         <LoaderCircle class="cq-icon mr-1 animate-spin" /><span>解压中</span>
       </Button>
-    {:else if ns.phase === 'completed'}
+    {:else if ns.phase === "completed"}
       <Button class="w-full cq-button flex-1" onclick={handleReset}>
         <Play class="cq-icon mr-1" /><span>重新开始</span>
       </Button>
     {/if}
-    <Button variant="ghost" class="w-full cq-button-sm" onclick={handleReset} disabled={isRunning}>
+    <Button
+      variant="ghost"
+      class="w-full cq-button-sm"
+      onclick={handleReset}
+      disabled={isRunning}
+    >
       <RotateCcw class="cq-icon mr-1" />重置
     </Button>
   </div>
@@ -330,7 +503,9 @@
 {#snippet filesBlock()}
   <div class="h-full flex flex-col overflow-hidden">
     <div class="flex items-center justify-between mb-1 shrink-0">
-      <span class="cq-text font-semibold flex items-center gap-1"><FileArchive class="cq-icon text-blue-500" />待解压文件</span>
+      <span class="cq-text font-semibold flex items-center gap-1"
+        ><FileArchive class="cq-icon text-blue-500" />待解压文件</span
+      >
       <span class="cq-text-sm text-muted-foreground">
         {#if isRunning && currentFileIndex >= 0}
           {currentFileIndex + 1}/{ns.archivePaths.length}
@@ -341,18 +516,24 @@
     </div>
     <div class="flex-1 overflow-y-auto cq-padding bg-muted/30 cq-rounded">
       {#if ns.archivePaths.length > 0 || parsePaths(pathsText).length > 0}
-        {#each (ns.archivePaths.length > 0 ? ns.archivePaths : parsePaths(pathsText)) as filePath, idx}
-          <div 
-            class="cq-text-sm truncate py-0.5 flex items-center gap-1"
-            class:text-muted-foreground={!isRunning || idx > currentFileIndex}
-            class:text-primary={isRunning && idx === currentFileIndex}
-            class:text-green-600={ns.phase === 'completed' || (isRunning && idx < currentFileIndex)}
+        {#each ns.archivePaths.length > 0 ? ns.archivePaths : parsePaths(pathsText) as filePath, idx}
+          {@const isActive = ns.activeIndices.includes(idx)}
+          {@const isCompleted =
+            ns.phase === "completed" || ns.completedIndices.includes(idx)}
+          <div
+            class="cq-text-sm truncate py-0.5 flex items-center gap-1 transition-colors"
+            class:text-muted-foreground={!isRunning ||
+              (!isActive && !isCompleted)}
+            class:text-primary={isActive}
+            class:text-green-600={isCompleted}
             title={filePath}
           >
-            {#if ns.phase === 'completed' || (isRunning && idx < currentFileIndex)}
+            {#if isCompleted}
               <CircleCheck class="w-3 h-3 text-green-500 shrink-0" />
-            {:else if isRunning && idx === currentFileIndex}
-              <LoaderCircle class="w-3 h-3 text-primary animate-spin shrink-0" />
+            {:else if isActive}
+              <LoaderCircle
+                class="w-3 h-3 text-primary animate-spin shrink-0"
+              />
             {:else}
               <span class="w-3 h-3 shrink-0 text-center">{idx + 1}.</span>
             {/if}
@@ -360,7 +541,9 @@
           </div>
         {/each}
       {:else}
-        <div class="cq-text text-muted-foreground text-center py-3">暂无文件</div>
+        <div class="cq-text text-muted-foreground text-center py-3">
+          暂无文件
+        </div>
       {/if}
     </div>
   </div>
@@ -371,12 +554,20 @@
     <div class="flex items-center justify-between mb-1 shrink-0">
       <span class="cq-text font-semibold">日志</span>
       <Button variant="ghost" size="icon" class="h-5 w-5" onclick={copyLogs}>
-        {#if copied}<Check class="w-3 h-3 text-green-500" />{:else}<Copy class="w-3 h-3" />{/if}
+        {#if copied}<Check class="w-3 h-3 text-green-500" />{:else}<Copy
+            class="w-3 h-3"
+          />{/if}
       </Button>
     </div>
-    <div class="flex-1 overflow-y-auto bg-muted/30 cq-rounded cq-padding font-mono cq-text-sm space-y-0.5">
+    <div
+      class="flex-1 overflow-y-auto bg-muted/30 cq-rounded cq-padding font-mono cq-text-sm space-y-0.5"
+    >
       {#if ns.logs.length > 0}
-        {#each ns.logs.slice(-10) as logItem}<div class="text-muted-foreground break-all">{logItem}</div>{/each}
+        {#each ns.logs.slice(-10) as logItem}<div
+            class="text-muted-foreground break-all"
+          >
+            {logItem}
+          </div>{/each}
       {:else}
         <div class="text-muted-foreground text-center py-2">暂无日志</div>
       {/if}
@@ -385,41 +576,45 @@
 {/snippet}
 
 {#snippet renderBlockContent(blockId: string)}
-  {#if blockId === 'source'}{@render sourceBlock()}
-  {:else if blockId === 'options'}{@render optionsBlock()}
-  {:else if blockId === 'operation'}{@render operationBlock()}
-  {:else if blockId === 'files'}{@render filesBlock()}
-  {:else if blockId === 'log'}{@render logBlock()}
+  {#if blockId === "source"}{@render sourceBlock()}
+  {:else if blockId === "options"}{@render optionsBlock()}
+  {:else if blockId === "operation"}{@render operationBlock()}
+  {:else if blockId === "files"}{@render filesBlock()}
+  {:else if blockId === "log"}{@render logBlock()}
   {/if}
 {/snippet}
 
-<div class="h-full w-full flex flex-col overflow-hidden" style={!isFullscreenRender ? 'max-width: 400px;' : ''}>
+<div
+  class="h-full w-full flex flex-col overflow-hidden"
+  style={!isFullscreenRender ? "max-width: 400px;" : ""}
+>
   {#if !isFullscreenRender}
     <NodeResizer minWidth={280} minHeight={200} maxWidth={400} />
     <Handle type="target" position={Position.Left} class="bg-primary!" />
   {/if}
 
-  <NodeWrapper 
-    nodeId={nodeId} 
-    title="bandia" 
-    icon={FileArchive} 
-    status={ns.phase} 
-    {borderClass} 
-    isFullscreenRender={isFullscreenRender}
+  <NodeWrapper
+    {nodeId}
+    title="bandia"
+    icon={FileArchive}
+    status={ns.phase}
+    {borderClass}
+    {isFullscreenRender}
     onCompact={() => layoutRenderer?.compact()}
     onResetLayout={() => layoutRenderer?.resetLayout()}
-    nodeType="bandia" 
+    nodeType="bandia"
     currentLayout={layoutRenderer?.getCurrentLayout()}
     currentTabGroups={layoutRenderer?.getCurrentTabGroups()}
-    onApplyLayout={(layout, tabGroups) => layoutRenderer?.applyLayout(layout, tabGroups)}
+    onApplyLayout={(layout, tabGroups) =>
+      layoutRenderer?.applyLayout(layout, tabGroups)}
     canCreateTab={true}
     onCreateTab={(blockIds) => layoutRenderer?.createTab(blockIds)}
-    layoutMode={isFullscreenRender ? 'fullscreen' : 'normal'}
+    layoutMode={isFullscreenRender ? "fullscreen" : "normal"}
   >
     {#snippet children()}
       <NodeLayoutRenderer
         bind:this={layoutRenderer}
-        nodeId={nodeId}
+        {nodeId}
         nodeType="bandia"
         isFullscreen={isFullscreenRender}
         defaultFullscreenLayout={BANDIA_DEFAULT_GRID_LAYOUT}

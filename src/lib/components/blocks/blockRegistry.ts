@@ -87,6 +87,7 @@ import { FORMATV_BLOCKS, FORMATV_DEFAULT_GRID_LAYOUT } from '$lib/components/nod
 import { BANDIA_BLOCKS, BANDIA_DEFAULT_GRID_LAYOUT } from '$lib/components/nodes/bandia/blocks';
 import { DISSOLVEF_BLOCKS, DISSOLVEF_DEFAULT_GRID_LAYOUT } from '$lib/components/nodes/dissolvef/blocks';
 import { SLEEPT_BLOCKS, SLEEPT_DEFAULT_GRID_LAYOUT } from '$lib/components/nodes/sleept/blocks';
+import { CLEANF_BLOCKS, CLEANF_DEFAULT_GRID_LAYOUT } from '$lib/components/nodes/cleanf/blocks';
 import { OWITHU_BLOCKS, OWITHU_DEFAULT_GRID_LAYOUT } from '$lib/components/nodes/owithu/blocks';
 import { LINKU_BLOCKS, LINKU_DEFAULT_GRID_LAYOUT } from '$lib/components/nodes/linku/blocks';
 import { SCOOLP_BLOCKS, SCOOLP_DEFAULT_GRID_LAYOUT } from '$lib/components/nodes/scoolp/blocks';
@@ -112,6 +113,7 @@ export { FORMATV_BLOCKS, FORMATV_DEFAULT_GRID_LAYOUT };
 export { BANDIA_BLOCKS, BANDIA_DEFAULT_GRID_LAYOUT };
 export { DISSOLVEF_BLOCKS, DISSOLVEF_DEFAULT_GRID_LAYOUT };
 export { SLEEPT_BLOCKS, SLEEPT_DEFAULT_GRID_LAYOUT };
+export { CLEANF_BLOCKS, CLEANF_DEFAULT_GRID_LAYOUT };
 export { OWITHU_BLOCKS, OWITHU_DEFAULT_GRID_LAYOUT };
 export { LINKU_BLOCKS, LINKU_DEFAULT_GRID_LAYOUT };
 export { SCOOLP_BLOCKS, SCOOLP_DEFAULT_GRID_LAYOUT };
@@ -138,6 +140,7 @@ export const nodeBlockRegistry: Record<string, NodeBlockLayout> = {
   bandia: { nodeType: 'bandia', blocks: BANDIA_BLOCKS, defaultGridLayout: BANDIA_DEFAULT_GRID_LAYOUT },
   dissolvef: { nodeType: 'dissolvef', blocks: DISSOLVEF_BLOCKS, defaultGridLayout: DISSOLVEF_DEFAULT_GRID_LAYOUT },
   sleept: { nodeType: 'sleept', blocks: SLEEPT_BLOCKS, defaultGridLayout: SLEEPT_DEFAULT_GRID_LAYOUT },
+  cleanf: { nodeType: 'cleanf', blocks: CLEANF_BLOCKS, defaultGridLayout: CLEANF_DEFAULT_GRID_LAYOUT },
   owithu: { nodeType: 'owithu', blocks: OWITHU_BLOCKS, defaultGridLayout: OWITHU_DEFAULT_GRID_LAYOUT },
   linku: { nodeType: 'linku', blocks: LINKU_BLOCKS, defaultGridLayout: LINKU_DEFAULT_GRID_LAYOUT },
   scoolp: { nodeType: 'scoolp', blocks: SCOOLP_BLOCKS, defaultGridLayout: SCOOLP_DEFAULT_GRID_LAYOUT },

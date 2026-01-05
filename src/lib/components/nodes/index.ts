@@ -12,6 +12,8 @@ export { CrashuNode } from './crashu';
 export { TrenameNode } from './trename';
 export { EngineVNode } from './enginev';
 export { MigrateFNode } from './migratefnode';
+export { DissolvefNode } from './dissolvef';
+export { CleanfNode } from './cleanf';
 export { FormatVNode } from './formatv';
 export { FindzNode } from './findz';
 export { BandiaNode } from './bandia';

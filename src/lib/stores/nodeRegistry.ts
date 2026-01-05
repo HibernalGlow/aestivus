@@ -23,6 +23,7 @@ import { FormatVNode } from '$lib/components/nodes/formatv';
 import { FindzNode } from '$lib/components/nodes/findz';
 import { BandiaNode } from '$lib/components/nodes/bandia';
 import { DissolvefNode } from '$lib/components/nodes/dissolvef';
+import { CleanfNode } from '$lib/components/nodes/cleanf';
 import { SleeptNode } from '$lib/components/nodes/sleept';
 import { OwithuNode } from '$lib/components/nodes/owithu';
 import { LinkuNode } from '$lib/components/nodes/linku';
@@ -236,6 +237,21 @@ export const NODE_REGISTRY: NodeRegistryEntry[] = [
       media: { type: 'boolean', label: '单媒体文件夹', default: true },
       archive: { type: 'boolean', label: '单压缩包文件夹', default: true },
       direct: { type: 'boolean', label: '直接解散', default: false },
+      preview: { type: 'boolean', label: '预览模式', default: false }
+    }
+  },
+  {
+    type: 'cleanf',
+    category: 'tool',
+    label: 'cleanf',
+    description: '文件清理：删除空文件夹、备份文件、临时文件夹等',
+    icon: 'Brush',
+    inputs: ['path'],
+    outputs: ['path'],
+    component: CleanfNode,
+    configSchema: {
+      paths: { type: 'string', label: '路径列表', required: false },
+      presets: { type: 'array', label: '清理预设', default: ['empty_folders', 'backup_files'] },
       preview: { type: 'boolean', label: '预览模式', default: false }
     }
   },

@@ -9,6 +9,7 @@ bandia 适配器
 - 支持 WebSocket 实时进度推送（带节流，减少性能影响）
 """
 
+import asyncio
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
@@ -24,7 +25,7 @@ class BandiaInput(BaseModel):
     delete_after: bool = Field(default=True, description="解压成功后删除源文件")
     use_trash: bool = Field(default=True, description="使用回收站而非物理删除")
     overwrite_mode: str = Field(default="overwrite", description="冲突处理: overwrite/skip/rename")
-    parallel: bool = Field(default=False, description="是否启用并行解压")
+    parallel: bool = Field(default=True, description="是否启用并行解压")
     workers: Optional[int] = Field(default=None, description="并行工作线程数")
 
 
@@ -66,9 +67,18 @@ class BandiaAdapter(BaseAdapter):
         on_log: Optional[Callable[[str], None]] = None
     ) -> BandiaOutput:
         """执行批量解压"""
+        import queue
+        import threading
+        from concurrent.futures import ThreadPoolExecutor
+        
         module = self.get_module()
         extract_batch = module["extract_batch"]
         ProgressCallback = module["ProgressCallback"]
+        
+        if input_data.action == "stop":
+            from bandia.main import _shutdown_event
+            _shutdown_event.set()
+            return BandiaOutput(success=True, message="已发送停止信号")
         
         # 转换路径
         paths = [Path(p.strip().strip('"\'')) for p in input_data.paths if p.strip()]
@@ -79,29 +89,85 @@ class BandiaAdapter(BaseAdapter):
                 message="没有有效的压缩包路径"
             )
         
-        # 创建进度回调（带节流，150ms 间隔）
+        # 使用队列在线程间传递进度消息
+        progress_queue: queue.Queue = queue.Queue()
+        result_holder = [None]  # 用于存储结果
+        
         def progress_wrapper(value: int, message: str, current_file: str = ""):
-            if on_progress:
-                # 格式: "message|current_file" 供前端解析
-                full_msg = f"{message}|{current_file}" if current_file else message
-                on_progress(value, full_msg)
+            full_msg = f"{message}|{current_file}" if current_file else message
+            progress_queue.put(("progress", value, full_msg))
+        
+        def log_wrapper(message: str):
+            progress_queue.put(("log", message))
         
         callback = ProgressCallback(
             on_progress=progress_wrapper,
-            on_log=on_log,
-            throttle_interval=0.15  # 150ms 节流，减少对解压速度的影响
+            on_log=log_wrapper,
+            throttle_interval=0.1  # 更快的更新频率
         )
         
-        # 执行解压
-        result = extract_batch(
-            paths=paths,
-            delete=input_data.delete_after,
-            use_trash=input_data.use_trash,
-            overwrite_mode=input_data.overwrite_mode,
-            callback=callback,
-            parallel=input_data.parallel,
-            workers=input_data.workers
-        )
+        def run_extraction():
+            try:
+                result_holder[0] = extract_batch(
+                    paths=paths,
+                    delete=input_data.delete_after,
+                    use_trash=input_data.use_trash,
+                    overwrite_mode=input_data.overwrite_mode,
+                    callback=callback,
+                    parallel=input_data.parallel,
+                    workers=input_data.workers
+                )
+            except Exception as e:
+                result_holder[0] = e
+            finally:
+                progress_queue.put(("done", None))
+        
+        # 启动后台线程执行解压
+        executor = ThreadPoolExecutor(max_workers=1)
+        future = executor.submit(run_extraction)
+        
+        # 主协程轮询队列，发送进度消息
+        is_done = False
+        while not is_done:
+            # 批量拉取当前所有进度消息并处理
+            while True:
+                try:
+                    msg = progress_queue.get_nowait()
+                    msg_type = msg[0]
+                    
+                    if msg_type == "done":
+                        is_done = True
+                        break
+                    elif msg_type == "progress":
+                        _, value, text = msg
+                        if on_progress:
+                            on_progress(value, text)
+                    elif msg_type == "log":
+                        _, log_text = msg
+                        if on_log:
+                            on_log(log_text)
+                except queue.Empty:
+                    break
+            
+            if not is_done:
+                # 让出控制权，同时给予队列填充时间
+                await asyncio.sleep(0.05)
+        
+        executor.shutdown(wait=True)
+        
+        # 处理结果
+        result = result_holder[0]
+        if isinstance(result, Exception):
+            return BandiaOutput(
+                success=False,
+                message=f"解压异常: {result}"
+            )
+        
+        if result is None:
+            return BandiaOutput(
+                success=False,
+                message="解压未返回结果"
+            )
         
         # 转换结果
         results = [

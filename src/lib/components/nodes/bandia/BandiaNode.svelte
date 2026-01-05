@@ -28,6 +28,7 @@
     Check,
     RotateCcw,
     FolderOpen,
+    Square,
   } from "@lucide/svelte";
 
   interface Props {
@@ -89,7 +90,7 @@
     archivePaths: [],
     deleteAfter: configDeleteAfter,
     useTrash: configUseTrash,
-    parallel: false,
+    parallel: true,
     workers: 2,
     activeIndices: [],
     completedIndices: [],
@@ -344,6 +345,17 @@
     ns.completedIndices = [];
   }
 
+  async function handleStop() {
+    log("⏹️ 用户请求停止解压");
+    try {
+      await api.executeNode("bandia", { action: "stop" }, { nodeId });
+    } catch (e) {
+      log(`❌ 发送停止指令失败: ${e}`);
+    }
+    ns.phase = "error";
+    ns.progressText = "已停止";
+  }
+
   async function copyLogs() {
     try {
       await navigator.clipboard.writeText(ns.logs.join("\n"));
@@ -481,8 +493,11 @@
         <Play class="cq-icon mr-1" /><span>开始解压</span>
       </Button>
     {:else if ns.phase === "extracting"}
-      <Button class="w-full cq-button flex-1" disabled>
-        <LoaderCircle class="cq-icon mr-1 animate-spin" /><span>解压中</span>
+      <Button
+        class="w-full cq-button flex-1 bg-destructive hover:bg-destructive/90"
+        onclick={handleStop}
+      >
+        <Square class="cq-icon mr-1" /><span>停止</span>
       </Button>
     {:else if ns.phase === "completed"}
       <Button class="w-full cq-button flex-1" onclick={handleReset}>

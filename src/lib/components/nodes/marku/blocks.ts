@@ -7,24 +7,28 @@ import type { GridItem } from '$lib/components/ui/dashboard-grid';
 import { FolderOpen, Settings, Play, FileText, ScrollText, Code, Clipboard, List, Diff, Undo2 } from '@lucide/svelte';
 
 export const MARKU_BLOCKS: BlockDefinition[] = [
-  { id: 'source', title: '输入来源', icon: FolderOpen, iconClass: 'text-primary', colSpan: 2, visibleInNormal: true, visibleInFullscreen: true },
-  { id: 'module', title: '处理模块', icon: List, iconClass: 'text-purple-500', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
-  { id: 'config', title: 'Step 配置', icon: Settings, iconClass: 'text-orange-500', colSpan: 2, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'source', title: '输入', icon: FolderOpen, iconClass: 'text-primary', colSpan: 2, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'module', title: '模块', icon: List, iconClass: 'text-purple-500', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'config', title: '配置', icon: Settings, iconClass: 'text-orange-500', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
   { id: 'options', title: '选项', icon: Settings, iconClass: 'text-blue-500', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
   { id: 'operation', title: '操作', icon: Play, iconClass: 'text-green-500', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
-  { id: 'diff', title: 'Diff 预览', icon: Diff, iconClass: 'text-yellow-500', colSpan: 2, fullHeight: true, collapsible: true, visibleInNormal: true, visibleInFullscreen: true },
-  { id: 'log', title: '日志', icon: ScrollText, iconClass: 'text-muted-foreground', colSpan: 2, collapsible: true, visibleInNormal: true, visibleInFullscreen: true }
+  { id: 'output', title: '输出', icon: FileText, iconClass: 'text-cyan-500', colSpan: 2, fullHeight: true, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'diff', title: 'Diff 对比', icon: Diff, iconClass: 'text-yellow-500', colSpan: 2, fullHeight: true, collapsible: true, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'log', title: '日志', icon: ScrollText, iconClass: 'text-muted-foreground', colSpan: 2, collapsible: true, visibleInNormal: false, visibleInFullscreen: true }
 ];
 
 export const MARKU_DEFAULT_GRID_LAYOUT: GridItem[] = [
-  { id: 'source', x: 0, y: 0, w: 2, h: 2, minW: 1, minH: 1 },
+  { id: 'source', x: 0, y: 0, w: 2, h: 3, minW: 1, minH: 2 },
   { id: 'module', x: 2, y: 0, w: 1, h: 2, minW: 1, minH: 1 },
-  { id: 'config', x: 0, y: 2, w: 2, h: 3, minW: 1, minH: 2 },
-  { id: 'options', x: 2, y: 2, w: 1, h: 2, minW: 1, minH: 1 },
+  { id: 'config', x: 2, y: 2, w: 1, h: 2, minW: 1, minH: 1 },
+  { id: 'options', x: 3, y: 2, w: 1, h: 2, minW: 1, minH: 1 },
   { id: 'operation', x: 3, y: 0, w: 1, h: 2, minW: 1, minH: 1 },
-  { id: 'diff', x: 0, y: 5, w: 2, h: 3, minW: 1, minH: 2 },
-  { id: 'log', x: 2, y: 4, w: 2, h: 4, minW: 1, minH: 1 }
+  { id: 'output', x: 0, y: 3, w: 2, h: 3, minW: 1, minH: 2 },
+  { id: 'diff', x: 2, y: 4, w: 2, h: 3, minW: 1, minH: 2 },
+  { id: 'log', x: 0, y: 6, w: 2, h: 2, minW: 1, minH: 1 }
 ];
+
+
 
 // 可用的 marku 模块列表
 export const MARKU_MODULES = [
@@ -49,6 +53,50 @@ export const MARKT_CONFIG_FIELDS = [
   { key: 'start_level', label: '起始标题级别 (l2h)', type: 'number', default: 1 },
   { key: 'max_level', label: '最大级别 (l2h)', type: 'number', default: 6 }
 ];
+
+// consecutive_header 模块配置
+export const CONSECUTIVE_HEADER_CONFIG_FIELDS = [
+  { key: 'min_consecutive_headers', label: '最小连续数', type: 'number', default: 2 },
+  { key: 'processing_mode', label: '处理模式', type: 'select', options: ['remove', 'merge', 'keep_first'], default: 'remove' }
+];
+
+// content_dedup 模块配置
+export const CONTENT_DEDUP_CONFIG_FIELDS = [
+  { key: 'dedup_titles', label: '标题去重', type: 'boolean', default: true },
+  { key: 'dedup_images', label: '图片去重', type: 'boolean', default: true },
+  { key: 'dedup_paragraphs', label: '段落去重', type: 'boolean', default: false }
+];
+
+// content_replace 模块配置
+export const CONTENT_REPLACE_CONFIG_FIELDS = [
+  { key: 'patterns', label: '替换规则 (JSON)', type: 'textarea', default: '[]' }
+];
+
+// title_convert 模块配置
+export const TITLE_CONVERT_CONFIG_FIELDS = [
+  { key: 'normalize', label: '标准化格式', type: 'boolean', default: true },
+  { key: 'levels', label: '级别偏移', type: 'number', default: 0 }
+];
+
+// image_path_replacer 模块配置
+export const IMAGE_PATH_CONFIG_FIELDS = [
+  { key: 'relative_pattern', label: '相对路径模式', type: 'string', default: '' },
+  { key: 'base_url', label: '基础 URL', type: 'string', default: '' }
+];
+
+// 模块配置字段映射
+export const MODULE_CONFIG_FIELDS: Record<string, typeof MARKT_CONFIG_FIELDS> = {
+  'markt': MARKT_CONFIG_FIELDS,
+  'consecutive_header': CONSECUTIVE_HEADER_CONFIG_FIELDS,
+  'content_dedup': CONTENT_DEDUP_CONFIG_FIELDS,
+  'content_replace': CONTENT_REPLACE_CONFIG_FIELDS,
+  'title_convert': TITLE_CONVERT_CONFIG_FIELDS,
+  'image_path_replacer': IMAGE_PATH_CONFIG_FIELDS,
+  // 下列模块无需额外配置
+  'html2sy_table': [],
+  'single_orderlist_remover': [],
+  't2list': []
+};
 
 // 通用配置字段（所有模块共享）
 export const COMMON_CONFIG_FIELDS = [

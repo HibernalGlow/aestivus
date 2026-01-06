@@ -37,6 +37,7 @@ import { MoveaNode } from '$lib/components/nodes/movea';
 import { SeriexNode } from '$lib/components/nodes/seriex';
 import { LataNode } from '$lib/components/nodes/lata';
 import { WeiboSpiderNode } from '$lib/components/nodes/weibospider';
+import { MarkuNode } from '$lib/components/nodes/marku';
 
 /** 节点注册项 - 包含定义和组件 */
 export interface NodeRegistryEntry extends NodeDefinition {
@@ -450,6 +451,23 @@ export const NODE_REGISTRY: NodeRegistryEntry[] = [
       filter_original: { type: 'boolean', label: '只爬原创', default: true },
       pic_download: { type: 'boolean', label: '下载图片', default: true },
       video_download: { type: 'boolean', label: '下载视频', default: true }
+    }
+  },
+  {
+    type: 'marku',
+    category: 'tool',
+    label: 'marku',
+    description: 'Markdown 模块化处理：标题转换、去重、表格转换等',
+    icon: 'FileCode',
+    inputs: ['path', 'text'],
+    outputs: ['path', 'text'],
+    component: MarkuNode,
+    configSchema: {
+      paths: { type: 'string', label: '路径列表', required: false },
+      module: { type: 'string', label: '处理模块', default: 'markt' },
+      step_config: { type: 'object', label: '模块配置', default: {} },
+      recursive: { type: 'boolean', label: '递归处理', default: false },
+      dry_run: { type: 'boolean', label: '预览模式', default: true }
     }
   },
 

@@ -38,6 +38,8 @@ _ADAPTER_REGISTRY: Dict[str, str] = {
     "lata": "adapters.lata_adapter.LataAdapter",
     # 微博爬虫
     "weibospider": "adapters.weibospider_adapter.WeiboSpiderAdapter",
+    # Markdown 处理工具箱
+    "marku": "adapters.marku_adapter.MarkuAdapter",
 }
 
 # 适配器实例缓存

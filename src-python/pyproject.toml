@@ -45,6 +45,8 @@ dev = [
 aestiv = "aestiv.cli:run_backend"
 # aestiva: 同时启动后端 + 前端开发服务器
 aestiva = "aestiv.cli:run_full"
+# anode: 快速启动单个 node
+anode = "aestiv.node_cli:main"
 
 [build-system]
 requires = ["setuptools>=61.0.0", "wheel"]

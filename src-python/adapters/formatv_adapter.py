@@ -204,6 +204,16 @@ class FormatVAdapter(BaseAdapter):
                     if count > 0:
                         on_log(f"  [{name}]: {count} 个")
             
+            # 转换前缀配置为可序列化格式
+            prefix_configs = [
+                {
+                    'name': p.get('name', ''),
+                    'prefix': p.get('prefix', ''),
+                    'description': p.get('description', '')
+                }
+                for p in prefixes
+            ]
+            
             return FormatVOutput(
                 success=True,
                 message=f"扫描完成: {total_normal} 普通, {total_nov} .nov",
@@ -220,7 +230,8 @@ class FormatVAdapter(BaseAdapter):
                     'normal_files': all_normal_files,
                     'nov_files': all_nov_files,
                     'prefixed_files': all_prefixed_files,
-                    'paths': paths
+                    'paths': paths,
+                    'prefixes': prefix_configs
                 }
             )
             

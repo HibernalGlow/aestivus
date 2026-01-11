@@ -3,18 +3,22 @@
  */
 import type { BlockDefinition } from '$lib/components/blocks/blockRegistry';
 import type { GridItem } from '$lib/components/ui/dashboard-grid';
-import { FolderOpen, Play, FolderTree, Copy } from '@lucide/svelte';
+import { FolderOpen, Play, FolderTree, Copy, AlertTriangle, Settings2 } from '@lucide/svelte';
 
 export const FORMATV_BLOCKS: BlockDefinition[] = [
   { id: 'path', title: '目标路径', icon: FolderOpen, iconClass: 'text-primary', colSpan: 2, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'config', title: '配置', icon: Settings2, iconClass: 'text-orange-500', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
   { id: 'operation', title: '操作', icon: Play, iconClass: 'text-green-500', colSpan: 1, visibleInNormal: true, visibleInFullscreen: true },
   { id: 'tree', title: '文件列表', icon: FolderTree, iconClass: 'text-blue-500', colSpan: 2, fullHeight: true, visibleInNormal: true, visibleInFullscreen: true },
+  { id: 'duplicates', title: '重复检测', icon: AlertTriangle, iconClass: 'text-yellow-500', colSpan: 2, fullHeight: true, visibleInNormal: false, visibleInFullscreen: true },
   { id: 'log', title: '日志', icon: Copy, iconClass: 'text-muted-foreground', colSpan: 2, collapsible: true, visibleInNormal: true, visibleInFullscreen: true }
 ];
 
 export const FORMATV_DEFAULT_GRID_LAYOUT: GridItem[] = [
   { id: 'path', x: 0, y: 0, w: 2, h: 2, minW: 1, minH: 1 },
-  { id: 'operation', x: 2, y: 0, w: 2, h: 3, minW: 1, minH: 2 },
-  { id: 'tree', x: 0, y: 2, w: 3, h: 5, minW: 1, minH: 2 },
-  { id: 'log', x: 3, y: 2, w: 1, h: 5, minW: 1, minH: 1 }
+  { id: 'config', x: 2, y: 0, w: 1, h: 2, minW: 1, minH: 1 },
+  { id: 'operation', x: 3, y: 0, w: 1, h: 3, minW: 1, minH: 2 },
+  { id: 'tree', x: 0, y: 2, w: 2, h: 5, minW: 1, minH: 2 },
+  { id: 'duplicates', x: 2, y: 2, w: 2, h: 4, minW: 1, minH: 2 },
+  { id: 'log', x: 2, y: 6, w: 2, h: 2, minW: 1, minH: 1 }
 ];

@@ -249,16 +249,34 @@ def run_recycleu_interactive(adapter):
                 print("\n⏹️  已停止")
 
 
-def run_node_web(node_name: str, port: int = 8019):
-    """以 Web 模式运行 node"""
+def run_node_web(node_name: str, port: int = 0, use_webview: bool = True):
+    """以 Web 模式运行 node
+    
+    Args:
+        node_name: node 名称
+        port: 后端 API 端口 (0 = 自动分配)
+        use_webview: 是否使用独立窗口 (pywebview)
+    """
+    import subprocess
+    import time
+    import socket
+    
     project_root = Path(__file__).parent.parent.parent
     src_python = project_root / "src-python"
     
-    # 构建 URL，直接打开 node 的全屏页面
-    url = f"http://localhost:1096/node/{node_name}"
+    def find_free_port():
+        """找一个空闲端口"""
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(('', 0))
+            return s.getsockname()[1]
+    
+    # 使用独立端口
+    backend_port = port if port > 0 else find_free_port()
+    frontend_port = find_free_port()
+    url = f"http://localhost:{frontend_port}/node/{node_name}"
     
     print(f"🚀 启动 {node_name} node...")
-    print(f"   后端: http://localhost:{port}")
+    print(f"   后端: http://localhost:{backend_port}")
     print(f"   前端: {url}")
     print()
     
@@ -275,25 +293,57 @@ def run_node_web(node_name: str, port: int = 8019):
     spec.loader.exec_module(main_module)
     app = main_module.app
     
-    # 在后台线程启动服务器
-    def run_server():
-        uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
+    # 在后台线程启动后端服务器
+    def run_backend():
+        uvicorn.run(app, host="127.0.0.1", port=backend_port, log_level="warning")
     
-    server_thread = threading.Thread(target=run_server, daemon=True)
-    server_thread.start()
+    backend_thread = threading.Thread(target=run_backend, daemon=True)
+    backend_thread.start()
     
-    # 等待服务器启动
-    import time
-    time.sleep(1)
+    # 启动前端开发服务器 (独立端口)
+    frontend_process = subprocess.Popen(
+        ["npx", "vite", "dev", "--port", str(frontend_port), "--host", "127.0.0.1"],
+        cwd=project_root,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        shell=True
+    )
     
-    # 打开浏览器
-    webbrowser.open(url)
+    print(f"⏳ 等待服务启动...")
+    time.sleep(3)  # 等待 vite 启动
     
-    print("按 Ctrl+C 退出...")
-    try:
-        server_thread.join()
-    except KeyboardInterrupt:
-        print("\n👋 再见!")
+    if use_webview:
+        try:
+            import webview
+            print(f"🪟 打开独立窗口...")
+            webview.create_window(
+                f"{node_name.title()} - Aestivus",
+                url,
+                width=900,
+                height=700,
+                resizable=True,
+            )
+            webview.start()
+        except ImportError:
+            print("⚠️  pywebview 未安装，使用浏览器模式")
+            print("   安装: pip install pywebview")
+            webbrowser.open(url)
+            print("按 Ctrl+C 退出...")
+            try:
+                backend_thread.join()
+            except KeyboardInterrupt:
+                pass
+    else:
+        webbrowser.open(url)
+        print("按 Ctrl+C 退出...")
+        try:
+            backend_thread.join()
+        except KeyboardInterrupt:
+            pass
+    
+    # 清理
+    frontend_process.terminate()
+    print("\n👋 再见!")
 
 
 def main():
@@ -302,7 +352,8 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 例子:
-  anode sleept          启动 sleept node (web 模式)
+  anode sleept          启动 sleept node (独立窗口模式)
+  anode sleept --browser  使用浏览器打开
   anode sleept --tui    启动 sleept node (TUI 模式)
   anode --list          列出所有可用的 nodes
         """
@@ -311,7 +362,8 @@ def main():
     parser.add_argument("node", nargs="?", help="要启动的 node 名称")
     parser.add_argument("--list", "-l", action="store_true", help="列出所有可用的 nodes")
     parser.add_argument("--tui", "-t", action="store_true", help="使用 TUI 模式 (无需浏览器)")
-    parser.add_argument("--port", "-p", type=int, default=8019, help="后端端口 (默认: 8019)")
+    parser.add_argument("--browser", "-b", action="store_true", help="使用浏览器而非独立窗口")
+    parser.add_argument("--port", "-p", type=int, default=0, help="后端端口 (默认: 自动分配)")
     
     args = parser.parse_args()
     
@@ -337,7 +389,8 @@ def main():
     if args.tui:
         run_node_tui(node_name)
     else:
-        run_node_web(node_name, args.port)
+        run_node_web(node_name, args.port, use_webview=not args.browser)
+
 
 
 if __name__ == "__main__":

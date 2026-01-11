@@ -254,7 +254,7 @@ def run_node_web(node_name: str, port: int = 0, use_webview: bool = True):
     
     Args:
         node_name: node 名称
-        port: 后端 API 端口 (0 = 自动分配)
+        port: 后端 API 端口 (0 = 自动分配，优先 8009)
         use_webview: 是否使用独立窗口 (pywebview)
     """
     import subprocess
@@ -264,14 +264,32 @@ def run_node_web(node_name: str, port: int = 0, use_webview: bool = True):
     project_root = Path(__file__).parent.parent.parent
     src_python = project_root / "src-python"
     
+    def is_port_free(p: int) -> bool:
+        """检查端口是否空闲"""
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.bind(('127.0.0.1', p))
+                return True
+        except OSError:
+            return False
+    
     def find_free_port():
         """找一个空闲端口"""
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind(('', 0))
             return s.getsockname()[1]
     
-    # 使用独立端口
-    backend_port = port if port > 0 else find_free_port()
+    # 后端端口：优先使用 8009（与前端默认配置匹配）
+    DEFAULT_BACKEND_PORT = 8009
+    if port > 0:
+        backend_port = port
+    elif is_port_free(DEFAULT_BACKEND_PORT):
+        backend_port = DEFAULT_BACKEND_PORT
+    else:
+        backend_port = find_free_port()
+        print(f"⚠️  端口 {DEFAULT_BACKEND_PORT} 已被占用，使用 {backend_port}")
+    
+    # 前端独立端口
     frontend_port = find_free_port()
     url = f"http://localhost:{frontend_port}/node/{node_name}"
     

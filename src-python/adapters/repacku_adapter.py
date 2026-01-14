@@ -272,13 +272,18 @@ class RepackuAdapter(BaseAdapter):
             # 创建压缩器
             compressor = ZipCompressor()
             
-            if on_progress:
-                on_progress(30, "正在执行压缩...")
+            # 创建进度回调包装器
+            def progress_wrapper(percent: int, msg: str):
+                if on_progress:
+                    # 从 10% 开始（读取配置占 10%），压缩占 90%
+                    adjusted_percent = 10 + int(percent * 0.9)
+                    on_progress(adjusted_percent, msg)
             
             # 执行压缩
             results = compressor.compress_from_json(
                 config_path,
-                delete_after_success=input_data.delete_after
+                delete_after_success=input_data.delete_after,
+                on_progress=progress_wrapper
             )
             
             # 统计结果

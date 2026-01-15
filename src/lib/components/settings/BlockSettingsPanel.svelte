@@ -12,8 +12,10 @@
     GripVertical,
     Check,
   } from "@lucide/svelte";
+  import * as icons from "@lucide/svelte";
   import { blockConfigStore } from "$lib/stores/blockConfig.svelte";
   import { nodeBlockRegistry } from "$lib/components/blocks/blockRegistry";
+  import { getNodeDefinition } from "$lib/stores/nodeRegistry";
   import { AnimatedDropdown } from "$lib/components/ui/animated-dropdown";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -26,14 +28,19 @@
   const nodeTypes = Object.keys(nodeBlockRegistry);
 
   // 下拉菜单项
-  const dropdownItems = nodeTypes.map((type) => ({
-    id: type,
-    name: nodeBlockRegistry[type].nodeType, //这里其实也可以用registry里的label如果有的话，目前registry里是nodeType
-    // 简单起见，这里复用 nodeType 作为 name，如果有更详细的 label 更好
-    // 实际项目中 nodeBlockRegistry key 和 value.nodeType 是一样的
-    icon: LayoutGrid, // 暂时统一图标，后续可以优化
-    badge: blockConfigStore.getNodeBlocks(type).length,
-  }));
+  const dropdownItems = nodeTypes.map((type) => {
+    const def = getNodeDefinition(type);
+    const iconName = def?.icon || "LayoutGrid";
+    // @ts-ignore - 动态获取图标
+    const IconComponent = icons[iconName as keyof typeof icons] || LayoutGrid;
+
+    return {
+      id: type,
+      name: def?.label || type,
+      icon: IconComponent,
+      badge: blockConfigStore.getNodeBlocks(type).length,
+    };
+  });
 
   let activeNode = $state<string>(nodeTypes[0] || "repacku");
   let searchQuery = $state("");

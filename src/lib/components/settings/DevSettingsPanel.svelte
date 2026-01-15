@@ -85,30 +85,32 @@
     <Card.Header>
       <Card.Title class="flex items-center gap-2">
         <Code class="h-5 w-5" />
-        Dev Mode
+        开发模式 (Dev Mode)
       </Card.Title>
       <Card.Description>
-        启用后，webview 将从本地开发服务器加载，而不是使用打包的静态文件。
+        启用后，应用将从开发服务器加载前端页面。此设置是<strong>持久化</strong
+        >的，下次启动将保持此状态。
         <br />
-        <span class="text-amber-500">注意：需要先启动开发服务器 (yarn dev)</span
+        <span class="text-amber-500 font-medium"
+          >注意：在开发模式下启动时，应用不会自动创建 Python 后端实例。</span
         >
       </Card.Description>
     </Card.Header>
     <Card.Content class="space-y-4">
       <div class="flex items-center justify-between">
         <div class="flex items-center gap-2">
-          <span class="text-sm font-medium">启用 Dev Mode</span>
+          <span class="text-sm font-medium">下次启动进入开发模式</span>
           {#if isDevMode}
             <span
               class="inline-flex items-center rounded-full bg-green-500/10 px-2 py-0.5 text-xs font-medium text-green-500"
             >
-              开发模式
+              开发模式 (HMR)
             </span>
           {:else}
             <span
               class="inline-flex items-center rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-500"
             >
-              正式模式
+              正式模式 (Bundled)
             </span>
           {/if}
         </div>

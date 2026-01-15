@@ -37,23 +37,12 @@ jobs:
           cache: "yarn"
           cache-dependency-path: yarn.lock
 
-      - name: Setup Python 3.12
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-        with:
-          enable-cache: true
-          cache-dependency-glob: "src-python/pyproject.toml"
-
-      - uses: dtolnay/rust-toolchain@stable
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Install Rust target
         run: rustup target add x86_64-pc-windows-msvc
 
-      # Rust 缓存 - 使用更稳定的 Swatinem/rust-cache
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
         with:
@@ -61,33 +50,8 @@ jobs:
           cache-on-failure: true
           shared-key: "release"
 
-      - name: Cache Nuitka
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/AppData/Local/Nuitka
-            ~/.cache/Nuitka
-            src-python/*.build
-          key: nuitka-windows-${{ hashFiles('src-python/pyproject.toml', 'src-python/**/*.py') }}
-          restore-keys: |
-            nuitka-windows-
-
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile
-
-      - name: Install Python dependencies
-        working-directory: src-python
-        run: uv sync --dev --frozen
-
-      - name: Build Python Sidecar
-        timeout-minutes: 30
-        working-directory: src-python
-        run: |
-          uv run python -m nuitka --onefile --standalone --output-filename=main --output-dir=../src-tauri/bin --windows-console-mode=attach --include-module=adapters --include-package=fastapi --include-package=starlette --include-package=pydantic --include-package=uvicorn --include-package=loguru --include-package=rich --include-package=typer --include-package=repacku --include-package=rawfilter --include-package=crashu --include-package=trename --nofollow-import-to=matplotlib --nofollow-import-to=numpy --nofollow-import-to=pandas --nofollow-import-to=scipy --nofollow-import-to=tkinter --nofollow-import-to=streamlit --nofollow-import-to=textual main.py
-
-      - name: Rename Sidecar (Windows)
-        run: |
-          Move-Item -Force src-tauri/bin/main.exe src-tauri/bin/main-x86_64-pc-windows-msvc.exe
 
       - name: Build Windows bundles
         timeout-minutes: 60

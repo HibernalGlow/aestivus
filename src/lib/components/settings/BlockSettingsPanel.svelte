@@ -210,7 +210,7 @@
     </div>
 
     <!-- 表格区域 -->
-    <div class="bg-card flex-1 overflow-hidden rounded-2xl border shadow-sm">
+    <div class="bg-card flex-1 overflow-auto rounded-2xl border shadow-sm">
       <Table.Root class="table-fixed">
         <Table.Header class="bg-muted/50 sticky top-0 z-10 backdrop-blur-md">
           <Table.Row>

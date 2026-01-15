@@ -60,10 +60,11 @@ jobs:
         run: yarn install --frozen-lockfile
 
       - name: Build Windows bundles
-        timeout-minutes: 60
-        shell: powershell
-        run: |
-          npx tauri build --bundles msi,nsis -- --profile ci-release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: --bundles msi,nsis -- --profile ci-release
 
       - name: Verify installer
         shell: powershell

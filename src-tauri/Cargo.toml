@@ -27,3 +27,23 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 dirs = "5"  # 获取系统目录路径
+
+# 本地 release：快速编译
+[profile.release]
+strip = true
+opt-level = 2         # 平衡优化，编译较快
+lto = "thin"          # 轻量 LTO，编译快
+codegen-units = 16    # 多单元并行编译
+panic = "abort"
+debug = false
+
+# CI 专用：极致性能优化（cargo build --profile ci-release）
+[profile.ci-release]
+inherits = "release"
+opt-level = 3         # 最高优化级别
+lto = "fat"           # 完整 LTO，跨 crate 深度优化
+codegen-units = 1     # 单代码生成单元，最大化优化
+overflow-checks = false  # 禁用溢出检查
+
+[profile.ci-release.build-override]
+opt-level = 3

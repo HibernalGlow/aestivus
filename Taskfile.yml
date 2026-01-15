@@ -1,0 +1,51 @@
+# https://taskfile.dev
+
+version: "3"
+
+vars:
+  PROJECT_DIR: .
+
+tasks:
+  default:
+    desc: Show current app versions
+    cmds:
+      - task: version:show
+
+  tdev:
+    desc: Start Tauri development server
+    cmds:
+      - yarn tauri dev
+
+  ydev:
+    desc: Start Vite development server only
+    cmds:
+      - yarn dev
+
+  uvi:
+    desc: Start Python backend with uvicorn (dev mode)
+    cmds:
+      - yarn dev:standalone
+
+  buildebug:
+    desc: Build Tauri app in debug mode
+    cmds:
+      - yarn tauri build --debug
+
+  build:
+    desc: Build Tauri app in release mode
+    cmds:
+      - yarn tauri build
+
+  version:show:
+    desc: Show versions in package.json, tauri.conf.json and Cargo.toml
+    dir: "{{.PROJECT_DIR}}"
+    cmds:
+      - node scripts/version.mjs show
+
+  v:
+    desc: Set version in package.json, tauri.conf.json and Cargo.toml
+    dir: "{{.PROJECT_DIR}}"
+    vars:
+      VERSION_ARG: "{{.CLI_ARGS | default .VERSION}}"
+    cmds:
+      - node scripts/version.mjs set {{.VERSION_ARG}}

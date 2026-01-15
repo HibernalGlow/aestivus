@@ -1,0 +1,131 @@
+name: release
+
+permissions:
+  contents: write
+
+on:
+  push:
+    tags:
+      - "[0-9]+.*"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  # 加速 Rust 编译
+  CARGO_NET_GIT_FETCH_WITH_CLI: true
+  CARGO_REGISTRIES_CRATES_IO_PROTOCOL: sparse
+  # 极致性能优化：启用 CPU 原生指令集优化
+  RUSTFLAGS: "-C target-cpu=x86-64-v3"
+
+jobs:
+  release:
+    runs-on: windows-latest
+    name: release (Windows)
+    timeout-minutes: 120
+
+    steps:
+      - name: Enable Git long paths (Windows)
+        run: git config --system core.longpaths true
+
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: "yarn"
+          cache-dependency-path: yarn.lock
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "src-python/pyproject.toml"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Rust target
+        run: rustup target add x86_64-pc-windows-msvc
+
+      # Rust 缓存 - 使用更稳定的 Swatinem/rust-cache
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+          cache-on-failure: true
+          shared-key: "release"
+
+      - name: Cache Nuitka
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/AppData/Local/Nuitka
+            ~/.cache/Nuitka
+            src-python/*.build
+          key: nuitka-windows-${{ hashFiles('src-python/pyproject.toml', 'src-python/**/*.py') }}
+          restore-keys: |
+            nuitka-windows-
+
+      - name: Install frontend dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Install Python dependencies
+        working-directory: src-python
+        run: uv sync --dev --frozen
+
+      - name: Build Python Sidecar
+        timeout-minutes: 30
+        working-directory: src-python
+        run: |
+          uv run python -m nuitka --onefile --standalone --output-filename=main --output-dir=../src-tauri/bin --windows-console-mode=attach --include-module=adapters --include-package=fastapi --include-package=starlette --include-package=pydantic --include-package=uvicorn --include-package=loguru --include-package=rich --include-package=typer --include-package=repacku --include-package=rawfilter --include-package=crashu --include-package=trename --nofollow-import-to=matplotlib --nofollow-import-to=numpy --nofollow-import-to=pandas --nofollow-import-to=scipy --nofollow-import-to=tkinter --nofollow-import-to=streamlit --nofollow-import-to=textual main.py
+
+      - name: Rename Sidecar (Windows)
+        run: |
+          Move-Item -Force src-tauri/bin/main.exe src-tauri/bin/main-x86_64-pc-windows-msvc.exe
+
+      - name: Build Windows bundles
+        timeout-minutes: 60
+        shell: powershell
+        run: |
+          npx tauri build --bundles msi,nsis -- --profile ci-release
+
+      - name: Verify installer
+        shell: powershell
+        run: |
+          $setup = Get-ChildItem ".\src-tauri\target\ci-release\bundle" -Recurse -Filter "*setup*.exe" | Select-Object -First 1
+
+          if ($null -ne $setup) {
+            Write-Host "Installer found at $($setup.FullName)"
+            exit 0
+          } else {
+            Write-Error "Installer not found in bundle directory"
+            Get-ChildItem ".\src-tauri\target\ci-release\bundle" -Recurse | Select-Object FullName
+            exit 1
+          }
+
+      - name: Verify portable exe
+        shell: powershell
+        run: |
+          $exePath = ".\src-tauri\target\ci-release\aestivus.exe"
+          if (!(Test-Path $exePath)) {
+            Write-Error "aestivus.exe not found at $exePath"
+            exit 1
+          }
+          Write-Host "Portable exe found at $exePath"
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            ./src-tauri/target/ci-release/bundle/**/*setup*.exe
+            ./src-tauri/target/ci-release/bundle/**/*.msi
+            ./src-tauri/target/ci-release/aestivus.exe

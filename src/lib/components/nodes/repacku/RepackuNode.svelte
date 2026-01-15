@@ -299,6 +299,26 @@
     try {
       const wsUrl = `${getWsBaseUrl()}/ws/tasks/${taskId}`;
       ws = new WebSocket(wsUrl);
+      
+      // 等待 WebSocket 连接成功（最多 2 秒）
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => {
+          log('⚠️ WebSocket 连接超时');
+          resolve();
+        }, 2000);
+        
+        ws!.onopen = () => {
+          clearTimeout(timeout);
+          log('✅ WebSocket 已连接');
+          resolve();
+        };
+        
+        ws!.onerror = () => {
+          clearTimeout(timeout);
+          log('⚠️ WebSocket 连接错误');
+          resolve();
+        };
+      });
 
       ws.onmessage = (event) => {
         try {
@@ -310,10 +330,6 @@
         } catch {
           /* ignore parse errors */
         }
-      };
-
-      ws.onerror = () => {
-        log("⚠️ WebSocket 连接错误");
       };
     } catch {
       /* WebSocket 连接失败，继续执行 */

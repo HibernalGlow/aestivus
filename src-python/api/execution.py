@@ -172,13 +172,16 @@ async def execute_node(request: NodeExecuteRequest):
             collected_logs.append(message)
             await send_log(task_id, message, node_id)
         
-        # 包装同步回调为异步
+        # 获取当前事件循环，用于从子线程安全调度
+        loop = asyncio.get_running_loop()
+        
+        # 包装同步回调为异步（线程安全）
         def sync_on_progress(progress: int, message: str):
-            asyncio.create_task(on_progress(progress, message))
+            asyncio.run_coroutine_threadsafe(on_progress(progress, message), loop)
         
         def sync_on_log(message: str):
             collected_logs.append(message)
-            asyncio.create_task(on_log(message))
+            asyncio.run_coroutine_threadsafe(on_log(message), loop)
         
         # 执行（带回调）
         result = await safe_execute(
@@ -279,12 +282,13 @@ async def execute_flow(request: FlowExecuteRequest):
             input_class = adapter.input_schema
             input_data = input_class(**config)
             
-            # 创建进度和日志回调
+            # 创建进度和日志回调（线程安全）
+            loop = asyncio.get_running_loop()
             def sync_on_progress(progress: int, message: str):
-                asyncio.create_task(send_progress(task_id, progress, message, node_id))
+                asyncio.run_coroutine_threadsafe(send_progress(task_id, progress, message, node_id), loop)
             
             def sync_on_log(message: str):
-                asyncio.create_task(send_log(task_id, message, node_id))
+                asyncio.run_coroutine_threadsafe(send_log(task_id, message, node_id), loop)
             
             # 执行（带回调）
             result = await safe_execute(

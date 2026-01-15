@@ -7,8 +7,31 @@ use std::path::PathBuf;
 // 非 Windows 平台需要 Stdio
 #[cfg(not(target_os = "windows"))]
 use std::process::Stdio;
-use tauri::{Emitter, Manager, RunEvent};
+use tauri::{Emitter, Manager, RunEvent, Url, WebviewUrl};
 use serde::{Deserialize, Serialize};
+
+// ============== Dev Mode 状态 ==============
+
+/// Dev Mode 配置
+#[derive(Debug, Clone)]
+pub struct DevModeState {
+    /// 是否处于 Dev 模式（使用开发服务器）
+    pub is_dev_mode: bool,
+    /// Dev 服务器 URL
+    pub dev_url: String,
+    /// 默认的 bundled URL (tauri://localhost)
+    pub bundled_url: String,
+}
+
+impl Default for DevModeState {
+    fn default() -> Self {
+        Self {
+            is_dev_mode: false,
+            dev_url: "http://localhost:1096".to_string(),
+            bundled_url: "tauri://localhost".to_string(),
+        }
+    }
+}
 
 // Windows 专用：创建新控制台窗口
 #[cfg(target_os = "windows")]
@@ -566,6 +589,71 @@ fn start_sidecar(app_handle: tauri::AppHandle) -> Result<String, String> {
     start_python(app_handle)
 }
 
+// ============== Dev Mode 命令 ==============
+
+/// 切换到 Dev 模式（使用开发服务器）
+#[tauri::command]
+async fn switch_to_dev_mode(window: tauri::WebviewWindow, app_handle: tauri::AppHandle) -> Result<String, String> {
+    let dev_url = if let Some(state) = app_handle.try_state::<Arc<Mutex<DevModeState>>>() {
+        let mut state = state.lock().map_err(|e| e.to_string())?;
+        state.is_dev_mode = true;
+        state.dev_url.clone()
+    } else {
+        "http://localhost:1096".to_string()
+    };
+    
+    println!("[tauri] Switching to dev mode: {}", dev_url);
+    
+    let url = Url::parse(&dev_url).map_err(|e| format!("Invalid URL: {}", e))?;
+    window.navigate(url).map_err(|e| format!("Navigation failed: {}", e))?;
+    
+    Ok(format!("Switched to dev mode: {}", dev_url))
+}
+
+/// 切换到 Release 模式（使用打包的静态文件）
+#[tauri::command]
+async fn switch_to_release_mode(window: tauri::WebviewWindow, app_handle: tauri::AppHandle) -> Result<String, String> {
+    let bundled_url = if let Some(state) = app_handle.try_state::<Arc<Mutex<DevModeState>>>() {
+        let mut state = state.lock().map_err(|e| e.to_string())?;
+        state.is_dev_mode = false;
+        state.bundled_url.clone()
+    } else {
+        "tauri://localhost".to_string()
+    };
+    
+    println!("[tauri] Switching to release mode: {}", bundled_url);
+    
+    // 使用 WebviewUrl::App 来导航回打包的静态资源
+    let url = Url::parse(&bundled_url).map_err(|e| format!("Invalid URL: {}", e))?;
+    window.navigate(url).map_err(|e| format!("Navigation failed: {}", e))?;
+    
+    Ok(format!("Switched to release mode: {}", bundled_url))
+}
+
+/// 获取当前 Dev Mode 状态
+#[tauri::command]
+fn get_dev_mode_status(app_handle: tauri::AppHandle) -> Result<bool, String> {
+    if let Some(state) = app_handle.try_state::<Arc<Mutex<DevModeState>>>() {
+        let state = state.lock().map_err(|e| e.to_string())?;
+        Ok(state.is_dev_mode)
+    } else {
+        Ok(false)
+    }
+}
+
+/// 设置 Dev 服务器 URL
+#[tauri::command]
+fn set_dev_url(app_handle: tauri::AppHandle, url: String) -> Result<String, String> {
+    if let Some(state) = app_handle.try_state::<Arc<Mutex<DevModeState>>>() {
+        let mut state = state.lock().map_err(|e| e.to_string())?;
+        state.dev_url = url.clone();
+        println!("[tauri] Dev URL set to: {}", url);
+        Ok(url)
+    } else {
+        Err("State not found".to_string())
+    }
+}
+
 // ============== 应用入口 ==============
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -579,6 +667,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .setup(move |app| {
             app.manage(Arc::new(Mutex::new(PythonProcess::new(config.clone()))));
+            app.manage(Arc::new(Mutex::new(DevModeState::default())));
             
             let app_handle = app.handle().clone();
             if let Some(window) = app.get_webview_window("main") {
@@ -616,7 +705,11 @@ pub fn run() {
             shutdown_sidecar,
             toggle_fullscreen,
             get_python_config,
-            get_backend_port
+            get_backend_port,
+            switch_to_dev_mode,
+            switch_to_release_mode,
+            get_dev_mode_status,
+            set_dev_url
         ])
         .build(tauri::generate_context!())
         .expect("Error building tauri application")

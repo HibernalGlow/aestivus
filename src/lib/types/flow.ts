@@ -44,7 +44,7 @@ export interface NodeDefinition {
 }
 
 export interface SchemaField {
-  type: 'string' | 'number' | 'boolean' | 'select' | 'path' | 'array';
+  type: 'string' | 'number' | 'boolean' | 'select' | 'path' | 'array' | 'object';
   label?: string;
   description?: string;
   required?: boolean;

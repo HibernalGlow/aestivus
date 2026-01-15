@@ -256,12 +256,25 @@
               <Table.Cell class="px-0">
                 <div class="flex items-center justify-center">
                   <div
-                    class="bg-muted text-muted-foreground group-hover:bg-primary group-hover:text-primary-foreground flex h-9 w-9 items-center justify-center rounded-xl shadow-sm transition-all duration-300"
+                    class="bg-muted group-hover:bg-primary group-hover:text-primary-foreground flex h-9 w-9 items-center justify-center rounded-xl shadow-sm transition-all duration-300"
                   >
                     {#if block.icon}
-                      <svelte:component this={block.icon} class="w-4.5 h-4.5" />
+                      <svelte:component
+                        this={block.icon}
+                        class={cn(
+                          "w-4.5 h-4.5",
+                          block.iconClass || "text-muted-foreground",
+                          "group-hover:text-primary-foreground"
+                        )}
+                      />
                     {:else}
-                      <LayoutGrid class="w-4.5 h-4.5" />
+                      <LayoutGrid
+                        class={cn(
+                          "w-4.5 h-4.5",
+                          block.iconClass || "text-muted-foreground",
+                          "group-hover:text-primary-foreground"
+                        )}
+                      />
                     {/if}
                   </div>
                 </div>

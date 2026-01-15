@@ -11,6 +11,7 @@ export interface BlockConfig {
 	id: string;
 	title: string;
 	icon?: Component;
+	iconClass?: string;
 	order: number;
 	visible: boolean;
 	expanded: boolean;
@@ -24,7 +25,7 @@ export interface NodeBlockConfig {
 	blocks: BlockConfig[];
 }
 
-const STORAGE_KEY = 'aestivus_block_configs_v1';
+const STORAGE_KEY = 'aestivus_block_configs_v3';
 
 // 从 registry 生成默认区块配置
 function generateDefaultConfigs(): Record<string, BlockConfig[]> {
@@ -35,6 +36,7 @@ function generateDefaultConfigs(): Record<string, BlockConfig[]> {
 			id: block.id,
 			title: block.title,
 			icon: block.icon,
+			iconClass: block.iconClass,
 			order: index,
 			visible: block.visibleInNormal !== false,
 			expanded: block.defaultExpanded !== false,
@@ -90,6 +92,7 @@ function createBlockConfigStore() {
 							// 更新可能变化的静态属性
 							title: def?.title || sb.title,
 							icon: def?.icon, 
+							iconClass: def?.iconClass,
 							colSpan: def?.colSpan
 						};
 					});

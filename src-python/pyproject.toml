@@ -1,6 +1,6 @@
 [project]
 name = "aestiv"
-version = "0.0.2"
+version = "0.0.3"
 description = "Aestivus Python 后端服务"
 requires-python = ">=3.11"
 license = "MIT"

@@ -141,3 +141,19 @@
 }
 
 /* 隐藏滚动条 - 移至 scrollbar.css 统一管理 */
+
+/* 全局选中样式 */
+::selection {
+  background-color: var(--primary);
+  color: var(--primary-foreground);
+}
+
+/* Svelte Flow 选中样式覆盖 */
+.svelte-flow__node.selected {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 1px var(--primary) !important;
+}
+
+.svelte-flow__edge.selected .svelte-flow__edge-path {
+  stroke: var(--primary) !important;
+}

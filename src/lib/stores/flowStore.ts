@@ -63,6 +63,31 @@ function createFlowStore() {
       }));
     },
 
+    duplicateNode(id: string) {
+      update(state => {
+        const nodeToDuplicate = state.nodes.find(n => n.id === id);
+        if (!nodeToDuplicate) return state;
+
+        const newNodeId = `node-${crypto.randomUUID()}`;
+        const newNode = {
+          ...nodeToDuplicate,
+          id: newNodeId,
+          position: {
+            x: nodeToDuplicate.position.x + 40,
+            y: nodeToDuplicate.position.y + 40
+          },
+          selected: true
+        };
+
+        return {
+          ...state,
+          nodes: [...state.nodes.map(n => ({ ...n, selected: false })), newNode],
+          isDirty: true,
+          selectedNodeId: newNodeId
+        };
+      });
+    },
+
     updateNodeData(id: string, data: Partial<FlowNode['data']>) {
       update(state => ({
         ...state,

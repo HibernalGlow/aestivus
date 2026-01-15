@@ -1,17 +1,22 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import {
     SvelteFlow,
     SvelteFlowProvider,
     Background,
     Controls,
     MiniMap,
+    Panel,
     type NodeTypes,
+    type Node,
+    type Edge,
   } from "@xyflow/svelte";
   import "@xyflow/svelte/dist/style.css";
+  import ELK from "elkjs/lib/elk.bundled.js";
 
   import { flowStore } from "$lib/stores";
   import { getNodeTypes } from "$lib/stores/nodeRegistry";
+  import NodeContextMenu from "./NodeContextMenu.svelte";
 
   let nodeIdCounter = 1;
   let containerRef: HTMLDivElement;
@@ -157,6 +162,64 @@
       );
     }
   });
+
+  // 右键菜单状态
+  let contextMenu = $state<{ id: string; x: number; y: number } | null>(null);
+
+  function handleNodeContextMenu(event: any) {
+    event.event.preventDefault();
+    contextMenu = {
+      id: event.node.id,
+      x: event.event.clientX,
+      y: event.event.clientY,
+    };
+  }
+
+  // 自动布局逻辑 (ELK)
+  const elk = new ELK();
+
+  async function handleAutoLayout() {
+    const elkNodes = nodes.map((n) => ({
+      id: n.id,
+      width: 250, // 假设节点平均宽度
+      height: 150, // 假设节点平均高度
+    }));
+
+    const elkEdges = edges.map((e) => ({
+      id: e.id,
+      sources: [e.source],
+      targets: [e.target],
+    }));
+
+    const graph = {
+      id: "root",
+      layoutOptions: {
+        "elk.algorithm": "layered",
+        "elk.direction": "RIGHT",
+        "elk.spacing.nodeNode": "80",
+        "elk.layered.spacing.nodeNodeLayered": "100",
+      },
+      children: elkNodes,
+      edges: elkEdges,
+    };
+
+    try {
+      const layoutedGraph = await elk.layout(graph);
+
+      layoutedGraph.children?.forEach((node) => {
+        if (node.x !== undefined && node.y !== undefined) {
+          flowStore.updateNode(node.id, {
+            position: { x: node.x, y: node.y },
+          });
+        }
+      });
+
+      // 等待 DOM 更新后调整视图
+      await tick();
+    } catch (e) {
+      console.error("Layout failed:", e);
+    }
+  }
 </script>
 
 <svelte:window onkeydown={handleKeyDown} />
@@ -174,6 +237,9 @@
       {edges}
       {nodeTypes}
       onnodeclick={({ node }) => flowStore.selectNode(node.id)}
+      onnodecontextmenu={handleNodeContextMenu}
+      selectionMode="multiple"
+      selectionOnDrag={true}
       onnodedragstop={({ targetNode }) => {
         // 检查节点是否被固定
         const originalPos = pinnedPositions.get(targetNode.id);
@@ -226,6 +292,41 @@
         }}
       />
 
+      <Panel position="top-right" class="canvas-panel">
+        <button
+          class="panel-button"
+          onclick={handleAutoLayout}
+          title="自动布局"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            ><path d="m21 16-4 4-4-4" /><path d="M17 20V4" /><path
+              d="m3 8 4-4 4 4"
+            /><path d="M7 4v16" /></svg
+          >
+          <span>整理</span>
+        </button>
+      </Panel>
+
+      {#if contextMenu}
+        <NodeContextMenu
+          id={contextMenu.id}
+          x={contextMenu.x}
+          y={contextMenu.y}
+          onClose={() => (contextMenu = null)}
+          onDelete={(id) => flowStore.removeNode(id)}
+          onDuplicate={(id) => flowStore.duplicateNode(id)}
+        />
+      {/if}
+
       <!-- Minimap Resize Handle -->
       <div
         class="minimap-resize-handle"
@@ -260,6 +361,11 @@
 <style>
   :global(.svelte-flow) {
     background: transparent !important;
+  }
+  :global(.svelte-flow__selection) {
+    background: color-mix(in srgb, var(--primary) 10%, transparent) !important;
+    border: 1px solid var(--primary) !important;
+    border-radius: 4px;
   }
   :global(.svelte-flow__node) {
     cursor: pointer;
@@ -340,5 +446,39 @@
 
   .minimap-resize-handle svg {
     transform: rotate(0deg);
+  }
+
+  /* Panel & Button Styles */
+  :global(.canvas-panel) {
+    margin: 1rem;
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .panel-button {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: color-mix(in srgb, var(--card) 85%, transparent);
+    backdrop-filter: blur(12px);
+    border: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
+    border-radius: 0.5rem;
+    color: var(--foreground);
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  }
+
+  .panel-button:hover {
+    background: var(--card);
+    border-color: var(--primary);
+    color: var(--primary);
+    transform: translateY(-1px);
+  }
+
+  .panel-button svg {
+    opacity: 0.8;
   }
 </style>

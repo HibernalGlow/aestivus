@@ -6,7 +6,8 @@ permissions:
 on:
   push:
     tags:
-      - "[0-9]+.*"
+      - "v*"
+      - "[0-9]*"
   workflow_dispatch:
 
 env:

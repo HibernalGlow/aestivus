@@ -63,7 +63,7 @@ jobs:
         timeout-minutes: 60
         shell: powershell
         run: |
-          npx tauri build --bundles msi,nsis --profile ci-release
+          npx tauri build --bundles msi,nsis -- --profile ci-release
 
       - name: Verify installer
         shell: powershell

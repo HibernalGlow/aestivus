@@ -41,36 +41,6 @@ const CREATE_NEW_CONSOLE: u32 = 0x00000010;
 
 // ============== 实例管理 ==============
 
-/// 获取 UDS socket 路径
-fn get_socket_path() -> PathBuf {
-    #[cfg(target_os = "windows")]
-    {
-        // Windows Named Pipe - 暂不支持，回退到 TCP
-        PathBuf::from(r"\\.\pipe\aestivus-backend")
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        std::env::temp_dir().join("aestivus-backend.sock")
-    }
-}
-
-/// 检查 socket 是否存在且可连接
-#[cfg(not(target_os = "windows"))]
-fn is_socket_active(path: &PathBuf) -> bool {
-    use std::os::unix::net::UnixStream;
-    if path.exists() {
-        UnixStream::connect(path).is_ok()
-    } else {
-        false
-    }
-}
-
-#[cfg(target_os = "windows")]
-fn is_socket_active(_path: &PathBuf) -> bool {
-    // Windows 不支持 UDS，回退到端口模式
-    false
-}
-
 /// 检查端口是否被占用
 fn is_port_in_use(port: u16) -> bool {
     TcpListener::bind(("127.0.0.1", port)).is_err()
@@ -296,8 +266,6 @@ struct PythonProcess {
     is_primary: bool,        // 是否是主实例
     owns_backend: bool,      // 是否拥有后端进程（自己启动的）
     actual_port: u16,        // 实际使用的端口
-    socket_path: Option<PathBuf>, // UDS socket 路径
-    use_uds: bool,           // 是否使用 UDS 模式
 }
 
 impl PythonProcess {
@@ -309,8 +277,6 @@ impl PythonProcess {
             is_primary: false,
             owns_backend: false,
             actual_port: port,
-            socket_path: None,
-            use_uds: false,
         }
     }
     
@@ -473,24 +439,7 @@ fn spawn_python_backend(app_handle: tauri::AppHandle, is_primary: bool) -> Resul
         find_available_port(default_port + 1)
     };
     
-    // 决定是否使用 UDS 模式
-    let socket_path = get_socket_path();
-    let use_uds = !cfg!(target_os = "windows") && !config.dev_mode;
-    
-    // 检查是否有现有的 UDS 服务
-    if use_uds && is_socket_active(&socket_path) {
-        println!("[tauri] Found active UDS socket, reusing...");
-        if let Some(state) = app_handle.try_state::<Arc<Mutex<PythonProcess>>>() {
-            let mut process_state = state.lock().unwrap();
-            process_state.socket_path = Some(socket_path.clone());
-            process_state.use_uds = true;
-            process_state.set_reusing_backend();
-        }
-        let _ = app_handle.emit("python-ready", default_port);
-        return Ok(default_port);
-    }
-    
-    println!("[tauri] Starting Python backend (UDS: {}, port: {})", use_uds, actual_port);
+    println!("[tauri] Starting Python backend on port {} (primary: {})", actual_port, is_primary);
     
     if !is_python_available(&config.python_path) {
         let msg = format!("Python not found at '{}'.", config.python_path);
@@ -506,36 +455,33 @@ fn spawn_python_backend(app_handle: tauri::AppHandle, is_primary: bool) -> Resul
         return Err(msg);
     }
     
-    // 构建启动参数
+    // 构建启动参数（带端口）
     let port_str = actual_port.to_string();
-    let socket_str = socket_path.to_string_lossy().to_string();
-    
-    let mut args: Vec<&str> = vec!["-m", "aestiv"];
-    
-    if use_uds {
-        args.push("--uds");
-        args.push(&socket_str);
-    } else {
-        args.push("--port");
-        args.push(&port_str);
-        if config.dev_mode {
-            args.push("--standalone");
-        }
+    let mut args = vec!["-m", "aestiv", "--port", &port_str];
+    if config.dev_mode {
+        args.push("--standalone");
     }
     
     println!("[tauri] Spawning: {} {:?}", config.python_path, args);
     
-    // 静默后台启动（不弹出任何窗口）
+    // 使用 Windows Terminal + PowerShell 启动 Python（方便查看日志）
     #[cfg(target_os = "windows")]
     let child = {
-        Command::new(&config.python_path)
-            .args(&args)
-            // CREATE_NO_WINDOW = 0x08000000
-            .creation_flags(0x08000000)
-            .stdin(std::process::Stdio::null())
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
+        // cmd 版本的命令
+        let cmd_python = format!("\"{}\" {}", config.python_path, args.join(" "));
+        
+        // 先尝试 Windows Terminal + cmd，不行再用 cmd.exe
+        Command::new("wt.exe")
+            .args(["--title", "Aestivus Python Backend", "cmd", "/K", &cmd_python])
             .spawn()
+            .or_else(|e| {
+                // 回退：直接用 cmd.exe
+                println!("[tauri] Windows Terminal not found ({}), using cmd...", e);
+                Command::new("cmd")
+                    .args(["/K", &cmd_python])
+                    .creation_flags(CREATE_NEW_CONSOLE)
+                    .spawn()
+            })
             .map_err(|e| {
                 let msg = format!("Failed to spawn Python: {}", e);
                 println!("[tauri] {}", msg);
@@ -546,12 +492,26 @@ fn spawn_python_backend(app_handle: tauri::AppHandle, is_primary: bool) -> Resul
     
     #[cfg(not(target_os = "windows"))]
     let child = {
-        Command::new(&config.python_path)
-            .args(&args)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+        // macOS/Linux: 使用终端模拟器打开
+        let terminal_cmd = if cfg!(target_os = "macos") {
+            format!("osascript -e 'tell app \"Terminal\" to do script \"{} {}\"'", 
+                config.python_path, args.join(" "))
+        } else {
+            // Linux: 尝试常见的终端模拟器
+            format!("x-terminal-emulator -e {} {}", config.python_path, args.join(" "))
+        };
+        
+        Command::new("sh")
+            .args(["-c", &terminal_cmd])
             .spawn()
+            .or_else(|_| {
+                // 回退：直接启动（无可见终端）
+                Command::new(&config.python_path)
+                    .args(&args)
+                    .stdout(Stdio::piped())
+                    .stderr(Stdio::piped())
+                    .spawn()
+            })
             .map_err(|e| {
                 let msg = format!("Failed to spawn Python: {}", e);
                 println!("[tauri] {}", msg);
@@ -561,15 +521,13 @@ fn spawn_python_backend(app_handle: tauri::AppHandle, is_primary: bool) -> Resul
     };
     
     let pid = child.id();
-    println!("[tauri] Python process spawned with PID: {} (Silent Mode, UDS: {})", pid, use_uds);
+    println!("[tauri] Python process spawned with PID: {} on port {} (in new console window)", pid, actual_port);
     
     // 存储进程和端口
     if let Some(state) = app_handle.try_state::<Arc<Mutex<PythonProcess>>>() {
         let mut process_state = state.lock().unwrap();
         process_state.set_process(child);
         process_state.set_actual_port(actual_port);
-        process_state.socket_path = if use_uds { Some(socket_path) } else { None };
-        process_state.use_uds = use_uds;
     }
     
     let _ = app_handle.emit("python-ready", actual_port);

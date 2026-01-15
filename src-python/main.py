@@ -34,31 +34,14 @@ from db.database import init_db
 PORT_API = 8009
 server_instance = None
 
-# UDS/Named Pipe 路径
-def get_socket_path() -> str:
-    """获取平台对应的 socket 路径"""
-    if sys.platform == "win32":
-        # Windows Named Pipe
-        return r"\\.\pipe\aestivus-backend"
-    else:
-        # Unix Domain Socket
-        import tempfile
-        return os.path.join(tempfile.gettempdir(), "aestivus-backend.sock")
 
-
-def parse_args():
-    """解析命令行参数"""
+def parse_port_arg() -> int:
+    """解析命令行 --port 参数"""
     import argparse
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument("--port", type=int, default=PORT_API)
-    parser.add_argument("--uds", type=str, default=None, help="Unix Domain Socket 路径")
     args, _ = parser.parse_known_args()
-    return args
-
-
-def parse_port_arg() -> int:
-    """解析命令行 --port 参数（兼容旧版）"""
-    return parse_args().port
+    return args.port
 
 
 def detect_running_mode() -> str:
@@ -267,45 +250,6 @@ def run_sidecar():
     start_api_server(port=requested_port)
 
 
-def run_uds_mode():
-    """运行 UDS/Named Pipe 模式（无端口）"""
-    args = parse_args()
-    socket_path = args.uds or get_socket_path()
-    
-    # 清理旧的 socket 文件（Unix only）
-    if sys.platform != "win32" and os.path.exists(socket_path):
-        try:
-            os.remove(socket_path)
-            print(f"[uds] Removed stale socket: {socket_path}")
-        except OSError:
-            pass
-    
-    print(f"🚀 Starting aestivus in UDS mode")
-    print(f"🔗 Socket path: {socket_path}")
-    print(f"💡 No TCP port used\n")
-    
-    try:
-        uvicorn.run(
-            app,
-            uds=socket_path,
-            log_level="info"
-        )
-    except KeyboardInterrupt:
-        print("\n🛑 Shutting down...")
-    except Exception as e:
-        print(f"❌ Error starting UDS server: {e}")
-        # 回退到 TCP 模式
-        print("⚠️ Falling back to TCP mode...")
-        run_sidecar()
-    finally:
-        # 清理 socket 文件
-        if sys.platform != "win32" and os.path.exists(socket_path):
-            try:
-                os.remove(socket_path)
-            except OSError:
-                pass
-
-
 def run_pywebview():
     """Run in pywebview mode as desktop application"""
     print(f"🚀 启动 pywebview 桌面应用模式")
@@ -322,12 +266,7 @@ def run_pywebview():
 
 
 if __name__ == "__main__":
-    args = parse_args()
-    
-    # 优先检查 --uds 参数
-    if args.uds or "--uds" in sys.argv:
-        run_uds_mode()
-    elif RUNNING_MODE == "pywebview":
+    if RUNNING_MODE == "pywebview":
         run_pywebview()
     elif RUNNING_MODE == "standalone":
         run_standalone()

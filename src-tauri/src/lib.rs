@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 // ============== Dev Mode 状态 ==============
 
 /// Dev Mode 配置
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DevModeState {
     /// 是否处于 Dev 模式（使用开发服务器）
     pub is_dev_mode: bool,
@@ -29,6 +29,36 @@ impl Default for DevModeState {
             is_dev_mode: false,
             dev_url: "http://localhost:1096".to_string(),
             bundled_url: "tauri://localhost".to_string(),
+        }
+    }
+}
+
+impl DevModeState {
+    /// 获取配置文件路径
+    fn get_config_path() -> PathBuf {
+        let app_data = dirs::data_local_dir()
+            .unwrap_or_else(|| PathBuf::from("."));
+        let config_dir = app_data.join("aestivus").join("config");
+        let _ = fs::create_dir_all(&config_dir);
+        config_dir.join("dev.json")
+    }
+
+    /// 从配置文件加载
+    pub fn load() -> Self {
+        let path = Self::get_config_path();
+        if let Ok(content) = fs::read_to_string(path) {
+            if let Ok(state) = serde_json::from_str::<DevModeState>(&content) {
+                return state;
+            }
+        }
+        Self::default()
+    }
+
+    /// 保存到配置文件
+    pub fn save(&self) {
+        let path = Self::get_config_path();
+        if let Ok(content) = serde_json::to_string_pretty(self) {
+            let _ = fs::write(path, content);
         }
     }
 }
@@ -597,12 +627,16 @@ async fn switch_to_dev_mode(window: tauri::WebviewWindow, app_handle: tauri::App
     let dev_url = if let Some(state) = app_handle.try_state::<Arc<Mutex<DevModeState>>>() {
         let mut state = state.lock().map_err(|e| e.to_string())?;
         state.is_dev_mode = true;
+        state.save();
         state.dev_url.clone()
     } else {
         "http://localhost:1096".to_string()
     };
     
     println!("[tauri] Switching to dev mode: {}", dev_url);
+    
+    // 杀死 Python 后端，避免端口冲突
+    cleanup_python_process(&app_handle);
     
     let url = Url::parse(&dev_url).map_err(|e| format!("Invalid URL: {}", e))?;
     window.navigate(url).map_err(|e| format!("Navigation failed: {}", e))?;
@@ -616,12 +650,24 @@ async fn switch_to_release_mode(window: tauri::WebviewWindow, app_handle: tauri:
     let bundled_url = if let Some(state) = app_handle.try_state::<Arc<Mutex<DevModeState>>>() {
         let mut state = state.lock().map_err(|e| e.to_string())?;
         state.is_dev_mode = false;
+        state.save();
         state.bundled_url.clone()
     } else {
         "tauri://localhost".to_string()
     };
     
     println!("[tauri] Switching to release mode: {}", bundled_url);
+    
+    // 如果是主实例，重新启动 Python 后端
+    let is_primary = if let Some(state) = app_handle.try_state::<Arc<Mutex<PythonProcess>>>() {
+        state.lock().unwrap().is_primary()
+    } else {
+        false
+    };
+    
+    if is_primary {
+        let _ = spawn_python_backend(app_handle.clone(), true);
+    }
     
     // 使用 WebviewUrl::App 来导航回打包的静态资源
     let url = Url::parse(&bundled_url).map_err(|e| format!("Invalid URL: {}", e))?;
@@ -647,6 +693,7 @@ fn set_dev_url(app_handle: tauri::AppHandle, url: String) -> Result<String, Stri
     if let Some(state) = app_handle.try_state::<Arc<Mutex<DevModeState>>>() {
         let mut state = state.lock().map_err(|e| e.to_string())?;
         state.dev_url = url.clone();
+        state.save();
         println!("[tauri] Dev URL set to: {}", url);
         Ok(url)
     } else {
@@ -666,8 +713,12 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .setup(move |app| {
+            let dev_mode = DevModeState::load();
+            let is_dev_mode = dev_mode.is_dev_mode;
+            let dev_url = dev_mode.dev_url.clone();
+
             app.manage(Arc::new(Mutex::new(PythonProcess::new(config.clone()))));
-            app.manage(Arc::new(Mutex::new(DevModeState::default())));
+            app.manage(Arc::new(Mutex::new(dev_mode)));
             
             let app_handle = app.handle().clone();
             if let Some(window) = app.get_webview_window("main") {
@@ -687,12 +738,21 @@ pub fn run() {
                 state.lock().unwrap().set_primary(is_primary);
             }
             
-            // 启动 Python 后端
+            // 启动 Python 后端（如果不是 Dev 模式）
             let app_handle = app.handle().clone();
-            println!("[tauri] Starting Python backend (primary: {})...", is_primary);
-            match spawn_python_backend(app_handle, is_primary) {
-                Ok(port) => println!("[tauri] Python backend ready on port {}", port),
-                Err(e) => eprintln!("[tauri] Failed to start Python backend: {}", e),
+            if is_dev_mode {
+                println!("[tauri] Dev Mode active, skipping auto backend startup. URL: {}", dev_url);
+                // 导航到 Dev URL
+                if let Some(window) = app.get_webview_window("main") {
+                    let url = Url::parse(&dev_url).expect("Invalid dev URL");
+                    let _ = window.navigate(url);
+                }
+            } else {
+                println!("[tauri] Starting Python backend (primary: {})...", is_primary);
+                match spawn_python_backend(app_handle, is_primary) {
+                    Ok(port) => println!("[tauri] Python backend ready on port {}", port),
+                    Err(e) => eprintln!("[tauri] Failed to start Python backend: {}", e),
+                }
             }
             
             Ok(())

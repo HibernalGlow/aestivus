@@ -3,7 +3,7 @@ name: Build Tauri App
 on:
   push:
     tags:
-      - '[0-9]+.[0-9]+.[0-9]+'
+      - "[0-9]+.[0-9]+.[0-9]+"
   workflow_dispatch:
 
 jobs:
@@ -34,20 +34,9 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'yarn'
+          node-version: "20"
+          cache: "yarn"
           cache-dependency-path: yarn.lock
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-        with:
-          enable-cache: true
-          cache-dependency-glob: 'src-python/pyproject.toml'
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
@@ -58,36 +47,11 @@ jobs:
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: 'src-tauri -> target'
+          workspaces: "src-tauri -> target"
           cache-on-failure: true
-
-      - name: Cache Nuitka
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/AppData/Local/Nuitka
-            ~/.cache/Nuitka
-            src-python/*.build
-          key: nuitka-${{ matrix.platform }}-${{ hashFiles('src-python/pyproject.toml', 'src-python/**/*.py') }}
-          restore-keys: |
-            nuitka-${{ matrix.platform }}-
 
       - name: Install frontend dependencies
         run: yarn install --frozen-lockfile
-
-      - name: Install Python dependencies
-        working-directory: src-python
-        run: uv sync --dev --frozen
-
-      - name: Build Python Sidecar
-        working-directory: src-python
-        run: |
-          uv run python -m nuitka --onefile --standalone --output-filename=main --output-dir=../src-tauri/bin --windows-console-mode=attach --include-module=adapters --include-package=fastapi --include-package=starlette --include-package=pydantic --include-package=uvicorn --include-package=loguru --include-package=rich --include-package=typer --include-package=repacku --include-package=rawfilter --include-package=crashu --include-package=trename --nofollow-import-to=matplotlib --nofollow-import-to=numpy --nofollow-import-to=pandas --nofollow-import-to=scipy --nofollow-import-to=tkinter --nofollow-import-to=streamlit --nofollow-import-to=textual main.py
-
-      - name: Rename Sidecar (Windows)
-        if: matrix.platform == 'windows-latest'
-        run: |
-          Move-Item -Force src-tauri/bin/main.exe src-tauri/bin/main-${{ matrix.target }}.exe
 
       - name: Build Tauri App
         uses: tauri-apps/tauri-action@v0
@@ -95,7 +59,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: 'AestivalFlow ${{ github.ref_name }}'
-          releaseBody: 'See the assets to download this version.'
+          releaseName: "AestivalFlow ${{ github.ref_name }}"
+          releaseBody: "See the assets to download this version."
           releaseDraft: true
           prerelease: false

@@ -1,24 +1,25 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import {
     SvelteFlow,
     SvelteFlowProvider,
     Background,
     Controls,
     MiniMap,
-    type NodeTypes
-  } from '@xyflow/svelte';
-  import '@xyflow/svelte/dist/style.css';
+    type NodeTypes,
+  } from "@xyflow/svelte";
+  import "@xyflow/svelte/dist/style.css";
 
-  import { flowStore } from '$lib/stores';
-  import { getNodeTypes } from '$lib/stores/nodeRegistry';
+  import { flowStore } from "$lib/stores";
+  import { getNodeTypes } from "$lib/stores/nodeRegistry";
 
   let nodeIdCounter = 1;
   let containerRef: HTMLDivElement;
 
   // 使用 $derived 确保节点变化时自动更新
   // 深拷贝节点确保 SvelteFlow 检测到属性变化（如 draggable）
-  let nodes = $derived($flowStore.nodes.map(n => ({ ...n })) as any[]);
-  let edges = $derived($flowStore.edges.map(e => ({ ...e })) as any[]);
+  let nodes = $derived($flowStore.nodes.map((n) => ({ ...n })) as any[]);
+  let edges = $derived($flowStore.edges.map((e) => ({ ...e })) as any[]);
 
   // 从注册表获取节点类型映射
   const nodeTypes: NodeTypes = getNodeTypes();
@@ -26,16 +27,20 @@
   function handleKeyDown(e: KeyboardEvent) {
     // 如果焦点在输入框、文本域等可编辑元素内，不处理删除键
     const target = e.target as HTMLElement;
-    const isEditable = target.tagName === 'INPUT' || 
-                       target.tagName === 'TEXTAREA' || 
-                       target.isContentEditable ||
-                       target.closest('input, textarea, [contenteditable="true"]');
-    
+    const isEditable =
+      target.tagName === "INPUT" ||
+      target.tagName === "TEXTAREA" ||
+      target.isContentEditable ||
+      target.closest('input, textarea, [contenteditable="true"]');
+
     if (isEditable) {
       return; // 让输入框正常处理 Backspace/Delete
     }
-    
-    if ((e.key === 'Delete' || e.key === 'Backspace') && $flowStore.selectedNodeId) {
+
+    if (
+      (e.key === "Delete" || e.key === "Backspace") &&
+      $flowStore.selectedNodeId
+    ) {
       e.preventDefault();
       flowStore.removeNode($flowStore.selectedNodeId);
     }
@@ -45,7 +50,7 @@
   function handleDrop(event: DragEvent) {
     event.preventDefault();
 
-    const data = event.dataTransfer?.getData('application/json');
+    const data = event.dataTransfer?.getData("application/json");
     if (!data) return;
 
     try {
@@ -58,7 +63,7 @@
       // 计算相对于容器的位置
       const position = {
         x: event.clientX - bounds.left,
-        y: event.clientY - bounds.top
+        y: event.clientY - bounds.top,
       };
 
       // 使用传入的 nodeId 或生成新的
@@ -68,34 +73,89 @@
         id: nodeId,
         type,
         position,
-        data: { label, status: 'idle' as const }
+        data: { label, status: "idle" as const },
       };
 
       flowStore.addNode(node);
     } catch (e) {
-      console.error('Failed to parse drop data:', e);
+      console.error("Failed to parse drop data:", e);
     }
   }
 
   function handleDragOver(event: DragEvent) {
     event.preventDefault();
     if (event.dataTransfer) {
-      event.dataTransfer.dropEffect = 'move';
+      event.dataTransfer.dropEffect = "move";
     }
   }
-  
+
   // 记录节点的原始位置，用于固定节点时恢复
   let pinnedPositions: Map<string, { x: number; y: number }> = new Map();
-  
+
   // 监听 flowStore 变化，记录固定节点的位置
   $effect(() => {
-    $flowStore.nodes.forEach(node => {
+    $flowStore.nodes.forEach((node) => {
       if (node.draggable === false && node.position) {
         pinnedPositions.set(node.id, { ...node.position });
       } else {
         pinnedPositions.delete(node.id);
       }
     });
+  });
+
+  // Minimap 调整大小逻辑
+  let miniMapWidth = $state(200);
+  let miniMapHeight = $state(150);
+  let isResizing = $state(false);
+
+  function handleResizePointerDown(e: PointerEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    isResizing = true;
+
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const startWidth = miniMapWidth;
+    const startHeight = miniMapHeight;
+
+    function onPointerMove(moveEvent: PointerEvent) {
+      if (!isResizing) return;
+      // 由于 minimap 在右下角，向左上方拖拽会增加宽高
+      const deltaX = startX - moveEvent.clientX;
+      const deltaY = startY - moveEvent.clientY;
+
+      miniMapWidth = Math.max(100, startWidth + deltaX);
+      miniMapHeight = Math.max(80, startHeight + deltaY);
+    }
+
+    function onPointerUp() {
+      isResizing = false;
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    }
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp);
+  }
+
+  onMount(() => {
+    const saved = localStorage.getItem("aestivus-minimap-size");
+    if (saved) {
+      try {
+        const { w, h } = JSON.parse(saved);
+        miniMapWidth = w;
+        miniMapHeight = h;
+      } catch (e) {}
+    }
+  });
+
+  $effect(() => {
+    if (!isResizing) {
+      localStorage.setItem(
+        "aestivus-minimap-size",
+        JSON.stringify({ w: miniMapWidth, h: miniMapHeight })
+      );
+    }
   });
 </script>
 
@@ -122,7 +182,9 @@
           flowStore.updateNode(targetNode.id, { position: originalPos });
         } else {
           // 非固定节点：更新到新位置
-          flowStore.updateNode(targetNode.id, { position: targetNode.position });
+          flowStore.updateNode(targetNode.id, {
+            position: targetNode.position,
+          });
         }
       }}
       onpaneclick={() => flowStore.selectNode(null)}
@@ -133,12 +195,12 @@
           target: conn.target,
           sourceHandle: conn.sourceHandle,
           targetHandle: conn.targetHandle,
-          animated: true
+          animated: true,
         });
       }}
       ondelete={({ nodes: deletedNodes, edges: deletedEdges }) => {
-        deletedNodes?.forEach(n => flowStore.removeNode(n.id));
-        deletedEdges?.forEach(e => flowStore.removeEdge(e.id));
+        deletedNodes?.forEach((n) => flowStore.removeNode(n.id));
+        deletedEdges?.forEach((e) => flowStore.removeEdge(e.id));
       }}
       fitView
       snapGrid={[15, 15]}
@@ -146,13 +208,51 @@
       <Background gap={20} class="opacity-10" />
       <Controls />
       <MiniMap
+        width={miniMapWidth}
+        height={miniMapHeight}
+        position="bottom-right"
         nodeColor={(node) => {
-          if (node.type === 'repacku' || node.type === 'rawfilter' || node.type === 'crashu' || node.type === 'trename') return '#3b82f6';
-          if (node.type?.includes('input')) return '#22c55e';
-          if (node.type?.includes('output') || node.type === 'terminal') return '#f59e0b';
-          return '#64748b';
+          if (
+            node.type === "repacku" ||
+            node.type === "rawfilter" ||
+            node.type === "crashu" ||
+            node.type === "trename"
+          )
+            return "#3b82f6";
+          if (node.type?.includes("input")) return "#22c55e";
+          if (node.type?.includes("output") || node.type === "terminal")
+            return "#f59e0b";
+          return "#64748b";
         }}
       />
+
+      <!-- Minimap Resize Handle -->
+      <div
+        class="minimap-resize-handle"
+        class:resizing={isResizing}
+        style="right: {miniMapWidth + 15 - 10}px; bottom: {miniMapHeight +
+          15 -
+          10}px;"
+        onpointerdown={handleResizePointerDown}
+        role="button"
+        tabindex="0"
+        aria-label="Resize minimap"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="3"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          ><path d="m15 15 6 6" /><path d="m9 9-6-6" /><path
+            d="M21 15v6h-6"
+          /><path d="M9 3H3v6" /></svg
+        >
+      </div>
     </SvelteFlow>
   </div>
 </SvelteFlowProvider>
@@ -203,5 +303,42 @@
   }
   :global(.svelte-flow__minimap-mask) {
     fill: color-mix(in srgb, var(--background) 60%, transparent) !important;
+  }
+
+  /* Minimap Resize Handle Style */
+  .minimap-resize-handle {
+    position: absolute;
+    z-index: 1001;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: color-mix(in srgb, var(--card) 85%, transparent);
+    backdrop-filter: blur(12px);
+    border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+    border-radius: 4px;
+    cursor: nwse-resize;
+    color: var(--muted-foreground);
+    transition: all 0.2s;
+    opacity: 0;
+    pointer-events: auto;
+  }
+
+  :global(.svelte-flow:hover) .minimap-resize-handle {
+    opacity: 1;
+  }
+
+  .minimap-resize-handle:hover,
+  .minimap-resize-handle.resizing {
+    opacity: 1;
+    color: var(--primary);
+    background: var(--card);
+    border-color: var(--primary);
+    box-shadow: 0 0 10px color-mix(in srgb, var(--primary) 20%, transparent);
+  }
+
+  .minimap-resize-handle svg {
+    transform: rotate(0deg);
   }
 </style>

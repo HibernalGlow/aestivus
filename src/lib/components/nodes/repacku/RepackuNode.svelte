@@ -125,7 +125,7 @@
   // 本地 UI 状态
   let copied = $state(false);
   let layoutRenderer = $state<any>(undefined);
-  let ws: WebSocket | null = $state(null);
+  // ws removed from state
 
   // 文件树统计（派生状态）
   let stats = $state<CompressionStats>({
@@ -296,43 +296,52 @@
 
     // 生成任务 ID 并建立 WebSocket 连接
     const taskId = `repacku-${nodeId}-${Date.now()}`;
+    let ws: WebSocket | null = null;
+
     try {
-      const wsUrl = `${getWsBaseUrl()}/ws/tasks/${taskId}`;
+      const wsUrl = `${getWsBaseUrl()}/v1/ws/tasks/${taskId}`;
+      console.log('[Repacku] Connecting to WebSocket:', wsUrl);
       ws = new WebSocket(wsUrl);
-      
-      // 等待 WebSocket 连接成功（最多 2 秒）
-      await new Promise<void>((resolve) => {
-        const timeout = setTimeout(() => {
-          log('⚠️ WebSocket 连接超时');
-          resolve();
-        }, 2000);
-        
-        ws!.onopen = () => {
-          clearTimeout(timeout);
-          log('✅ WebSocket 已连接');
-          resolve();
-        };
-        
-        ws!.onerror = () => {
-          clearTimeout(timeout);
-          log('⚠️ WebSocket 连接错误');
-          resolve();
-        };
-      });
 
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
+          console.log('[Repacku] WS Message:', msg);
           if (msg.type === "progress" && ns.phase === "compressing") {
             ns.progress = msg.progress;
             ns.progressText = msg.message;
           }
-        } catch {
+        } catch (e) {
           /* ignore parse errors */
         }
       };
-    } catch {
-      /* WebSocket 连接失败，继续执行 */
+
+      ws.onerror = (e) => {
+        console.error('[Repacku] WebSocket error event:', e);
+      };
+
+      // 等待 WebSocket 连接成功（最多 2 秒）
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => {
+          log("⚠️ WebSocket 连接超时");
+          resolve();
+        }, 2000);
+
+        ws!.onopen = () => {
+          clearTimeout(timeout);
+          log("✅ WebSocket 已连接");
+          resolve();
+        };
+
+        ws!.onerror = () => {
+          clearTimeout(timeout);
+          log("⚠️ WebSocket 连接错误");
+          resolve();
+        };
+      });
+    } catch (err) {
+      console.error('[Repacku] WebSocket initialization failed:', err);
+      log("⚠️ WebSocket 初始化失败");
     }
 
     try {
@@ -348,9 +357,8 @@
       )) as any;
 
       // 关闭 WebSocket
-      if (ws) {
+      if (ws && ws.readyState === WebSocket.OPEN) {
         ws.close();
-        ws = null;
       }
 
       if (response.success) {

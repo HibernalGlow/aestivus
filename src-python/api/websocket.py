@@ -176,6 +176,11 @@ async def send_status(task_id: str, status: str, message: str = "", node_id: str
     await manager.send_to_task(task_id, msg.model_dump())
 
 
+@router.get("/ws/test")
+async def ws_test():
+    return {"status": "ok", "message": "WebSocket router is reachable"}
+
+
 # ============ WebSocket 端点 ============
 
 @router.websocket("/ws/tasks/{task_id}")

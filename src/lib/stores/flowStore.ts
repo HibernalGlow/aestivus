@@ -9,6 +9,7 @@ export interface FlowState {
   edges: FlowEdge[];
   isDirty: boolean;
   selectedNodeId: string | null;
+  layoutTrigger?: number;
 }
 
 const initialState: FlowState = {
@@ -138,6 +139,10 @@ function createFlowStore() {
 
     reset() {
       set(initialState);
+    },
+
+    triggerLayout() {
+      update(state => ({ ...state, layoutTrigger: Date.now() }));
     },
 
     getState(): FlowState {

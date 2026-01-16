@@ -10,6 +10,7 @@
     type NodeTypes,
     type Node,
     type Edge,
+    SelectionMode,
   } from "@xyflow/svelte";
   import "@xyflow/svelte/dist/style.css";
   import ELK from "elkjs/lib/elk.bundled.js";
@@ -220,6 +221,13 @@
       console.error("Layout failed:", e);
     }
   }
+
+  // 监听外部布局触发器
+  $effect(() => {
+    if ($flowStore.layoutTrigger) {
+      handleAutoLayout();
+    }
+  });
 </script>
 
 <svelte:window onkeydown={handleKeyDown} />
@@ -238,7 +246,7 @@
       {nodeTypes}
       onnodeclick={({ node }) => flowStore.selectNode(node.id)}
       onnodecontextmenu={handleNodeContextMenu}
-      selectionMode="multiple"
+      selectionMode={SelectionMode.Partial}
       selectionOnDrag={true}
       onnodedragstop={({ targetNode }) => {
         // 检查节点是否被固定
@@ -270,6 +278,7 @@
       }}
       fitView
       snapGrid={[15, 15]}
+      proOptions={{ hideAttribution: true }}
     >
       <Background gap={20} class="opacity-10" />
       <Controls />
@@ -291,30 +300,6 @@
           return "#64748b";
         }}
       />
-
-      <Panel position="top-right" class="canvas-panel">
-        <button
-          class="panel-button"
-          onclick={handleAutoLayout}
-          title="自动布局"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="16"
-            height="16"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            ><path d="m21 16-4 4-4-4" /><path d="M17 20V4" /><path
-              d="m3 8 4-4 4 4"
-            /><path d="M7 4v16" /></svg
-          >
-          <span>整理</span>
-        </button>
-      </Panel>
 
       {#if contextMenu}
         <NodeContextMenu
@@ -448,37 +433,7 @@
     transform: rotate(0deg);
   }
 
-  /* Panel & Button Styles */
-  :global(.canvas-panel) {
-    margin: 1rem;
-    display: flex;
-    gap: 0.5rem;
-  }
-
-  .panel-button {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    background: color-mix(in srgb, var(--card) 85%, transparent);
-    backdrop-filter: blur(12px);
-    border: 1px solid color-mix(in srgb, var(--border) 40%, transparent);
-    border-radius: 0.5rem;
-    color: var(--foreground);
-    font-size: 0.875rem;
-    cursor: pointer;
-    transition: all 0.2s;
-    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
-  }
-
-  .panel-button:hover {
-    background: var(--card);
-    border-color: var(--primary);
-    color: var(--primary);
-    transform: translateY(-1px);
-  }
-
-  .panel-button svg {
-    opacity: 0.8;
+  .minimap-resize-handle svg {
+    transform: rotate(0deg);
   }
 </style>

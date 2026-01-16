@@ -18,6 +18,7 @@
   import { flowStore } from "$lib/stores";
   import { getNodeTypes } from "$lib/stores/nodeRegistry";
   import NodeContextMenu from "./NodeContextMenu.svelte";
+  import CanvasContextMenu from "./CanvasContextMenu.svelte";
 
   let nodeIdCounter = 1;
   let containerRef: HTMLDivElement;
@@ -165,14 +166,33 @@
   });
 
   // 右键菜单状态
-  let contextMenu = $state<{ id: string; x: number; y: number } | null>(null);
+  let nodeContextMenu = $state<{ id: string; x: number; y: number } | null>(
+    null
+  );
+  let canvasContextMenu = $state<{ x: number; y: number } | null>(null);
 
-  function handleNodeContextMenu(event: any) {
-    event.event.preventDefault();
-    contextMenu = {
-      id: event.node.id,
-      x: event.event.clientX,
-      y: event.event.clientY,
+  function handleNodeContextMenu({
+    event,
+    node,
+  }: {
+    event: MouseEvent;
+    node: any;
+  }) {
+    event.preventDefault();
+    canvasContextMenu = null; // 关闭画布菜单
+    nodeContextMenu = {
+      id: node.id,
+      x: event.clientX,
+      y: event.clientY,
+    };
+  }
+
+  function handlePaneContextMenu({ event }: { event: MouseEvent }) {
+    event.preventDefault();
+    nodeContextMenu = null; // 关闭节点菜单
+    canvasContextMenu = {
+      x: event.clientX,
+      y: event.clientY,
     };
   }
 
@@ -261,7 +281,12 @@
           });
         }
       }}
-      onpaneclick={() => flowStore.selectNode(null)}
+      onpaneclick={() => {
+        flowStore.selectNode(null);
+        nodeContextMenu = null;
+        canvasContextMenu = null;
+      }}
+      onpanecontextmenu={handlePaneContextMenu}
       onconnect={(conn) => {
         flowStore.addEdge({
           id: `e-${conn.source}-${conn.target}-${Date.now()}`,
@@ -301,14 +326,23 @@
         }}
       />
 
-      {#if contextMenu}
+      {#if nodeContextMenu}
         <NodeContextMenu
-          id={contextMenu.id}
-          x={contextMenu.x}
-          y={contextMenu.y}
-          onClose={() => (contextMenu = null)}
+          id={nodeContextMenu.id}
+          x={nodeContextMenu.x}
+          y={nodeContextMenu.y}
+          onClose={() => (nodeContextMenu = null)}
           onDelete={(id) => flowStore.removeNode(id)}
           onDuplicate={(id) => flowStore.duplicateNode(id)}
+        />
+      {/if}
+
+      {#if canvasContextMenu}
+        <CanvasContextMenu
+          x={canvasContextMenu.x}
+          y={canvasContextMenu.y}
+          onClose={() => (canvasContextMenu = null)}
+          onAutoLayout={handleAutoLayout}
         />
       {/if}
 

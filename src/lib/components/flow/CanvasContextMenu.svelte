@@ -1,19 +1,15 @@
 <script lang="ts">
-  import { onMount } from "svelte";
   import * as ContextMenu from "$lib/components/ui/context-menu";
-  import { Trash2, Copy, Info } from "@lucide/svelte";
+  import { Layout, Plus, Play } from "@lucide/svelte";
 
   interface Props {
-    id: string;
     x: number;
     y: number;
     onClose: () => void;
-    onDelete: (id: string) => void;
-    onDuplicate: (id: string) => void;
+    onAutoLayout: () => void;
   }
 
-  let { id, x, y, onClose, onDelete, onDuplicate }: Props = $props();
-
+  let { x, y, onClose, onAutoLayout }: Props = $props();
   let open = $state(true);
 
   $effect(() => {
@@ -33,27 +29,24 @@
   <ContextMenu.Content class="w-48">
     <ContextMenu.Item
       onclick={() => {
-        onDelete(id);
+        onAutoLayout();
+        onClose();
       }}
     >
-      <Trash2 class="mr-2 h-4 w-4" />
-      <span>删除节点</span>
-    </ContextMenu.Item>
-
-    <ContextMenu.Item
-      onclick={() => {
-        onDuplicate(id);
-      }}
-    >
-      <Copy class="mr-2 h-4 w-4" />
-      <span>复制节点</span>
+      <Layout class="mr-2 h-4 w-4" />
+      <span>自动布局</span>
     </ContextMenu.Item>
 
     <ContextMenu.Separator />
 
-    <ContextMenu.Item onclick={onClose}>
-      <Info class="mr-2 h-4 w-4" />
-      <span>更多属性</span>
+    <ContextMenu.Item disabled>
+      <Plus class="mr-2 h-4 w-4" />
+      <span>添加节点 (待选)</span>
+    </ContextMenu.Item>
+
+    <ContextMenu.Item disabled>
+      <Play class="mr-2 h-4 w-4" />
+      <span>运行全部</span>
     </ContextMenu.Item>
   </ContextMenu.Content>
 </ContextMenu.Root>

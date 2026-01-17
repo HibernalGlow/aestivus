@@ -28,19 +28,11 @@ export interface WallpaperItem {
 
 /**
  * 获取壁纸预览图的 URL
- * Tauri 环境使用 asset:// 协议，Web 环境使用 Python 后端 API
+ * 通过 Python 后端 API 提供文件访问
  */
 export function getPreviewUrl(wallpaper: WallpaperItem, apiBase: string): string | null {
   if (!wallpaper.preview || !wallpaper.path) return null;
   const fullPath = `${wallpaper.path}/${wallpaper.preview}`.replace(/\\/g, '/');
-  
-  // Tauri 环境使用 asset:// 协议
-  if (typeof window !== 'undefined' && (window as any).__TAURI_INTERNALS__) {
-    // Windows 路径需要处理盘符，如 E:/xxx -> E:/xxx
-    return `asset://localhost/${fullPath}`;
-  }
-  
-  // Web 环境使用 Python 后端
   return `${apiBase}/file?path=${encodeURIComponent(fullPath)}`;
 }
 

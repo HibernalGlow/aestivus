@@ -15,51 +15,12 @@ const RETRY_CONFIG = {
 // 延迟函数
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-// 检测是否在 Tauri 环境
-const isTauri = () => typeof window !== 'undefined' && !!(window as any).__TAURI_INTERNALS__;
-
-// 路径到 RPC 模块/函数的映射
-function pathToRpc(path: string, method: string, body: any): { module: string; func: string; args: any } | null {
-  // /execute/node -> execution.rpc_execute_node
-  if (path === '/execute/node' && method === 'POST') {
-    return { module: 'execution', func: 'rpc_execute_node', args: body };
-  }
-  // /execute/flow -> execution.rpc_execute_flow
-  if (path === '/execute/flow' && method === 'POST') {
-    return { module: 'execution', func: 'rpc_execute_flow', args: body };
-  }
-  // /nodes/types -> execution.rpc_get_node_types
-  if (path === '/nodes/types' && method === 'GET') {
-    return { module: 'execution', func: 'rpc_get_node_types', args: {} };
-  }
-  // 其他路径暂不支持 RPC
-  return null;
-}
-
 // 带重试的请求函数
 async function requestWithRetry<T>(
   path: string, 
   options?: RequestInit,
   retryCount = 0
 ): Promise<T> {
-  const method = options?.method || 'GET';
-  const body = options?.body ? JSON.parse(options.body as string) : null;
-
-  // Tauri 环境下优先使用 RPC
-  if (isTauri()) {
-    const rpcInfo = pathToRpc(path, method, body);
-    if (rpcInfo) {
-      const { invoke } = await import('@tauri-apps/api/core');
-      try {
-        return await invoke<T>('py_rpc', rpcInfo);
-      } catch (e) {
-        console.error(`[API] RPC failed for ${path}:`, e);
-        throw e;
-      }
-    }
-  }
-
-  // 非 Tauri 或不支持的路径，走 HTTP
   try {
     const res = await fetch(`${getApiBase()}${path}`, {
       headers: {

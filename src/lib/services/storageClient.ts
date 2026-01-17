@@ -74,52 +74,6 @@ const getApiBase = () => getApiV1Url();
 export { getApiBase };
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const method = options?.method || 'GET';
-  const body = options?.body ? JSON.parse(options.body as string) : null;
-
-  // 判断是否在 Tauri 环境且应使用嵌入式 Python
-  // 检测方式: 存在 __TAURI_INTERNALS__ 且 backendReady 为 false（表示没有 Server）
-  const isTauri = typeof window !== 'undefined' && !!(window as any).__TAURI_INTERNALS__;
-  
-  // 如果在 Tauri 环境，直接走 RPC，不尝试 fetch
-  if (isTauri) {
-    const { invoke } = await import('@tauri-apps/api/core');
-    
-    // 路径解析策略：/storage/layouts/{nodeType} -> module: "storage", func: "rpc_get_layout", args: {...}
-    const parts = path.split('/').filter(Boolean);
-    const module = parts[0];
-    
-    let func = parts[1];
-    let args: any = { ...body };
-
-    if (module === 'storage') {
-      if (parts[1] === 'layouts') {
-        if (method === 'GET') {
-          func = parts[2] ? 'rpc_get_layout' : 'rpc_list_layouts';
-          if (parts[2]) args = { node_type: parts[2] };
-        } else if (method === 'PUT') {
-          func = 'rpc_set_layout';
-          args = { node_type: parts[2], ...body };
-        } else if (method === 'DELETE') {
-          func = 'rpc_delete_layout';
-          args = { node_type: parts[2] };
-        }
-      } else if (parts[1] === 'presets') {
-        if (method === 'GET') func = 'rpc_list_presets';
-        else if (method === 'POST') func = 'rpc_create_preset';
-        else if (method === 'PUT') func = 'rpc_update_preset';
-        else if (method === 'DELETE') func = 'rpc_delete_preset';
-        if (parts[2]) args.id = parts[2];
-      } else if (parts[1] === 'defaults') {
-        func = method === 'GET' ? 'rpc_get_defaults' : 'rpc_set_defaults';
-        args.node_type = parts[2];
-      }
-    }
-
-    return await invoke<T>('py_rpc', { module, func, args });
-  }
-  
-  // 非 Tauri 环境，走传统 HTTP（FastAPI Server）
   const res = await fetch(`${getApiBase()}${path}`, {
     headers: {
       'Content-Type': 'application/json',

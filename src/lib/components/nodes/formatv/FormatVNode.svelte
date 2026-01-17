@@ -180,12 +180,6 @@
 
   // 获取视频缩略图 URL（使用系统缩略图）
   function getThumbnailUrl(filePath: string): string {
-    // Tauri 环境使用 asset:// 协议
-    if (typeof window !== "undefined" && (window as any).__TAURI_INTERNALS__) {
-      const normalizedPath = filePath.replace(/\\/g, "/");
-      return `asset://localhost/${normalizedPath}`;
-    }
-    // Web 环境使用 Python 后端
     return `${getApiV1Url()}/file?path=${encodeURIComponent(filePath)}&thumbnail=true`;
   }
 

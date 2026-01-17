@@ -22,17 +22,10 @@
       }
     ],
     "security": {
-      "csp": null,
-      "assetProtocol": {
-        "enable": true,
-        "scope": ["**"]
-      }
+      "csp": null
     }
   },
   "bundle": {
-    "resources": {
-      "../src-python": "src-python"
-    },
     "active": true,
     "targets": "all",
     "icon": [

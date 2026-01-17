@@ -20,12 +20,15 @@
 
   // 自动隐藏标题栏引用
   let autoHideTitleBar: AutoHideTitleBar;
+  let titleBarPinned = $state(
+    settingsManager.getSettings().panels.titleBarPinned ?? true,
+  );
 
   // 获取全屏节点的信息
   let fullscreenNode = $derived(
     $fullscreenNodeStore.isOpen && $fullscreenNodeStore.nodeId
       ? $flowStore.nodes.find((n) => n.id === $fullscreenNodeStore.nodeId)
-      : null
+      : null,
   );
 
   // 获取节点类型组件
@@ -115,7 +118,10 @@
   {/if}
 
   <!-- 顶部标题栏 - 自动隐藏，悬停唤出，支持 pin -->
-  <AutoHideTitleBar bind:this={autoHideTitleBar}>
+  <AutoHideTitleBar
+    bind:this={autoHideTitleBar}
+    onPinnedChange={(p) => (titleBarPinned = p)}
+  >
     <TitleBar onTogglePin={() => autoHideTitleBar?.togglePin()} />
   </AutoHideTitleBar>
 
@@ -159,7 +165,10 @@
     <!-- 半透明遮罩 -->
     <div class="absolute inset-0 bg-background/40 backdrop-blur-sm"></div>
   </div>
-  <div class="fixed inset-4 z-51 flex flex-col">
+  <div
+    class="fixed inset-4 z-51 flex flex-col transition-all duration-300 ease-in-out"
+    style="top: {titleBarPinned ? 'calc(1rem + 28px)' : '1rem'}"
+  >
     <FullscreenComponent
       id={fullscreenNode.id}
       data={fullscreenNode.data}

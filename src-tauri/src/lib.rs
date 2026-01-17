@@ -238,18 +238,18 @@ impl PythonConfig {
 fn detect_python_path() -> String {
     #[cfg(target_os = "windows")]
     let candidates = vec![
-        "../src-python/.venv/Scripts/python.exe",
-        ".venv\\Scripts\\python.exe",
         "python",
         "python3",
+        "../src-python/.venv/Scripts/python.exe",
+        ".venv\\Scripts\\python.exe",
     ];
     
     #[cfg(not(target_os = "windows"))]
     let candidates = vec![
-        "../src-python/.venv/bin/python",
-        ".venv/bin/python",
         "python3",
         "python",
+        "../src-python/.venv/bin/python",
+        ".venv/bin/python",
     ];
     
     for candidate in candidates {
@@ -474,8 +474,20 @@ fn spawn_python_backend(app_handle: tauri::AppHandle, is_primary: bool) -> Resul
     let actual_port = if is_primary && !is_port_in_use(default_port) {
         default_port
     } else {
-        // 多开实例或端口被占用，找可用端口
-        find_available_port(default_port + 1)
+        // 如果是主实例但端口被占用，尝试清理后再检查一次
+        if is_primary {
+            println!("[tauri] Port {} occupied, attempting cleanup...", default_port);
+            cleanup_python_ports();
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            if !is_port_in_use(default_port) {
+                default_port
+            } else {
+                find_available_port(default_port + 1)
+            }
+        } else {
+            // 多开实例，找可用端口
+            find_available_port(default_port + 1)
+        }
     };
     
     println!("[tauri] Starting Python backend on port {} (primary: {})", actual_port, is_primary);
@@ -529,8 +541,12 @@ fn spawn_python_backend(app_handle: tauri::AppHandle, is_primary: bool) -> Resul
         })?;
         
         // 静默启动 Python 进程，无控制台窗口
+        // 设置 PYTHONIOENCODING=utf-8 避免 Windows GBK 编码问题
         Command::new(&config.python_path)
             .args(&args)
+            .env("PYTHONIOENCODING", "utf-8")
+            .env("PYTHONUTF8", "1")
+            .current_dir("../src-python")
             .creation_flags(CREATE_NO_WINDOW)
             .stdout(Stdio::from(log_file))
             .stderr(Stdio::from(log_file_err))
@@ -556,11 +572,13 @@ fn spawn_python_backend(app_handle: tauri::AppHandle, is_primary: bool) -> Resul
         
         Command::new("sh")
             .args(["-c", &terminal_cmd])
+            .current_dir("../src-python")
             .spawn()
             .or_else(|_| {
                 // 回退：直接启动（无可见终端）
                 Command::new(&config.python_path)
                     .args(&args)
+                    .current_dir("../src-python")
                     .stdout(Stdio::piped())
                     .stderr(Stdio::piped())
                     .spawn()

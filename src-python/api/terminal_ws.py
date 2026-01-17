@@ -157,8 +157,8 @@ async def websocket_terminal(websocket: WebSocket):
     
     连接后接收所有终端输出
     """
-    # 确保捕获器已安装
-    loop = asyncio.get_event_loop()
+    # 确保捕获器已安装（使用 get_running_loop 代替已弃用的 get_event_loop）
+    loop = asyncio.get_running_loop()
     terminal_capture.install(loop)
     
     await terminal_capture.connect(websocket)
@@ -188,3 +188,4 @@ async def websocket_terminal(websocket: WebSocket):
 
 # 导出
 __all__ = ["router", "terminal_capture"]
+

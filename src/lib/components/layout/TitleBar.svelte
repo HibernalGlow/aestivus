@@ -4,15 +4,28 @@
    * 无边框窗口的标题栏，支持拖拽移动和窗口控制
    * 符合 shadcn 设计风格
    */
-  import { Button } from '$lib/components/ui/button';
-  import { Separator } from '$lib/components/ui/separator';
-  import { 
-    Minus, Square, X, Sun, Moon, Palette, 
-    Maximize2, Minimize2, Settings, Workflow
-  } from '@lucide/svelte';
-  import { themeStore, toggleThemeMode, openThemeImport } from '$lib/stores/theme.svelte';
-  import { onMount } from 'svelte';
-  import { isTauriEnvironment } from '$lib/api/platform';
+  import { Button } from "$lib/components/ui/button";
+  import { Separator } from "$lib/components/ui/separator";
+  import {
+    Minus,
+    Square,
+    X,
+    Sun,
+    Moon,
+    Palette,
+    Maximize2,
+    Minimize2,
+    Settings,
+    Workflow,
+  } from "@lucide/svelte";
+  import {
+    themeStore,
+    toggleThemeMode,
+    openThemeImport,
+  } from "$lib/stores/theme.svelte";
+  import { backendPort, isPrimary, backendReady } from "$lib/stores/backend";
+  import { onMount, onDestroy } from "svelte";
+  import { isTauriEnvironment } from "$lib/api/platform";
 
   // 窗口 API 类型
   type WindowAPI = {
@@ -26,15 +39,36 @@
   let windowApi: WindowAPI | null = null;
   let isMaximized = $state(false);
 
+  // 后端状态
+  let portInfo = $state(8009);
+  let primaryInfo = $state(true);
+  let readyInfo = $state(false);
+
+  let unsubscribePort: any;
+  let unsubscribePrimary: any;
+  let unsubscribeReady: any;
+
   onMount(() => {
     initWindowApi();
+
+    unsubscribePort = backendPort.subscribe((v) => (portInfo = v));
+    unsubscribePrimary = isPrimary.subscribe((v) => (primaryInfo = v));
+    unsubscribeReady = backendReady.subscribe((v) => (readyInfo = v));
+  });
+
+  onDestroy(() => {
+    unsubscribePort?.();
+    unsubscribePrimary?.();
+    unsubscribeReady?.();
   });
 
   async function initWindowApi() {
     // 优先尝试 Tauri API
     if (isTauriEnvironment()) {
       try {
-        const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+        const { getCurrentWebviewWindow } = await import(
+          "@tauri-apps/api/webviewWindow"
+        );
         const appWindow = getCurrentWebviewWindow();
         windowApi = {
           minimize: () => appWindow.minimize(),
@@ -43,17 +77,17 @@
           startDrag: () => appWindow.startDragging(),
           isMaximized: () => appWindow.isMaximized(),
         };
-        
+
         // 监听窗口状态变化
         appWindow.onResized(async () => {
           isMaximized = await appWindow.isMaximized();
         });
-        
+
         // 初始化最大化状态
         isMaximized = await appWindow.isMaximized();
         return;
       } catch (e) {
-        console.warn('Tauri API 加载失败:', e);
+        console.warn("Tauri API 加载失败:", e);
       }
     }
 
@@ -69,22 +103,38 @@
     }
   }
 
-  function minimizeWindow() { windowApi?.minimize(); }
-  function maximizeWindow() { windowApi?.maximize(); }
-  function closeWindow() { windowApi?.close(); }
-  
+  function minimizeWindow() {
+    windowApi?.minimize();
+  }
+  function maximizeWindow() {
+    windowApi?.maximize();
+  }
+  function closeWindow() {
+    windowApi?.close();
+  }
+
   // 拖拽处理
   function handleMouseDown(e: MouseEvent) {
     if (e.button !== 0) return;
     const target = e.target as HTMLElement;
-    if (target.closest('button') || target.closest('.no-drag') || target.closest('[data-no-drag]')) return;
+    if (
+      target.closest("button") ||
+      target.closest(".no-drag") ||
+      target.closest("[data-no-drag]")
+    )
+      return;
     windowApi?.startDrag?.();
   }
-  
+
   // 双击最大化
   function handleDoubleClick(e: MouseEvent) {
     const target = e.target as HTMLElement;
-    if (target.closest('button') || target.closest('.no-drag') || target.closest('[data-no-drag]')) return;
+    if (
+      target.closest("button") ||
+      target.closest(".no-drag") ||
+      target.closest("[data-no-drag]")
+    )
+      return;
     maximizeWindow();
   }
 </script>
@@ -93,39 +143,61 @@
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <header
   data-tauri-drag-region
-  class="h-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 flex items-center justify-between px-3 select-none border-b shrink-0"
+  class="h-10 bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60 flex items-center justify-between px-3 select-none border-b shrink-0"
   onmousedown={handleMouseDown}
   ondblclick={handleDoubleClick}
 >
   <!-- 左侧：Logo + 应用名称 -->
   <div class="flex items-center gap-2" data-tauri-drag-region>
-    <div class="flex items-center justify-center w-6 h-6 rounded-md bg-primary/10">
+    <div
+      class="flex items-center justify-center w-6 h-6 rounded-md bg-primary/10"
+    >
       <Workflow class="h-4 w-4 text-primary" />
     </div>
-    <span class="text-sm font-medium tracking-tight">aestival</span>
-    <span class="text-xs text-muted-foreground hidden sm:inline">flow</span>
+    <div class="flex items-baseline gap-2">
+      <span class="text-sm font-medium tracking-tight">aestival</span>
+
+      <!-- 状态指示器 -->
+      {#if readyInfo}
+        <div
+          class="flex items-center gap-1.5 px-1.5 py-0.5 rounded-full bg-muted/50 border text-[10px] font-mono leading-none no-drag"
+          data-no-drag
+        >
+          <div
+            class="w-1.5 h-1.5 rounded-full {readyInfo
+              ? 'bg-green-500'
+              : 'bg-red-500'}"
+          ></div>
+          <span class="text-muted-foreground/80">{portInfo}</span>
+          <span class="w-px h-2 bg-border"></span>
+          <span class={primaryInfo ? "text-primary/70" : "text-amber-500/70"}>
+            {primaryInfo ? "Primary" : "Secondary"}
+          </span>
+        </div>
+      {/if}
+    </div>
   </div>
 
   <!-- 中间：功能按钮 -->
   <div class="flex items-center gap-0.5 no-drag" data-no-drag>
-    <Button 
-      variant="ghost" 
-      size="icon" 
-      class="h-7 w-7 rounded-md" 
-      onclick={toggleThemeMode} 
-      title={$themeStore.mode === 'dark' ? '切换到亮色模式' : '切换到暗色模式'}
+    <Button
+      variant="ghost"
+      size="icon"
+      class="h-7 w-7 rounded-md"
+      onclick={toggleThemeMode}
+      title={$themeStore.mode === "dark" ? "切换到亮色模式" : "切换到暗色模式"}
     >
-      {#if $themeStore.mode === 'dark'}
+      {#if $themeStore.mode === "dark"}
         <Sun class="h-4 w-4" />
       {:else}
         <Moon class="h-4 w-4" />
       {/if}
     </Button>
-    <Button 
-      variant="ghost" 
-      size="icon" 
-      class="h-7 w-7 rounded-md" 
-      onclick={openThemeImport} 
+    <Button
+      variant="ghost"
+      size="icon"
+      class="h-7 w-7 rounded-md"
+      onclick={openThemeImport}
       title="主题设置"
     >
       <Palette class="h-4 w-4" />
@@ -142,12 +214,12 @@
     >
       <Minus class="h-4 w-4" />
     </button>
-    
+
     <!-- 最大化/还原 -->
     <button
       class="inline-flex items-center justify-center h-10 w-11 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
       onclick={maximizeWindow}
-      title={isMaximized ? '还原' : '最大化'}
+      title={isMaximized ? "还原" : "最大化"}
     >
       {#if isMaximized}
         <Minimize2 class="h-3.5 w-3.5" />
@@ -155,7 +227,7 @@
         <Maximize2 class="h-3.5 w-3.5" />
       {/if}
     </button>
-    
+
     <!-- 关闭 -->
     <button
       class="inline-flex items-center justify-center h-10 w-11 text-muted-foreground hover:bg-destructive hover:text-destructive-foreground transition-colors"

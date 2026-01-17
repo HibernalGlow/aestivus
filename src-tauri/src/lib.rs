@@ -640,6 +640,16 @@ fn get_backend_port(app_handle: tauri::AppHandle) -> Result<u16, String> {
 }
 
 #[tauri::command]
+fn get_instance_status(app_handle: tauri::AppHandle) -> Result<bool, String> {
+    if let Some(state) = app_handle.try_state::<Arc<Mutex<PythonProcess>>>() {
+        let guard = state.lock().map_err(|_| "Lock failed")?;
+        Ok(guard.is_primary())
+    } else {
+        Err("State not found".to_string())
+    }
+}
+
+#[tauri::command]
 fn get_python_config(app_handle: tauri::AppHandle) -> Result<PythonConfig, String> {
     if let Some(state) = app_handle.try_state::<Arc<Mutex<PythonProcess>>>() {
         let guard = state.lock().map_err(|_| "Lock failed")?;
@@ -816,6 +826,7 @@ pub fn run() {
             toggle_fullscreen,
             get_python_config,
             get_backend_port,
+            get_instance_status,
             get_python_log_file,
             switch_to_dev_mode,
             switch_to_release_mode,

@@ -15,6 +15,9 @@ export const backendPort = writable<number>(DEFAULT_PORT);
 // 是否已初始化
 export const backendReady = writable<boolean>(false);
 
+// 是否为主实例
+export const isPrimary = writable<boolean>(true);
+
 // 派生的 API 基础 URL
 export const apiBaseUrl = derived(backendPort, ($port) => `http://127.0.0.1:${$port}`);
 export const apiV1Url = derived(backendPort, ($port) => `http://127.0.0.1:${$port}/v1`);
@@ -26,11 +29,16 @@ export const wsBaseUrl = derived(backendPort, ($port) => `ws://127.0.0.1:${$port
  */
 export async function initBackend(): Promise<number> {
   try {
-    // 从 Tauri 获取端口
-    const port = await invoke<number>('get_backend_port');
+    // 从 Tauri 获取端口和实例状态
+    const [port, primary] = await Promise.all([
+      invoke<number>('get_backend_port'),
+      invoke<boolean>('get_instance_status').catch(() => true)
+    ]);
+    
     backendPort.set(port);
+    isPrimary.set(primary);
     backendReady.set(true);
-    console.log(`[backend] 已连接到端口 ${port}`);
+    console.log(`[backend] 已连接到端口 ${port}, 主实例: ${primary}`);
     return port;
   } catch (e) {
     // 非 Tauri 环境，使用默认端口

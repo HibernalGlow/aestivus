@@ -1,6 +1,6 @@
 {
   "name": "aestivus",
-  "version": "0.0.5",
+  "version": "0.0.7",
   "description": "Python工具链可视化编排与执行平台 - Tauri 版本",
   "type": "module",
   "scripts": {

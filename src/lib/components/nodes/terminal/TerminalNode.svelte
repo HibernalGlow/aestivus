@@ -21,12 +21,9 @@
   } from "@lucide/svelte";
   import AnsiToHtml from "ansi-to-html";
   import { invoke } from "@tauri-apps/api/core";
+  import { backendPort } from "$lib/stores/backend";
 
-  export let id: string;
-  export let data: {
-    label?: string;
-    maxLines?: number;
-  } = {};
+  let { id, data = {} } = $props();
 
   // ANSI 转 HTML 转换器
   const ansiConverter = new AnsiToHtml({
@@ -53,21 +50,20 @@
   });
 
   // 状态
-  let connected = false;
-  let paused = false;
-  let copied = false;
-  let lines: { text: string; html: string }[] = [];
+  let connected = $state(false);
+  let paused = $state(false);
+  let copied = $state(false);
+  let lines = $state<{ text: string; html: string }[]>([]);
   let ws: WebSocket | null = null;
-  let terminalEl: HTMLDivElement;
-  let backendPort = 8009; // 默认端口
+  let terminalEl = $state<HTMLDivElement>();
 
   const maxLines = data?.maxLines ?? 200;
 
   // 动态获取 WebSocket URL
-  $: wsUrl = `ws://localhost:${backendPort}/ws/terminal`;
+  let wsUrl = $derived(`ws://127.0.0.1:${$backendPort}/ws/terminal`);
 
   // 边框样式
-  $: borderClass = connected ? "border-primary/50" : "border-border";
+  let borderClass = $derived(connected ? "border-primary/50" : "border-border");
 
   function connect() {
     retryCount = 0;
@@ -121,16 +117,10 @@
   const maxRetries = 5;
 
   async function initConnection() {
-    try {
-      // 从 Tauri 获取实际端口
-      backendPort = await invoke<number>("get_backend_port");
-      addLine(`📍 后端端口: ${backendPort}`);
-    } catch (e) {
-      // 非 Tauri 环境或获取失败，使用默认端口
-      addLine(`⚠️ 使用默认端口: ${backendPort}`);
+    // 等待后端就绪或直接尝试连接
+    if ($backendPort === 0) {
+      addLine("🟡 等待后端就绪...");
     }
-    // 等待服务启动
-    await new Promise((r) => setTimeout(r, 500));
     connectWithRetry();
   }
 
@@ -138,7 +128,7 @@
     if (ws) ws.close();
 
     // 直接构建 WebSocket URL，避免响应式变量的时序问题
-    const currentWsUrl = `ws://localhost:${backendPort}/ws/terminal`;
+    const currentWsUrl = `ws://127.0.0.1:${$backendPort}/ws/terminal`;
 
     try {
       ws = new WebSocket(currentWsUrl);
@@ -271,7 +261,7 @@
         </div>
         <div class="flex items-center gap-2">
           <span class="text-xs text-muted-foreground" title="后端端口"
-            >:{backendPort}</span
+            >:{$backendPort}</span
           >
           <span class="text-xs text-muted-foreground">{lines.length} 行</span>
           {#if !connected}

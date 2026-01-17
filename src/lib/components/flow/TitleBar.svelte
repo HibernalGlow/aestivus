@@ -3,17 +3,37 @@
    * 自定义标题栏 - 集成窗口控制和工具栏功能
    * 支持自动隐藏、悬停唤出、pin 固定
    */
-  import { flowStore, taskStore, isRunning, openSettingsOverlay } from '$lib/stores';
-  import { api } from '$lib/services/api';
-  import { 
-    Save, Play, Square, RotateCcw, FileDown, FileUp, 
-    Sun, Moon, Monitor, Image, X,
-    Minus, Square as MaxIcon, X as CloseIcon,
-    FolderOpen, Settings, Pin, PinOff
-  } from '@lucide/svelte';
-  import { Button } from '$lib/components/ui/button';
-  import { themeStore, toggleThemeMode } from '$lib/stores/theme.svelte';
-  import { settingsManager } from '$lib/settings/settingsManager';
+  import {
+    flowStore,
+    taskStore,
+    isRunning,
+    openSettingsOverlay,
+  } from "$lib/stores";
+  import { api } from "$lib/services/api";
+  import {
+    Save,
+    Play,
+    Square,
+    RotateCcw,
+    FileDown,
+    FileUp,
+    Sun,
+    Moon,
+    Monitor,
+    Image,
+    X,
+    Minus,
+    Square as MaxIcon,
+    X as CloseIcon,
+    FolderOpen,
+    Settings,
+    Pin,
+    PinOff,
+  } from "@lucide/svelte";
+  import { Button } from "$lib/components/ui/button";
+  import { themeStore, toggleThemeMode } from "$lib/stores/theme.svelte";
+  import { backendPort, isPrimary, backendReady } from "$lib/stores/backend";
+  import { settingsManager } from "$lib/settings/settingsManager";
 
   interface Props {
     /** 切换 pin 状态的回调 */
@@ -24,35 +44,51 @@
 
   // 获取面板设置（包含 pin 状态）
   let panelSettings = $state(settingsManager.getSettings().panels);
-  
+
   // 从设置中读取 pin 状态
   let isPinned = $derived(panelSettings.titleBarPinned ?? true);
-  
+
   // 计算标题栏样式 - 使用 color-mix 实现带颜色的透明效果
   let toolbarStyle = $derived(
-    `background: color-mix(in srgb, var(--card) ${panelSettings.topToolbarOpacity}%, transparent); backdrop-filter: blur(${panelSettings.topToolbarBlur}px);`
+    `background: color-mix(in srgb, var(--card) ${panelSettings.topToolbarOpacity}%, transparent); backdrop-filter: blur(${panelSettings.topToolbarBlur}px);`,
   );
 
   // Tauri 窗口 API
   let windowApi: any = $state(null);
-  
+
   // 是否在 Tauri 环境中（用于控制窗口按钮显示）
   let isTauri = $derived(windowApi !== null);
-  
+
   // 动态导入 Tauri API
-  import { onMount } from 'svelte';
+  import { onMount } from "svelte";
   onMount(async () => {
     try {
-      const { getCurrentWindow } = await import('@tauri-apps/api/window');
+      const { getCurrentWindow } = await import("@tauri-apps/api/window");
       windowApi = getCurrentWindow();
     } catch (e) {
-      console.log('Not running in Tauri');
+      console.log("Not running in Tauri");
     }
-    
+
     // 监听设置变化
     settingsManager.addListener((s) => {
       panelSettings = s.panels;
     });
+  });
+
+  // 后端状态
+  let portInfo = $state(8009);
+  let primaryInfo = $state(true);
+  let readyInfo = $state(false);
+
+  $effect(() => {
+    const unsubPort = backendPort.subscribe((v) => (portInfo = v));
+    const unsubPrimary = isPrimary.subscribe((v) => (primaryInfo = v));
+    const unsubReady = backendReady.subscribe((v) => (readyInfo = v));
+    return () => {
+      unsubPort();
+      unsubPrimary();
+      unsubReady();
+    };
   });
 
   // 拖拽窗口
@@ -77,14 +113,16 @@
 
   // 流程管理弹窗
   let showFlowManager = $state(false);
-  let flows = $state<Array<{id: string, name: string, updatedAt: string}>>([]);
+  let flows = $state<Array<{ id: string; name: string; updatedAt: string }>>(
+    [],
+  );
 
   function loadFlowList() {
     try {
-      const saved = localStorage.getItem('aestival_flows');
+      const saved = localStorage.getItem("aestival_flows");
       if (saved) flows = JSON.parse(saved);
     } catch (e) {
-      console.error('加载流程列表失败:', e);
+      console.error("加载流程列表失败:", e);
     }
   }
 
@@ -98,28 +136,29 @@
   }
 
   function selectFlow(id: string) {
-    api.getFlow(id)
-      .then(flow => {
+    api
+      .getFlow(id)
+      .then((flow) => {
         flowStore.load(flow);
         // 记忆上次使用的流程
-        localStorage.setItem('aestivus_last_flow', id);
+        localStorage.setItem("aestivus_last_flow", id);
       })
-      .catch(e => console.error('加载流程失败:', e));
+      .catch((e) => console.error("加载流程失败:", e));
     showFlowManager = false;
   }
 
   function createNewFlow() {
     flowStore.reset();
     // 清除上次记忆
-    localStorage.removeItem('aestivus_last_flow');
+    localStorage.removeItem("aestivus_last_flow");
     showFlowManager = false;
   }
 
   function deleteFlow(id: string, event: MouseEvent) {
     event.stopPropagation();
-    if (confirm('确定删除此流程？')) {
-      flows = flows.filter(f => f.id !== id);
-      localStorage.setItem('aestival_flows', JSON.stringify(flows));
+    if (confirm("确定删除此流程？")) {
+      flows = flows.filter((f) => f.id !== id);
+      localStorage.setItem("aestival_flows", JSON.stringify(flows));
     }
   }
 
@@ -132,9 +171,9 @@
 
   // 背景图上传
   function uploadBackground() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
@@ -163,7 +202,9 @@
         flowStore.load(saved);
       }
       flowStore.markSaved();
-    } catch (e) { console.error('保存失败:', e); }
+    } catch (e) {
+      console.error("保存失败:", e);
+    }
   }
 
   async function executeFlow() {
@@ -172,33 +213,43 @@
     try {
       const { taskId } = await api.executeFlow(flowStore.getState().id!);
       taskStore.startTask(taskId);
-    } catch (e) { console.error('执行失败:', e); }
+    } catch (e) {
+      console.error("执行失败:", e);
+    }
   }
 
   function stopExecution() {
     const taskId = $taskStore.taskId;
-    if (taskId) { api.cancelTask(taskId); taskStore.cancel(); }
+    if (taskId) {
+      api.cancelTask(taskId);
+      taskStore.cancel();
+    }
   }
 
   function resetFlow() {
-    if (confirm('确定要重置流程吗？')) { flowStore.reset(); taskStore.reset(); }
+    if (confirm("确定要重置流程吗？")) {
+      flowStore.reset();
+      taskStore.reset();
+    }
   }
 
   function exportFlow() {
     const flow = flowStore.toFlow();
-    const blob = new Blob([JSON.stringify(flow, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(flow, null, 2)], {
+      type: "application/json",
+    });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
-    a.download = `${flow.name || 'flow'}.json`;
+    a.download = `${flow.name || "flow"}.json`;
     a.click();
     URL.revokeObjectURL(url);
   }
 
   function importFlow() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.json';
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
     input.onchange = async (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
@@ -215,191 +266,305 @@
   <!-- 顶部标题栏 -->
   <div class="h-10 flex items-center select-none relative" style={toolbarStyle}>
     <!-- 左侧：Logo 和流程名 -->
-  <div class="flex items-center gap-2 px-3">
-    <span class="text-sm font-bold text-primary">Aestivus</span>
-    <div class="w-px h-4 bg-border"></div>
-    <Button variant="ghost" size="sm" class="h-7 px-2" onclick={openFlowManager} title="打开流程">
-      <FolderOpen class="w-3.5 h-3.5 mr-1" />
-      <span class="text-xs">流程</span>
-    </Button>
-    <input
-      type="text"
-      class="text-sm bg-transparent border-none focus:outline-none focus:ring-1 focus:ring-primary rounded px-2 py-1 w-32"
-      value={$flowStore.name}
-      onchange={(e) => flowStore.setName(e.currentTarget.value)}
-      placeholder="未命名流程"
-    />
-    {#if $flowStore.isDirty}
-      <span class="text-xs text-amber-600 bg-amber-100 dark:bg-amber-900/30 px-1.5 py-0.5 rounded">未保存</span>
-    {/if}
-  </div>
+    <div class="flex items-center gap-2 px-3">
+      <div class="flex items-baseline gap-2">
+        <span class="text-sm font-bold text-primary">Aestivus</span>
 
-  <!-- 中间：拖拽区域 -->
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="flex-1 h-full cursor-default" onmousedown={startDrag}></div>
-
-  <!-- 居中按钮组 - 使用绝对定位保持居中 -->
-  <div class="absolute left-1/2 -translate-x-1/2 flex items-center gap-0.5">
-    <!-- Pin 固定按钮 -->
-    <Button 
-      variant={isPinned ? "secondary" : "ghost"} 
-      size="icon" 
-      class="h-7 w-7" 
-      onclick={onTogglePin} 
-      title={isPinned ? "取消固定标题栏" : "固定标题栏"}
-    >
-      {#if isPinned}
-        <Pin class="w-3.5 h-3.5" />
-      {:else}
-        <PinOff class="w-3.5 h-3.5" />
+        <!-- 后端状态指示器 -->
+        {#if readyInfo}
+          <div
+            class="flex items-center gap-1.5 px-1.5 py-0.5 rounded-full bg-muted/50 border border-border/50 text-[10px] font-mono leading-none no-drag"
+            data-no-drag
+          >
+            <div
+              class="w-1.5 h-1.5 rounded-full {readyInfo
+                ? 'bg-green-500'
+                : 'bg-red-500'}"
+            ></div>
+            <span class="text-muted-foreground/80">{portInfo}</span>
+            <span class="w-px h-2 bg-border"></span>
+            <span class={primaryInfo ? "text-primary/70" : "text-amber-500/70"}>
+              {primaryInfo ? "Primary" : "Secondary"}
+            </span>
+          </div>
+        {/if}
+      </div>
+      <div class="w-px h-4 bg-border"></div>
+      <Button
+        variant="ghost"
+        size="sm"
+        class="h-7 px-2"
+        onclick={openFlowManager}
+        title="打开流程"
+      >
+        <FolderOpen class="w-3.5 h-3.5 mr-1" />
+        <span class="text-xs">流程</span>
+      </Button>
+      <input
+        type="text"
+        class="text-sm bg-transparent border-none focus:outline-none focus:ring-1 focus:ring-primary rounded px-2 py-1 w-32"
+        value={$flowStore.name}
+        onchange={(e) => flowStore.setName(e.currentTarget.value)}
+        placeholder="未命名流程"
+      />
+      {#if $flowStore.isDirty}
+        <span
+          class="text-xs text-amber-600 bg-amber-100 dark:bg-amber-900/30 px-1.5 py-0.5 rounded"
+          >未保存</span
+        >
       {/if}
-    </Button>
-    <!-- 主题模式切换 -->
-    <Button variant="ghost" size="icon" class="h-7 w-7" onclick={toggleThemeMode} title="主题">
-      {#if $themeStore.mode === 'dark'}<Moon class="w-3.5 h-3.5" />
-      {:else if $themeStore.mode === 'light'}<Sun class="w-3.5 h-3.5" />
-      {:else}<Monitor class="w-3.5 h-3.5" />{/if}
-    </Button>
-    <!-- 背景图展开按钮 -->
-    <Button variant={showBgBar ? "secondary" : "ghost"} size="icon" class="h-7 w-7" onclick={toggleBgBar} title="背景图设置">
-      <Image class="w-3.5 h-3.5" />
-    </Button>
-    <!-- 设置 -->
-    <Button variant="ghost" size="icon" class="h-7 w-7" onclick={openSettingsOverlay} title="设置">
-      <Settings class="w-3.5 h-3.5" />
-    </Button>
-  </div>
+    </div>
 
-  <!-- 右侧：工具按钮 -->
-  <div class="flex items-center gap-0.5 px-2">
-    <!-- 流程操作 -->
-    <Button variant="ghost" size="icon" class="h-7 w-7" onclick={importFlow} title="导入">
-      <FileUp class="w-3.5 h-3.5" />
-    </Button>
-    <Button variant="ghost" size="icon" class="h-7 w-7" onclick={exportFlow} title="导出">
-      <FileDown class="w-3.5 h-3.5" />
-    </Button>
-    <Button variant="ghost" size="icon" class="h-7 w-7" onclick={resetFlow} title="重置">
-      <RotateCcw class="w-3.5 h-3.5" />
-    </Button>
-    <Button variant="ghost" size="icon" class="h-7 w-7" onclick={saveFlow} disabled={!$flowStore.isDirty} title="保存">
-      <Save class="w-3.5 h-3.5" />
-    </Button>
-    {#if $isRunning}
-      <Button variant="destructive" size="icon" class="h-7 w-7" onclick={stopExecution} title="停止">
-        <Square class="w-3.5 h-3.5" />
-      </Button>
-    {:else}
-      <Button variant="default" size="icon" class="h-7 w-7" onclick={executeFlow} disabled={$flowStore.nodes.length === 0} title="执行">
-        <Play class="w-3.5 h-3.5" />
-      </Button>
-    {/if}
-    
-    <!-- 窗口控制按钮 - 仅在 Tauri 环境显示 -->
-    {#if isTauri}
-      <div class="w-px h-5 bg-border mx-1"></div>
-      
-      <button 
-        class="h-7 w-10 flex items-center justify-center hover:bg-muted transition-colors"
-        onclick={minimizeWindow}
-        title="最小化"
-      >
-        <Minus class="w-4 h-4" />
-      </button>
-      <button 
-        class="h-7 w-10 flex items-center justify-center hover:bg-muted transition-colors"
-        onclick={toggleMaximize}
-        title="最大化"
-      >
-        <MaxIcon class="w-3.5 h-3.5" />
-      </button>
-      <button 
-        class="h-7 w-10 flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground transition-colors"
-        onclick={closeWindow}
-        title="关闭"
-      >
-        <CloseIcon class="w-4 h-4" />
-      </button>
-    {/if}
-  </div>
-</div>
+    <!-- 中间：拖拽区域 -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <div class="flex-1 h-full cursor-default" onmousedown={startDrag}></div>
 
-<!-- 背景图设置展开栏 -->
-{#if showBgBar}
-  <div class="h-8 flex items-center gap-4 px-4" style={toolbarStyle}>
-    <!-- 背景图 -->
-    <div class="flex items-center gap-1">
-      <span class="text-xs text-muted-foreground">背景</span>
-      <Button variant="ghost" size="sm" class="h-5 px-1.5 text-xs" onclick={uploadBackground}>
-        <FileUp class="w-3 h-3" />
+    <!-- 居中按钮组 - 使用绝对定位保持居中 -->
+    <div class="absolute left-1/2 -translate-x-1/2 flex items-center gap-0.5">
+      <!-- Pin 固定按钮 -->
+      <Button
+        variant={isPinned ? "secondary" : "ghost"}
+        size="icon"
+        class="h-7 w-7"
+        onclick={onTogglePin}
+        title={isPinned ? "取消固定标题栏" : "固定标题栏"}
+      >
+        {#if isPinned}
+          <Pin class="w-3.5 h-3.5" />
+        {:else}
+          <PinOff class="w-3.5 h-3.5" />
+        {/if}
       </Button>
-      {#if $themeStore.backgroundImage}
-        <Button variant="ghost" size="sm" class="h-5 px-1.5 text-xs text-destructive" onclick={clearBackground}>
-          <X class="w-3 h-3" />
+      <!-- 主题模式切换 -->
+      <Button
+        variant="ghost"
+        size="icon"
+        class="h-7 w-7"
+        onclick={toggleThemeMode}
+        title="主题"
+      >
+        {#if $themeStore.mode === "dark"}<Moon class="w-3.5 h-3.5" />
+        {:else if $themeStore.mode === "light"}<Sun class="w-3.5 h-3.5" />
+        {:else}<Monitor class="w-3.5 h-3.5" />{/if}
+      </Button>
+      <!-- 背景图展开按钮 -->
+      <Button
+        variant={showBgBar ? "secondary" : "ghost"}
+        size="icon"
+        class="h-7 w-7"
+        onclick={toggleBgBar}
+        title="背景图设置"
+      >
+        <Image class="w-3.5 h-3.5" />
+      </Button>
+      <!-- 设置 -->
+      <Button
+        variant="ghost"
+        size="icon"
+        class="h-7 w-7"
+        onclick={openSettingsOverlay}
+        title="设置"
+      >
+        <Settings class="w-3.5 h-3.5" />
+      </Button>
+    </div>
+
+    <!-- 右侧：工具按钮 -->
+    <div class="flex items-center gap-0.5 px-2">
+      <!-- 流程操作 -->
+      <Button
+        variant="ghost"
+        size="icon"
+        class="h-7 w-7"
+        onclick={importFlow}
+        title="导入"
+      >
+        <FileUp class="w-3.5 h-3.5" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        class="h-7 w-7"
+        onclick={exportFlow}
+        title="导出"
+      >
+        <FileDown class="w-3.5 h-3.5" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        class="h-7 w-7"
+        onclick={resetFlow}
+        title="重置"
+      >
+        <RotateCcw class="w-3.5 h-3.5" />
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
+        class="h-7 w-7"
+        onclick={saveFlow}
+        disabled={!$flowStore.isDirty}
+        title="保存"
+      >
+        <Save class="w-3.5 h-3.5" />
+      </Button>
+      {#if $isRunning}
+        <Button
+          variant="destructive"
+          size="icon"
+          class="h-7 w-7"
+          onclick={stopExecution}
+          title="停止"
+        >
+          <Square class="w-3.5 h-3.5" />
         </Button>
+      {:else}
+        <Button
+          variant="default"
+          size="icon"
+          class="h-7 w-7"
+          onclick={executeFlow}
+          disabled={$flowStore.nodes.length === 0}
+          title="执行"
+        >
+          <Play class="w-3.5 h-3.5" />
+        </Button>
+      {/if}
+
+      <!-- 窗口控制按钮 - 仅在 Tauri 环境显示 -->
+      {#if isTauri}
+        <div class="w-px h-5 bg-border mx-1"></div>
+
+        <button
+          class="h-7 w-10 flex items-center justify-center hover:bg-muted transition-colors"
+          onclick={minimizeWindow}
+          title="最小化"
+        >
+          <Minus class="w-4 h-4" />
+        </button>
+        <button
+          class="h-7 w-10 flex items-center justify-center hover:bg-muted transition-colors"
+          onclick={toggleMaximize}
+          title="最大化"
+        >
+          <MaxIcon class="w-3.5 h-3.5" />
+        </button>
+        <button
+          class="h-7 w-10 flex items-center justify-center hover:bg-destructive hover:text-destructive-foreground transition-colors"
+          onclick={closeWindow}
+          title="关闭"
+        >
+          <CloseIcon class="w-4 h-4" />
+        </button>
+      {/if}
+    </div>
+  </div>
+
+  <!-- 背景图设置展开栏 -->
+  {#if showBgBar}
+    <div class="h-8 flex items-center gap-4 px-4" style={toolbarStyle}>
+      <!-- 背景图 -->
+      <div class="flex items-center gap-1">
+        <span class="text-xs text-muted-foreground">背景</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          class="h-5 px-1.5 text-xs"
+          onclick={uploadBackground}
+        >
+          <FileUp class="w-3 h-3" />
+        </Button>
+        {#if $themeStore.backgroundImage}
+          <Button
+            variant="ghost"
+            size="sm"
+            class="h-5 px-1.5 text-xs text-destructive"
+            onclick={clearBackground}
+          >
+            <X class="w-3 h-3" />
+          </Button>
+          <input
+            type="number"
+            min="0"
+            max="100"
+            value={$themeStore.backgroundOpacity}
+            onchange={(e) =>
+              themeStore.setBackgroundOpacity(
+                parseInt(e.currentTarget.value) || 0,
+              )}
+            class="w-10 h-5 text-xs text-center bg-transparent rounded px-1"
+          />
+        {/if}
+      </div>
+      <!-- UI 透明度 -->
+      <div class="flex items-center gap-1">
+        <span class="text-xs text-muted-foreground">透明</span>
         <input
           type="number"
           min="0"
           max="100"
-          value={$themeStore.backgroundOpacity}
-          onchange={(e) => themeStore.setBackgroundOpacity(parseInt(e.currentTarget.value) || 0)}
+          value={panelSettings.topToolbarOpacity}
+          onchange={(e) =>
+            settingsManager.updateNestedSettings("panels", {
+              topToolbarOpacity: parseInt(e.currentTarget.value) || 0,
+              sidebarOpacity: parseInt(e.currentTarget.value) || 0,
+            })}
           class="w-10 h-5 text-xs text-center bg-transparent rounded px-1"
         />
-      {/if}
+      </div>
+      <!-- UI 模糊 -->
+      <div class="flex items-center gap-1">
+        <span class="text-xs text-muted-foreground">模糊</span>
+        <input
+          type="number"
+          min="0"
+          max="30"
+          value={panelSettings.topToolbarBlur}
+          onchange={(e) =>
+            settingsManager.updateNestedSettings("panels", {
+              topToolbarBlur: parseInt(e.currentTarget.value) || 0,
+              sidebarBlur: parseInt(e.currentTarget.value) || 0,
+            })}
+          class="w-10 h-5 text-xs text-center bg-transparent rounded px-1"
+        />
+      </div>
     </div>
-    <!-- UI 透明度 -->
-    <div class="flex items-center gap-1">
-      <span class="text-xs text-muted-foreground">透明</span>
-      <input
-        type="number"
-        min="0"
-        max="100"
-        value={panelSettings.topToolbarOpacity}
-        onchange={(e) => settingsManager.updateNestedSettings('panels', { topToolbarOpacity: parseInt(e.currentTarget.value) || 0, sidebarOpacity: parseInt(e.currentTarget.value) || 0 })}
-        class="w-10 h-5 text-xs text-center bg-transparent rounded px-1"
-      />
-    </div>
-    <!-- UI 模糊 -->
-    <div class="flex items-center gap-1">
-      <span class="text-xs text-muted-foreground">模糊</span>
-      <input
-        type="number"
-        min="0"
-        max="30"
-        value={panelSettings.topToolbarBlur}
-        onchange={(e) => settingsManager.updateNestedSettings('panels', { topToolbarBlur: parseInt(e.currentTarget.value) || 0, sidebarBlur: parseInt(e.currentTarget.value) || 0 })}
-        class="w-10 h-5 text-xs text-center bg-transparent rounded px-1"
-      />
-    </div>
-  </div>
-{/if}
+  {/if}
 </div>
 
 <!-- 流程管理弹窗 -->
 {#if showFlowManager}
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="fixed inset-0 z-[200] bg-black/50" onclick={closeFlowManager}></div>
-  <div class="fixed top-12 left-4 z-[201] w-80 bg-card border rounded-lg shadow-xl">
+  <div
+    class="fixed inset-0 z-[200] bg-black/50"
+    onclick={closeFlowManager}
+  ></div>
+  <div
+    class="fixed top-12 left-4 z-[201] w-80 bg-card border rounded-lg shadow-xl"
+  >
     <div class="p-3 border-b flex items-center justify-between">
       <span class="font-medium">流程列表</span>
       <Button variant="outline" size="sm" onclick={createNewFlow}>新建</Button>
     </div>
     <div class="max-h-80 overflow-y-auto">
       {#if flows.length === 0}
-        <div class="p-4 text-center text-muted-foreground text-sm">暂无保存的流程</div>
+        <div class="p-4 text-center text-muted-foreground text-sm">
+          暂无保存的流程
+        </div>
       {:else}
         {#each flows as flow}
           <!-- svelte-ignore a11y_click_events_have_key_events -->
           <!-- svelte-ignore a11y_no_static_element_interactions -->
-          <div 
+          <div
             class="p-3 hover:bg-muted cursor-pointer flex items-center justify-between group"
             onclick={() => selectFlow(flow.id)}
           >
             <div>
-              <div class="font-medium text-sm">{flow.name || '未命名'}</div>
+              <div class="font-medium text-sm">{flow.name || "未命名"}</div>
               <div class="text-xs text-muted-foreground">
-                {new Date(flow.updatedAt).toLocaleString('zh-CN')}
+                {new Date(flow.updatedAt).toLocaleString("zh-CN")}
               </div>
             </div>
             <button

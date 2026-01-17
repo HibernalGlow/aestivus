@@ -63,11 +63,11 @@ impl DevModeState {
     }
 }
 
-// Windows 专用：创建新控制台窗口
+// Windows 专用：进程创建标志
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 #[cfg(target_os = "windows")]
-const CREATE_NEW_CONSOLE: u32 = 0x00000010;
+const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 // ============== 实例管理 ==============
 
@@ -114,6 +114,15 @@ fn get_lock_file_path() -> PathBuf {
     let lock_dir = app_data.join("aestivus");
     let _ = fs::create_dir_all(&lock_dir);
     lock_dir.join("instance.lock")
+}
+
+/// 获取 Python 后端日志文件路径
+fn get_python_log_path() -> PathBuf {
+    let app_data = dirs::data_local_dir()
+        .unwrap_or_else(|| PathBuf::from("."));
+    let logs_dir = app_data.join("aestivus").join("logs");
+    let _ = fs::create_dir_all(&logs_dir);
+    logs_dir.join("python_backend.log")
 }
 
 /// 尝试获取主实例锁
@@ -494,24 +503,38 @@ fn spawn_python_backend(app_handle: tauri::AppHandle, is_primary: bool) -> Resul
     
     println!("[tauri] Spawning: {} {:?}", config.python_path, args);
     
-    // 使用 Windows Terminal + PowerShell 启动 Python（方便查看日志）
+    // Windows: 静默后台启动，日志写入文件
     #[cfg(target_os = "windows")]
     let child = {
-        // cmd 版本的命令
-        let cmd_python = format!("\"{}\" {}", config.python_path, args.join(" "));
+        use std::process::Stdio;
         
-        // 先尝试 Windows Terminal + cmd，不行再用 cmd.exe
-        Command::new("wt.exe")
-            .args(["--title", "Aestivus Python Backend", "cmd", "/K", &cmd_python])
+        let log_path = get_python_log_path();
+        println!("[tauri] Python backend log: {:?}", log_path);
+        
+        // 打开日志文件（追加模式）
+        let log_file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+            .map_err(|e| {
+                let msg = format!("Failed to open log file: {}", e);
+                println!("[tauri] {}", msg);
+                msg
+            })?;
+        
+        let log_file_err = log_file.try_clone().map_err(|e| {
+            let msg = format!("Failed to clone log file handle: {}", e);
+            println!("[tauri] {}", msg);
+            msg
+        })?;
+        
+        // 静默启动 Python 进程，无控制台窗口
+        Command::new(&config.python_path)
+            .args(&args)
+            .creation_flags(CREATE_NO_WINDOW)
+            .stdout(Stdio::from(log_file))
+            .stderr(Stdio::from(log_file_err))
             .spawn()
-            .or_else(|e| {
-                // 回退：直接用 cmd.exe
-                println!("[tauri] Windows Terminal not found ({}), using cmd...", e);
-                Command::new("cmd")
-                    .args(["/K", &cmd_python])
-                    .creation_flags(CREATE_NEW_CONSOLE)
-                    .spawn()
-            })
             .map_err(|e| {
                 let msg = format!("Failed to spawn Python: {}", e);
                 println!("[tauri] {}", msg);
@@ -617,6 +640,15 @@ fn shutdown_sidecar(app_handle: tauri::AppHandle) -> Result<String, String> {
 #[tauri::command]
 fn start_sidecar(app_handle: tauri::AppHandle) -> Result<String, String> {
     start_python(app_handle)
+}
+
+/// 获取 Python 后端日志文件路径
+#[tauri::command]
+fn get_python_log_file() -> Result<String, String> {
+    let path = get_python_log_path();
+    path.to_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "Invalid path".to_string())
 }
 
 // ============== Dev Mode 命令 ==============
@@ -766,6 +798,7 @@ pub fn run() {
             toggle_fullscreen,
             get_python_config,
             get_backend_port,
+            get_python_log_file,
             switch_to_dev_mode,
             switch_to_release_mode,
             get_dev_mode_status,

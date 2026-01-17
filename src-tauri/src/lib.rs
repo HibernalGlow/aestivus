@@ -7,8 +7,9 @@ use std::path::PathBuf;
 // 非 Windows 平台需要 Stdio
 #[cfg(not(target_os = "windows"))]
 use std::process::Stdio;
-use tauri::{Emitter, Manager, RunEvent, Url, WebviewUrl};
+use tauri::{Emitter, Manager, RunEvent, Url};
 use serde::{Deserialize, Serialize};
+use pyo3::prelude::*;
 
 // ============== Dev Mode 状态 ==============
 
@@ -619,6 +620,79 @@ fn start_sidecar(app_handle: tauri::AppHandle) -> Result<String, String> {
     start_python(app_handle)
 }
 
+// ============== Python 直接调用桥接 (PyO3) ==============
+
+#[allow(deprecated)]
+#[tauri::command]
+fn py_rpc(app: tauri::AppHandle, module: String, func: String, args: serde_json::Value) -> Result<serde_json::Value, String> {
+    Python::with_gil(|py| {
+        // 设置 PYTHONPATH，添加 src-python 目录
+        let sys = py.import("sys").map_err(|e| e.to_string())?;
+        let sys_path = sys.getattr("path").map_err(|e| e.to_string())?;
+        
+        // 尝试多个路径寻找 src-python
+        let current_dir = std::env::current_dir().unwrap_or_default();
+        
+        // 获取 exe 所在目录（用于打包后的应用）
+        let exe_dir = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+            .unwrap_or_default();
+        
+        // 获取 Tauri 资源目录（用于打包后的应用）
+        let resource_dir = app.path().resource_dir().ok();
+        
+        let mut candidates = vec![
+            current_dir.join("src-python"),                     // 从项目根目录运行
+            current_dir.join("..").join("src-python"),          // 从 src-tauri 运行
+            current_dir.parent().unwrap_or(&current_dir).join("src-python"),
+            exe_dir.join("src-python"),                         // exe 同目录
+            exe_dir.join("..").join("src-python"),              // exe 父目录
+        ];
+        
+        // 添加 Tauri 资源目录
+        if let Some(res_dir) = resource_dir {
+            candidates.push(res_dir.join("src-python"));
+        }
+        
+        let mut py_src_found = String::new();
+        for candidate in candidates {
+            if candidate.exists() {
+                py_src_found = candidate.canonicalize().unwrap_or(candidate).to_string_lossy().to_string();
+                break;
+            }
+        }
+        
+        if py_src_found.is_empty() {
+            return Err(format!("Cannot find src-python directory. Current dir: {:?}, Exe dir: {:?}", current_dir, exe_dir));
+        }
+        
+        // 检查 path 列表（转换为 Vec<String>）
+        let path_vec: Vec<String> = sys_path.extract().unwrap_or_default();
+        if !path_vec.contains(&py_src_found) {
+            println!("[py_rpc] Adding to PYTHONPATH: {}", py_src_found);
+            sys_path.call_method1("append", (py_src_found.as_str(),)).map_err(|e| e.to_string())?;
+        }
+
+        // 动态导入模块 (如 "api.storage")
+        let full_module_name = format!("api.{}", module);
+        let py_mod = py.import(full_module_name.as_str()).map_err(|e| format!("Module {} load failed: {}", full_module_name, e))?;
+        
+        // 调用导出函数
+        let args_json = serde_json::to_string(&args).unwrap_or_default();
+        let json_mod = py.import("json").map_err(|e| e.to_string())?;
+        let py_args = json_mod.call_method1("loads", (args_json.as_str(),)).map_err(|e| e.to_string())?;
+        
+        let result = py_mod.call_method1(func.as_str(), (&py_args,)).map_err(|e| format!("Function {}.{} call failed: {}", module, func, e))?;
+        
+        // 将结果转回 JSON
+        let json_str: String = json_mod.call_method1("dumps", (&result,)).map_err(|e: pyo3::PyErr| e.to_string())?.extract::<String>().map_err(|e: pyo3::PyErr| e.to_string())?;
+        let res_val: serde_json::Value = serde_json::from_str(&json_str).map_err(|e| e.to_string())?;
+        
+        Ok(res_val)
+    })
+}
+
 // ============== Dev Mode 命令 ==============
 
 /// 切换到 Dev 模式（使用开发服务器）
@@ -748,11 +822,9 @@ pub fn run() {
                     let _ = window.navigate(url);
                 }
             } else {
-                println!("[tauri] Starting Python backend (primary: {})...", is_primary);
-                match spawn_python_backend(app_handle, is_primary) {
-                    Ok(port) => println!("[tauri] Python backend ready on port {}", port),
-                    Err(e) => eprintln!("[tauri] Failed to start Python backend: {}", e),
-                }
+                // 使用嵌入式 PyO3，不启动外部服务器
+                // 前端会自动通过 py_rpc 调用嵌入式 Python
+                println!("[tauri] Using embedded PyO3 (no server)");
             }
             
             Ok(())
@@ -769,7 +841,8 @@ pub fn run() {
             switch_to_dev_mode,
             switch_to_release_mode,
             get_dev_mode_status,
-            set_dev_url
+            set_dev_url,
+            py_rpc
         ])
         .build(tauri::generate_context!())
         .expect("Error building tauri application")

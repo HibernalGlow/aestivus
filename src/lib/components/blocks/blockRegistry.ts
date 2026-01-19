@@ -101,6 +101,7 @@ import { SERIEX_BLOCKS, SERIEX_DEFAULT_GRID_LAYOUT } from '$lib/components/nodes
 import { LATA_BLOCKS, LATA_DEFAULT_GRID_LAYOUT } from '$lib/components/nodes/lata/blocks';
 import { WEIBOSPIDER_BLOCKS, WEIBOSPIDER_DEFAULT_GRID_LAYOUT } from '$lib/components/nodes/weibospider/blocks';
 import { MARKU_BLOCKS, MARKU_DEFAULT_GRID_LAYOUT } from '$lib/components/nodes/marku/blocks';
+import { MVZ_BLOCKS, MVZ_DEFAULT_GRID_LAYOUT } from '$lib/components/nodes/mvz/blocks';
 
 // 重新导出供外部使用
 export { FINDZ_BLOCKS, FINDZ_DEFAULT_GRID_LAYOUT };
@@ -128,6 +129,7 @@ export { SERIEX_BLOCKS, SERIEX_DEFAULT_GRID_LAYOUT };
 export { LATA_BLOCKS, LATA_DEFAULT_GRID_LAYOUT };
 export { WEIBOSPIDER_BLOCKS, WEIBOSPIDER_DEFAULT_GRID_LAYOUT };
 export { MARKU_BLOCKS, MARKU_DEFAULT_GRID_LAYOUT };
+export { MVZ_BLOCKS, MVZ_DEFAULT_GRID_LAYOUT };
 
 // ============ 注册表 ============
 export const nodeBlockRegistry: Record<string, NodeBlockLayout> = {
@@ -155,7 +157,8 @@ export const nodeBlockRegistry: Record<string, NodeBlockLayout> = {
   seriex: { nodeType: 'seriex', blocks: SERIEX_BLOCKS, defaultGridLayout: SERIEX_DEFAULT_GRID_LAYOUT },
   lata: { nodeType: 'lata', blocks: LATA_BLOCKS, defaultGridLayout: LATA_DEFAULT_GRID_LAYOUT },
   weibospider: { nodeType: 'weibospider', blocks: WEIBOSPIDER_BLOCKS, defaultGridLayout: WEIBOSPIDER_DEFAULT_GRID_LAYOUT },
-  marku: { nodeType: 'marku', blocks: MARKU_BLOCKS, defaultGridLayout: MARKU_DEFAULT_GRID_LAYOUT }
+  marku: { nodeType: 'marku', blocks: MARKU_BLOCKS, defaultGridLayout: MARKU_DEFAULT_GRID_LAYOUT },
+  mvz: { nodeType: 'mvz', blocks: MVZ_BLOCKS, defaultGridLayout: MVZ_DEFAULT_GRID_LAYOUT }
 };
 
 // ============ 工具函数 ============

@@ -38,6 +38,7 @@ import { SeriexNode } from '$lib/components/nodes/seriex';
 import { LataNode } from '$lib/components/nodes/lata';
 import { WeiboSpiderNode } from '$lib/components/nodes/weibospider';
 import { MarkuNode } from '$lib/components/nodes/marku';
+import { MvzNode } from '$lib/components/nodes/mvz';
 
 /** 节点注册项 - 包含定义和组件 */
 export interface NodeRegistryEntry extends NodeDefinition {
@@ -491,6 +492,21 @@ export const NODE_REGISTRY: NodeRegistryEntry[] = [
     inputs: ['any'],
     outputs: [],
     component: TerminalNode
+  },
+  {
+    type: 'mvz',
+    category: 'tool',
+    label: 'mvz',
+    description: '压缩包操作：删除、提取、移动、重命名压缩包内的文件',
+    icon: 'Package',
+    inputs: ['path'],
+    outputs: ['path'],
+    component: MvzNode,
+    configSchema: {
+      action: { type: 'select', label: '操作类型', default: 'extract' },
+      output: { type: 'path', label: '输出目录', default: '.' },
+      dryRun: { type: 'boolean', label: '预览模式', default: false }
+    }
   }
 ];
 

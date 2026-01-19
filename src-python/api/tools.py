@@ -29,17 +29,6 @@ TOOLS = {
             "path": {"type": "string", "required": True, "description": "输入路径"}
         }
     },
-    "samea": {
-        "name": "samea",
-        "displayName": "Samea",
-        "description": "相似文件分析",
-        "category": "file",
-        "schema": {
-            "path": {"type": "string", "required": True, "description": "输入路径"},
-            "threshold": {"type": "number", "default": 0.9, "description": "相似度阈值"},
-            "method": {"type": "string", "default": "hash", "enum": ["hash", "pixel"], "description": "比较方法"}
-        }
-    },
     "crashu": {
         "name": "crashu",
         "displayName": "Crashu",

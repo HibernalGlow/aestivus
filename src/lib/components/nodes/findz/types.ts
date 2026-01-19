@@ -38,7 +38,8 @@ export interface FindzNodeState {
   searchResult: SearchResult | null;
   files: FileData[];
   byExtension: Record<string, number>;
-  targetPath: string;
+  targetPath: string; // 保留用于单路径兼容
+  targetPaths: string[]; // 多路径列表
   whereClause: string;
   logs: string[];
   withImageMeta: boolean; // 是否启用图片元数据

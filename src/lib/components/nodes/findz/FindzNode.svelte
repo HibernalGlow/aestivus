@@ -26,7 +26,7 @@
   import type { FileData, SearchResult, FindzNodeState } from './types';
   import { 
     Search, LoaderCircle, FolderOpen, Clipboard, CircleCheck, CircleX, 
-    File, Folder, Archive, Copy, Check, RotateCcw, Package, Layers, Image
+    File, Folder, Archive, Copy, Check, RotateCcw, Package, Layers, Image, Plus, X, Trash2
   } from '@lucide/svelte';
 
   /** NodeLayoutRenderer 组件实例类型 */
@@ -72,6 +72,7 @@
     files: [],
     byExtension: {},
     targetPath: configPath || '.',
+    targetPaths: [],
     whereClause: configWhere || '1',
     logs: [],
     withImageMeta: false
@@ -81,6 +82,7 @@
   let hasInputConnection = $state(false);
   let layoutRenderer = $state<LayoutRendererInstance | undefined>(undefined);
   let advancedMode = $state(false);
+  let pathInput = $state(''); // 新路径输入框
   
   // 实时进度状态（不需要持久化）
   let progressMessage = $state('');
@@ -100,6 +102,11 @@
   $effect(() => {
     if (dataLogs.length > 0) ns.logs = [...dataLogs];
     hasInputConnection = dataHasInputConnection;
+    
+    // 初始化：如果 targetPaths 为空但 targetPath 有值，迁移到 targetPaths
+    if (ns.targetPaths.length === 0 && ns.targetPath && ns.targetPath !== '.') {
+      ns.targetPaths = [ns.targetPath];
+    }
   });
 
   // WebSocket 连接管理
@@ -169,7 +176,7 @@
     disconnectWebSocket();
   });
 
-  let canExecute = $derived(ns.phase === 'idle' && (ns.targetPath.trim() !== '' || hasInputConnection));
+  let canExecute = $derived(ns.phase === 'idle' && (ns.targetPaths.length > 0 || hasInputConnection));
   let isRunning = $derived(ns.phase === 'searching');
   let borderClass = $derived({
     idle: 'border-border',
@@ -184,7 +191,12 @@
     try {
       const { platform } = await import('$lib/api/platform');
       const selected = await platform.openFolderDialog('选择搜索目录');
-      if (selected) ns.targetPath = selected;
+      if (selected) {
+        // 添加到路径列表
+        if (!ns.targetPaths.includes(selected)) {
+          ns.targetPaths = [...ns.targetPaths, selected];
+        }
+      }
     } catch (e) { log(`选择文件夹失败: ${e}`); }
   }
 
@@ -192,8 +204,29 @@
     try {
       const { platform } = await import('$lib/api/platform');
       const text = await platform.readClipboard();
-      if (text) ns.targetPath = text.trim();
+      if (text) {
+        pathInput = text.trim();
+      }
     } catch (e) { log(`读取剪贴板失败: ${e}`); }
+  }
+
+  // 添加路径
+  function addPath() {
+    const path = pathInput.trim();
+    if (path && !ns.targetPaths.includes(path)) {
+      ns.targetPaths = [...ns.targetPaths, path];
+      pathInput = '';
+    }
+  }
+
+  // 移除路径
+  function removePath(index: number) {
+    ns.targetPaths = ns.targetPaths.filter((_, i) => i !== index);
+  }
+
+  // 清空所有路径
+  function clearPaths() {
+    ns.targetPaths = [];
   }
 
   async function executeAction(action: Action) {
@@ -209,7 +242,9 @@
     const newTaskId = `findz-${nodeId}-${Date.now()}`;
     connectWebSocket(newTaskId);
     
-    log(`🔍 开始搜索: ${ns.targetPath}`);
+    // 使用多路径或单路径
+    const paths = ns.targetPaths.length > 0 ? ns.targetPaths : [ns.targetPath || '.'];
+    log(`🔍 开始搜索: ${paths.join(', ')}`);
     
     // 计时器
     const startTime = Date.now();
@@ -220,7 +255,7 @@
     try {
       ns.progress = 10;
       const response = await api.executeNode('findz', {
-        path: ns.targetPath, where: ns.whereClause, action, long_format: true, max_results: 0, with_image_meta: ns.withImageMeta
+        paths, where: ns.whereClause, action, long_format: true, max_results: 0, with_image_meta: ns.withImageMeta
       }, { taskId: newTaskId, nodeId }) as any;
 
       if (response.logs) for (const m of response.logs) log(m);
@@ -293,14 +328,27 @@
 
 <!-- 路径输入 -->
 {#snippet pathBlock()}
-  <div class="cq-mb">
+  <div class="cq-mb h-full flex flex-col">
     <div class="flex items-center gap-1 mb-1 cq-text">
       <Search class="cq-icon" />
       <span class="font-medium">搜索路径</span>
+      {#if ns.targetPaths.length > 0}
+        <span class="text-xs text-muted-foreground">({ns.targetPaths.length})</span>
+      {/if}
     </div>
     {#if !hasInputConnection}
-      <div class="flex cq-gap">
-        <Input bind:value={ns.targetPath} placeholder="输入或选择目录..." disabled={isRunning} class="flex-1 cq-input" />
+      <!-- 路径输入框 -->
+      <div class="flex cq-gap mb-1">
+        <Input 
+          bind:value={pathInput} 
+          placeholder="输入路径..." 
+          disabled={isRunning} 
+          class="flex-1 cq-input"
+          onkeydown={(e) => e.key === 'Enter' && addPath()}
+        />
+        <Button variant="outline" size="icon" class="cq-button-icon shrink-0" onclick={addPath} disabled={isRunning || !pathInput.trim()}>
+          <Plus class="cq-icon" />
+        </Button>
         <Button variant="outline" size="icon" class="cq-button-icon shrink-0" onclick={selectFolder} disabled={isRunning}>
           <FolderOpen class="cq-icon" />
         </Button>
@@ -308,6 +356,38 @@
           <Clipboard class="cq-icon" />
         </Button>
       </div>
+      
+      <!-- 路径列表 -->
+      {#if ns.targetPaths.length > 0}
+        <div class="flex-1 overflow-y-auto space-y-0.5 cq-padding bg-muted/30 cq-rounded">
+          {#each ns.targetPaths as path, index}
+            <div class="flex items-center gap-1 cq-text-sm bg-background cq-rounded px-1.5 py-0.5 group">
+              <Folder class="w-3 h-3 text-yellow-500 shrink-0" />
+              <span class="flex-1 truncate" title={path}>{path}</span>
+              <button 
+                onclick={() => removePath(index)} 
+                disabled={isRunning}
+                class="opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                <X class="w-3 h-3 text-muted-foreground hover:text-destructive" />
+              </button>
+            </div>
+          {/each}
+        </div>
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          class="cq-button-sm mt-1 w-full" 
+          onclick={clearPaths} 
+          disabled={isRunning}
+        >
+          <Trash2 class="cq-icon mr-1" />清空
+        </Button>
+      {:else}
+        <div class="cq-text-sm text-muted-foreground text-center py-2 bg-muted/30 cq-rounded">
+          添加一个或多个搜索路径
+        </div>
+      {/if}
     {:else}
       <div class="text-muted-foreground cq-padding bg-muted cq-rounded flex items-center cq-gap cq-text">
         <span>←</span><span>输入来自上游节点</span>

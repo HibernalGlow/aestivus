@@ -254,7 +254,7 @@
     </div>
     
     <!-- 文件输入框 -->
-    <div class="flex cq-gap mb-1">
+    <div class="flex flex-col cq-gap mb-1">
       <textarea
         bind:value={fileInput}
         placeholder="粘贴文件路径（archive//internal 格式）..."
@@ -268,12 +268,15 @@
           }
         }}
       />
-      <div class="flex flex-col gap-1">
-        <Button variant="outline" size="icon" class="cq-button-icon" onclick={addFile} disabled={isRunning || !fileInput.trim()}>
+      <div class="flex cq-gap">
+        <Button variant="outline" size="icon" class="cq-button-icon shrink-0" onclick={addFile} disabled={isRunning || !fileInput.trim()} title="添加文件">
           <Plus class="cq-icon" />
         </Button>
-        <Button variant="outline" size="icon" class="cq-button-icon" onclick={pasteFromClipboard} disabled={isRunning}>
+        <Button variant="outline" size="icon" class="cq-button-icon shrink-0" onclick={pasteFromClipboard} disabled={isRunning} title="从剪贴板粘贴">
           <Clipboard class="cq-icon" />
+        </Button>
+        <Button variant="outline" size="icon" class="cq-button-icon shrink-0" onclick={clearFiles} disabled={isRunning || ns.files.length === 0} title="清空所有文件">
+          <Trash2 class="cq-icon" />
         </Button>
       </div>
     </div>
@@ -291,9 +294,6 @@
           </div>
         {/each}
       </div>
-      <Button variant="ghost" size="sm" class="cq-button-sm mt-1 w-full" onclick={clearFiles} disabled={isRunning}>
-        <Trash2 class="cq-icon mr-1" />清空
-      </Button>
     {:else}
       <div class="cq-text-sm text-muted-foreground text-center py-4 bg-muted/30 cq-rounded">
         从 findz 输出粘贴文件路径

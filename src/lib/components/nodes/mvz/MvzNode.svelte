@@ -15,10 +15,11 @@
   import { getWsBaseUrl } from '$lib/stores/backend';
   import NodeWrapper from '../NodeWrapper.svelte';
   import type { MvzNodeState, MvzAction } from './types';
+  import { buildCompleteFileTree, calculateSmartExpansion, type TreeNode } from './treeUtils';
   import { 
     Package, LoaderCircle, Trash2, Download, Move, Edit3, 
     CircleCheck, CircleX, Copy, Check, RotateCcw, Clipboard, Plus, X,
-    ChevronDown, ChevronRight
+    ChevronDown, ChevronRight, Sparkles
   } from '@lucide/svelte';
 
   interface Props {
@@ -66,6 +67,7 @@
   let copiedLogs = $state(false);
   let copiedPath = $state(false);
   let expandedArchives = $state<Set<string>>(new Set());
+  let autoExpandApplied = $state(false);
 
   // WebSocket 连接
   let ws: WebSocket | null = null;
@@ -140,6 +142,8 @@
     
     if (added > 0) {
       log(`➕ 添加了 ${added} 个文件`);
+      // 重置自动展开标记，以便重新应用智能展开
+      autoExpandApplied = false;
     }
     fileInput = '';
   }
@@ -158,11 +162,15 @@
   // 移除文件
   function removeFile(index: number) {
     ns.files = ns.files.filter((_, i) => i !== index);
+    autoExpandApplied = false;
   }
 
   // 清空文件
   function clearFiles() {
     ns.files = [];
+    expandedArchives.clear();
+    expandedArchives = new Set();
+    autoExpandApplied = false;
   }
 
   // 切换压缩包展开状态
@@ -174,6 +182,50 @@
     }
     expandedArchives = new Set(expandedArchives);
   }
+
+  // 应用智能展开
+  function applySmartExpansion() {
+    if (ns.files.length === 0) return;
+    
+    const tree = buildCompleteFileTree(ns.files);
+    const smartExpanded = calculateSmartExpansion(tree);
+    expandedArchives = smartExpanded;
+    autoExpandApplied = true;
+    log(`✨ 智能展开: 已展开 ${smartExpanded.size} 个节点`);
+  }
+
+  // 全部展开
+  function expandAll() {
+    const tree = buildCompleteFileTree(ns.files);
+    const allPaths = new Set<string>();
+    
+    function collectPaths(node: TreeNode) {
+      if (node.path) {
+        allPaths.add(node.path);
+      }
+      for (const child of node.children) {
+        collectPaths(child);
+      }
+    }
+    
+    collectPaths(tree);
+    expandedArchives = allPaths;
+    log(`📂 全部展开: ${allPaths.size} 个节点`);
+  }
+
+  // 全部折叠
+  function collapseAll() {
+    expandedArchives.clear();
+    expandedArchives = new Set();
+    log(`📁 全部折叠`);
+  }
+
+  // 当文件列表变化时，自动应用智能展开（仅首次）
+  $effect(() => {
+    if (ns.files.length > 0 && !autoExpandApplied) {
+      applySmartExpansion();
+    }
+  });
 
   // 执行操作
   async function execute() {
@@ -250,98 +302,6 @@
     { value: 'move', label: '移动', icon: Move },
     { value: 'rename', label: '重命名', icon: Edit3 }
   ];
-
-  // 文件树节点接口
-  interface TreeNode {
-    name: string;
-    path: string;
-    isFolder: boolean;
-    isArchive?: boolean;
-    children: TreeNode[];
-    fileIndex?: number;
-    archivePath?: string;
-  }
-
-  // 构建完整的文件树结构（包括外部路径）
-  function buildCompleteFileTree(): TreeNode {
-    const root: TreeNode = {
-      name: 'root',
-      path: '',
-      isFolder: true,
-      children: []
-    };
-
-    // 按压缩包分组
-    const groupedFiles = new Map<string, string[]>();
-    for (const file of ns.files) {
-      const parts = file.split('//');
-      const archive = parts[0];
-      const internal = parts[1] || '';
-      if (!groupedFiles.has(archive)) {
-        groupedFiles.set(archive, []);
-      }
-      groupedFiles.get(archive)!.push(internal);
-    }
-
-    // 为每个压缩包构建树
-    for (const [archivePath, internalFiles] of groupedFiles.entries()) {
-      // 解析压缩包的外部路径（支持 Windows 和 Unix 路径）
-      const normalizedPath = archivePath.replace(/\\/g, '/');
-      const archiveParts = normalizedPath.split('/').filter(p => p);
-      
-      let current = root;
-
-      // 构建外部路径树（递归创建文件夹节点）
-      for (let i = 0; i < archiveParts.length; i++) {
-        const part = archiveParts[i];
-        const isLastPart = i === archiveParts.length - 1;
-        const fullPath = archiveParts.slice(0, i + 1).join('/');
-
-        let child = current.children.find(c => c.name === part);
-        if (!child) {
-          child = {
-            name: part,
-            path: fullPath,
-            isFolder: !isLastPart,
-            isArchive: isLastPart,
-            children: [],
-            archivePath: isLastPart ? archivePath : undefined
-          };
-          current.children.push(child);
-        }
-        current = child;
-      }
-
-      // 构建压缩包内部文件树（递归创建文件夹节点）
-      for (const internal of internalFiles) {
-        if (!internal) continue;
-        
-        const parts = internal.split('/').filter(p => p);
-        let innerCurrent = current;
-
-        for (let i = 0; i < parts.length; i++) {
-          const part = parts[i];
-          const isLastPart = i === parts.length - 1;
-          const fullPath = `${archivePath}//${parts.slice(0, i + 1).join('/')}`;
-
-          let child = innerCurrent.children.find(c => c.name === part);
-          if (!child) {
-            child = {
-              name: part,
-              path: fullPath,
-              isFolder: !isLastPart,
-              children: [],
-              fileIndex: isLastPart ? ns.files.findIndex(f => f === `${archivePath}//${internal}`) : undefined
-            };
-            innerCurrent.children.push(child);
-          }
-          innerCurrent = child;
-        }
-      }
-    }
-
-    return root;
-  }
 </script>
 
 <!-- 输入 -->
@@ -440,20 +400,55 @@
 
 <!-- 文件夹树 Block -->
 {#snippet filesBlock()}
-  {@const fileTree = buildCompleteFileTree()}
+  {@const fileTree = buildCompleteFileTree(ns.files)}
   
   <div class="h-full flex flex-col overflow-hidden">
     <div class="flex items-center justify-between cq-padding border-b bg-muted/30 shrink-0">
       <span class="cq-text font-semibold flex items-center gap-1">
         <Package class="cq-icon text-purple-500" />文件夹树
       </span>
-      <div class="flex items-center cq-gap cq-text-sm">
-        <span class="text-muted-foreground">{ns.files.length} 个文件</span>
-        {#if ns.files.length > 0}
-          <Button variant="ghost" size="icon" class="h-5 w-5" onclick={() => copyToClipboard(ns.files.join('\n'), v => copiedPath = v)}>
-            {#if copiedPath}<Check class="w-3 h-3 text-green-500" />{:else}<Copy class="w-3 h-3" />{/if}
+      <div class="flex items-center cq-gap">
+        <span class="cq-text-sm text-muted-foreground">{ns.files.length} 个文件</span>
+        <div class="flex items-center gap-0.5">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            class="h-5 w-5" 
+            onclick={applySmartExpansion}
+            title="智能展开"
+          >
+            <Sparkles class="w-3 h-3 text-yellow-500" />
           </Button>
-        {/if}
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            class="h-5 w-5" 
+            onclick={expandAll}
+            title="全部展开"
+          >
+            <ChevronDown class="w-3 h-3" />
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            class="h-5 w-5" 
+            onclick={collapseAll}
+            title="全部折叠"
+          >
+            <ChevronRight class="w-3 h-3" />
+          </Button>
+          {#if ns.files.length > 0}
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              class="h-5 w-5" 
+              onclick={() => copyToClipboard(ns.files.join('\n'), v => copiedPath = v)}
+              title="复制路径"
+            >
+              {#if copiedPath}<Check class="w-3 h-3 text-green-500" />{:else}<Copy class="w-3 h-3" />{/if}
+            </Button>
+          {/if}
+        </div>
       </div>
     </div>
     

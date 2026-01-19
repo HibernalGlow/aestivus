@@ -358,11 +358,16 @@
       <span>预览模式（不实际执行）</span>
     </label>
 
-    <!-- 执行按钮 -->
-    <Button class="w-full cq-button" onclick={execute} disabled={!canExecute || isRunning}>
-      {#if isRunning}<LoaderCircle class="cq-icon mr-1 animate-spin" />{:else}<Package class="cq-icon mr-1" />{/if}
-      <span>执行</span>
-    </Button>
+    <!-- 执行和重置按钮 -->
+    <div class="flex cq-gap">
+      <Button class="flex-1 cq-button" onclick={execute} disabled={!canExecute || isRunning}>
+        {#if isRunning}<LoaderCircle class="cq-icon mr-1 animate-spin" />{:else}<Package class="cq-icon mr-1" />{/if}
+        <span>执行</span>
+      </Button>
+      <Button variant="outline" size="icon" class="cq-button-icon shrink-0" onclick={handleReset} disabled={ns.phase === 'idle'} title="重置状态">
+        <RotateCcw class="cq-icon" />
+      </Button>
+    </div>
   </div>
 {/snippet}
 

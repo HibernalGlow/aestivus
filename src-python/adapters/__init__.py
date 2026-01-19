@@ -40,6 +40,8 @@ _ADAPTER_REGISTRY: Dict[str, str] = {
     "weibospider": "adapters.weibospider_adapter.WeiboSpiderAdapter",
     # Markdown 处理工具箱
     "marku": "adapters.marku_adapter.MarkuAdapter",
+    # 压缩包操作工具
+    "mvz": "adapters.mvz_adapter.MvzAdapter",
 }
 
 # 适配器实例缓存

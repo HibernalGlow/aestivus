@@ -154,12 +154,22 @@ async def execute_node(request: NodeExecuteRequest):
     collected_logs: List[str] = []
     
     try:
+        # 调试日志：记录请求信息
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"[DEBUG] 执行节点请求: node_type={request.node_type}, task_id={task_id}, node_id={node_id}")
+        logger.info(f"[DEBUG] 请求配置: {request.config}")
+        
         # 获取适配器
+        logger.info(f"[DEBUG] 尝试获取适配器: {request.node_type}")
         adapter = get_adapter(request.node_type)
+        logger.info(f"[DEBUG] 成功获取适配器: {adapter.display_name}")
         
         # 构建输入数据
+        logger.info(f"[DEBUG] 适配器输入模式: {adapter.input_schema}")
         input_class = adapter.input_schema
         input_data = input_class(**request.config)
+        logger.info(f"[DEBUG] 输入数据构建成功")
         
         # 发送开始状态
         await send_status(task_id, "running", f"开始执行 {adapter.display_name}", node_id)
@@ -205,9 +215,18 @@ async def execute_node(request: NodeExecuteRequest):
         )
         
     except ValueError as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"[DEBUG] ValueError: {str(e)}")
         await send_status(task_id, "error", str(e), node_id)
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"[DEBUG] 异常类型: {type(e).__name__}")
+        logger.error(f"[DEBUG] 异常信息: {str(e)}")
+        import traceback
+        logger.error(f"[DEBUG] 堆栈跟踪:\n{traceback.format_exc()}")
         error_msg = f"执行失败: {type(e).__name__}: {str(e)}"
         collected_logs.append(f"❌ {error_msg}")
         await send_status(task_id, "error", error_msg, node_id)

@@ -21,6 +21,8 @@ from .base import BaseAdapter, AdapterInput, AdapterOutput
 
 class MvzInput(AdapterInput):
     """mvz 输入参数"""
+    # 覆盖基类的 path 字段，使其可选（mvz 使用 files 列表）
+    path: str = Field(default="", description="输入路径（可选，mvz 使用 files 列表）")
     action: str = Field(default="extract", description="操作类型: delete/extract/move/rename")
     # 输入文件列表（格式：archive_path//internal_path）
     files: List[str] = Field(default_factory=list, description="文件列表（archive//internal 格式）")

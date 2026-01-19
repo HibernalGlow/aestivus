@@ -3,15 +3,25 @@
  */
 import type { BlockDefinition } from '$lib/components/blocks/blockRegistry';
 import type { GridItem } from '$lib/components/ui/dashboard-grid';
-import { Package, Play, FileText, BarChart3, Copy } from '@lucide/svelte';
+import { Package, Play, FileText, BarChart3, Copy, List } from '@lucide/svelte';
 
 export const MVZ_BLOCKS: BlockDefinition[] = [
   {
     id: 'input',
-    title: '输入文件',
+    title: '输入',
     icon: FileText,
     iconClass: 'text-blue-500',
-    colSpan: 2,
+    colSpan: 1,
+    visibleInNormal: true,
+    visibleInFullscreen: true
+  },
+  {
+    id: 'files',
+    title: '文件列表',
+    icon: List,
+    iconClass: 'text-cyan-500',
+    colSpan: 1,
+    fullHeight: true,
     visibleInNormal: true,
     visibleInFullscreen: true
   },
@@ -56,7 +66,8 @@ export const MVZ_BLOCKS: BlockDefinition[] = [
 ];
 
 export const MVZ_DEFAULT_GRID_LAYOUT: GridItem[] = [
-  { id: 'input', x: 0, y: 0, w: 2, h: 3, minW: 1, minH: 2 },
+  { id: 'input', x: 0, y: 0, w: 1, h: 2, minW: 1, minH: 2 },
+  { id: 'files', x: 1, y: 0, w: 1, h: 3, minW: 1, minH: 2 },
   { id: 'operation', x: 2, y: 0, w: 2, h: 2, minW: 1, minH: 1 },
   { id: 'stats', x: 2, y: 2, w: 2, h: 1, minW: 1, minH: 1 },
   { id: 'results', x: 0, y: 3, w: 4, h: 3, minW: 1, minH: 2 },

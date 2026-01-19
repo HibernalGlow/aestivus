@@ -6,12 +6,9 @@
   import { Handle, Position, NodeResizer } from '@xyflow/svelte';
   import { Button } from '$lib/components/ui/button';
   import { Input } from '$lib/components/ui/input';
-  import { Progress } from '$lib/components/ui/progress';
-  import * as Select from '$lib/components/ui/select';
   import { onDestroy } from 'svelte';
 
   import { NodeLayoutRenderer } from '$lib/components/blocks';
-  import type { GridItem } from '$lib/components/ui/dashboard-grid';
   import { MVZ_DEFAULT_GRID_LAYOUT } from './blocks';
   import { api } from '$lib/services/api';
   import { getNodeState } from '$lib/stores/nodeState.svelte';
@@ -20,7 +17,7 @@
   import type { MvzNodeState, MvzAction } from './types';
   import { 
     Package, LoaderCircle, Trash2, Download, Move, Edit3, 
-    CircleCheck, CircleX, Copy, Check, RotateCcw, FileText, Clipboard, Plus, X
+    CircleCheck, CircleX, Copy, Check, RotateCcw, Clipboard, Plus, X
   } from '@lucide/svelte';
 
   interface Props {
@@ -242,25 +239,17 @@
   ];
 </script>
 
-<!-- 输入文件 -->
+<!-- 输入 -->
 {#snippet inputBlock()}
   <div class="h-full flex flex-col">
-    <div class="flex items-center gap-1 mb-1 cq-text">
-      <FileText class="cq-icon" />
-      <span class="font-medium">输入文件</span>
-      {#if ns.files.length > 0}
-        <span class="text-xs text-muted-foreground">({ns.files.length})</span>
-      {/if}
-    </div>
-    
     <!-- 文件输入框 -->
-    <div class="flex flex-col cq-gap mb-1">
+    <div class="flex flex-col cq-gap">
       <textarea
         bind:value={fileInput}
         placeholder="粘贴文件路径（archive//internal 格式）..."
         disabled={isRunning}
         class="flex-1 cq-input resize-none"
-        rows="2"
+        rows="3"
         onkeydown={(e) => {
           if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
@@ -280,23 +269,38 @@
         </Button>
       </div>
     </div>
+  </div>
+{/snippet}
 
-    <!-- 文件列表 -->
+<!-- 文件列表树 -->
+{#snippet filesBlock()}
+  <div class="h-full flex flex-col overflow-hidden">
+    <div class="flex items-center justify-between mb-1 shrink-0">
+      <span class="cq-text-sm font-semibold">
+        {ns.files.length} 个文件
+      </span>
+    </div>
+    
     {#if ns.files.length > 0}
-      <div class="flex-1 overflow-y-auto space-y-0.5 cq-padding bg-muted/30 cq-rounded">
+      <div class="flex-1 overflow-y-auto space-y-0.5">
         {#each ns.files as file, index}
-          <div class="flex items-center gap-1 cq-text-sm bg-background cq-rounded px-1.5 py-0.5 group">
+          <div class="flex items-center gap-1 cq-text-sm bg-muted/50 cq-rounded px-2 py-1 group hover:bg-muted transition-colors">
             <Package class="w-3 h-3 text-purple-500 shrink-0" />
             <span class="flex-1 truncate font-mono text-xs" title={file}>{file}</span>
-            <button onclick={() => removeFile(index)} disabled={isRunning} class="opacity-0 group-hover:opacity-100">
+            <button 
+              onclick={() => removeFile(index)} 
+              disabled={isRunning} 
+              class="opacity-0 group-hover:opacity-100 transition-opacity"
+              title="删除"
+            >
               <X class="w-3 h-3 text-muted-foreground hover:text-destructive" />
             </button>
           </div>
         {/each}
       </div>
     {:else}
-      <div class="cq-text-sm text-muted-foreground text-center py-4 bg-muted/30 cq-rounded">
-        从 findz 输出粘贴文件路径
+      <div class="cq-text-sm text-muted-foreground text-center py-4">
+        无文件
       </div>
     {/if}
   </div>
@@ -468,6 +472,7 @@
 <!-- 区块渲染器 -->
 {#snippet renderBlockContent(blockId: string)}
   {#if blockId === 'input'}{@render inputBlock()}
+  {:else if blockId === 'files'}{@render filesBlock()}
   {:else if blockId === 'operation'}{@render operationBlock()}
   {:else if blockId === 'stats'}{@render statsBlock()}
   {:else if blockId === 'results'}{@render resultsBlock()}

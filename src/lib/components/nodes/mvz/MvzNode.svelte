@@ -250,27 +250,105 @@
     { value: 'move', label: '移动', icon: Move },
     { value: 'rename', label: '重命名', icon: Edit3 }
   ];
-</script>
 
-<!-- 输入 -->
-{#snippet inputBlock()}
-  {@const groupedFiles = (() => {
-    const groups = new Map<string, string[]>();
+  // 文件树节点接口
+  interface TreeNode {
+    name: string;
+    path: string;
+    isFolder: boolean;
+    isArchive?: boolean;
+    children: TreeNode[];
+    fileIndex?: number;
+    archivePath?: string;
+  }
+
+  // 构建完整的文件树结构（包括外部路径）
+  function buildCompleteFileTree(): TreeNode {
+    const root: TreeNode = {
+      name: 'root',
+      path: '',
+      isFolder: true,
+      children: []
+    };
+
+    // 按压缩包分组
+    const groupedFiles = new Map<string, string[]>();
     for (const file of ns.files) {
       const parts = file.split('//');
       const archive = parts[0];
       const internal = parts[1] || '';
-      if (!groups.has(archive)) {
-        groups.set(archive, []);
+      if (!groupedFiles.has(archive)) {
+        groupedFiles.set(archive, []);
       }
-      groups.get(archive)!.push(internal);
+      groupedFiles.get(archive)!.push(internal);
     }
-    return Array.from(groups.entries());
-  })()}
-  
+
+    // 为每个压缩包构建树
+    for (const [archivePath, internalFiles] of groupedFiles.entries()) {
+      // 解析压缩包的外部路径（支持 Windows 和 Unix 路径）
+      const normalizedPath = archivePath.replace(/\\/g, '/');
+      const archiveParts = normalizedPath.split('/').filter(p => p);
+      
+      let current = root;
+
+      // 构建外部路径树（递归创建文件夹节点）
+      for (let i = 0; i < archiveParts.length; i++) {
+        const part = archiveParts[i];
+        const isLastPart = i === archiveParts.length - 1;
+        const fullPath = archiveParts.slice(0, i + 1).join('/');
+
+        let child = current.children.find(c => c.name === part);
+        if (!child) {
+          child = {
+            name: part,
+            path: fullPath,
+            isFolder: !isLastPart,
+            isArchive: isLastPart,
+            children: [],
+            archivePath: isLastPart ? archivePath : undefined
+          };
+          current.children.push(child);
+        }
+        current = child;
+      }
+
+      // 构建压缩包内部文件树（递归创建文件夹节点）
+      for (const internal of internalFiles) {
+        if (!internal) continue;
+        
+        const parts = internal.split('/').filter(p => p);
+        let innerCurrent = current;
+
+        for (let i = 0; i < parts.length; i++) {
+          const part = parts[i];
+          const isLastPart = i === parts.length - 1;
+          const fullPath = `${archivePath}//${parts.slice(0, i + 1).join('/')}`;
+
+          let child = innerCurrent.children.find(c => c.name === part);
+          if (!child) {
+            child = {
+              name: part,
+              path: fullPath,
+              isFolder: !isLastPart,
+              children: [],
+              fileIndex: isLastPart ? ns.files.findIndex(f => f === `${archivePath}//${internal}`) : undefined
+            };
+            innerCurrent.children.push(child);
+          }
+          innerCurrent = child;
+        }
+      }
+    }
+
+    return root;
+  }
+</script>
+
+<!-- 输入 -->
+{#snippet inputBlock()}
   <div class="h-full flex flex-col">
     <!-- 文件输入框 -->
-    <div class="flex flex-col cq-gap mb-2">
+    <div class="flex flex-col cq-gap">
       <textarea
         bind:value={fileInput}
         placeholder="粘贴文件路径（archive//internal 格式）..."
@@ -296,158 +374,98 @@
         </Button>
       </div>
     </div>
-    
-    <!-- 文件树显示 -->
-    {#if ns.files.length > 0}
-      <div class="flex-1 overflow-y-auto border-t pt-2">
-        {#each groupedFiles as [archive, files]}
-          {@const isExpanded = expandedArchives.has(archive)}
-          
-          <div class="select-none">
-            <!-- 压缩包行 -->
-            <div
-              class="flex items-center gap-1 py-0.5 px-1 rounded hover:bg-muted/50 cursor-pointer text-xs"
-              onclick={() => toggleArchive(archive)}
-              onkeydown={(e) => e.key === 'Enter' && toggleArchive(archive)}
-              role="button"
-              tabindex="0"
-            >
-              {#if isExpanded}
-                <ChevronDown class="w-3 h-3 text-muted-foreground shrink-0" />
-              {:else}
-                <ChevronRight class="w-3 h-3 text-muted-foreground shrink-0" />
-              {/if}
-              <Package class="w-3 h-3 text-purple-500 shrink-0" />
-              <span class="truncate flex-1" title={archive}>{archive}</span>
-              <span class="text-muted-foreground shrink-0">{files.length}</span>
-              <button 
-                onclick={(e) => {
-                  e.stopPropagation();
-                  ns.files = ns.files.filter(f => !f.startsWith(archive + '//'));
-                }}
-                disabled={isRunning} 
-                class="opacity-0 hover:opacity-100 transition-opacity"
-                title="删除此压缩包的所有文件"
-              >
-                <X class="w-3 h-3 text-muted-foreground hover:text-destructive" />
-              </button>
-            </div>
-            
-            <!-- 文件列表 -->
-            {#if isExpanded}
-              {#each files as internal, fileIdx}
-                {@const pathParts = internal.split('/')}
-                {@const fileName = pathParts[pathParts.length - 1]}
-                {@const fileIndex = ns.files.findIndex(f => f === `${archive}//${internal}`)}
-                
-                <div class="flex items-center gap-1 py-0.5 px-1 ml-3 rounded hover:bg-muted/30 text-xs group/file">
-                  <span class="w-3 h-3 shrink-0"></span>
-                  <div class="w-1.5 h-1.5 bg-cyan-500 rounded-full shrink-0"></div>
-                  <span class="truncate flex-1 text-cyan-600" title={internal}>{fileName}</span>
-                  <button 
-                    onclick={() => removeFile(fileIndex)}
-                    disabled={isRunning} 
-                    class="opacity-0 group-hover/file:opacity-100 transition-opacity"
-                    title="删除"
-                  >
-                    <X class="w-3 h-3 text-muted-foreground hover:text-destructive" />
-                  </button>
-                </div>
-              {/each}
-            {/if}
-          </div>
-        {/each}
-      </div>
+  </div>
+{/snippet}
+
+<!-- 文件夹树 -->
+{#snippet renderTreeNode(node: TreeNode, depth: number = 0)}
+  {@const isExpanded = expandedArchives.has(node.path)}
+  {@const hasChildren = node.children && node.children.length > 0}
+  
+  <div class="select-none">
+    <div
+      class="flex items-center gap-1 py-0.5 px-1 rounded hover:bg-muted/50 cursor-pointer text-xs"
+      style="padding-left: {depth * 12}px"
+      onclick={() => hasChildren && toggleArchive(node.path)}
+      onkeydown={(e) => e.key === 'Enter' && hasChildren && toggleArchive(node.path)}
+      role="button"
+      tabindex="0"
+    >
+      {#if hasChildren}
+        {#if isExpanded}
+          <ChevronDown class="w-3 h-3 text-muted-foreground shrink-0" />
+        {:else}
+          <ChevronRight class="w-3 h-3 text-muted-foreground shrink-0" />
+        {/if}
+      {:else}
+        <span class="w-3 h-3 shrink-0"></span>
+      {/if}
+
+      {#if node.isArchive}
+        <Package class="w-3 h-3 text-purple-500 shrink-0" />
+      {:else if node.isFolder}
+        <span class="text-yellow-500 shrink-0">📁</span>
+      {:else}
+        <div class="w-1.5 h-1.5 bg-cyan-500 rounded-full shrink-0"></div>
+      {/if}
+
+      <span class="truncate flex-1" title={node.path}>{node.name}</span>
+
+      {#if hasChildren}
+        <span class="text-muted-foreground shrink-0 text-xs">{node.children.length}</span>
+      {/if}
+
+      {#if !node.isFolder && !node.isArchive && node.fileIndex !== undefined}
+        <button 
+          onclick={(e) => {
+            e.stopPropagation();
+            removeFile(node.fileIndex!);
+          }}
+          disabled={isRunning} 
+          class="opacity-0 hover:opacity-100 transition-opacity"
+          title="删除"
+        >
+          <X class="w-3 h-3 text-muted-foreground hover:text-destructive" />
+        </button>
+      {/if}
+    </div>
+
+    {#if hasChildren && isExpanded}
+      {#each node.children as child}
+        {@render renderTreeNode(child, depth + 1)}
+      {/each}
     {/if}
   </div>
 {/snippet}
 
-<!-- 文件列表树 -->
+<!-- 文件夹树 Block -->
 {#snippet filesBlock()}
-  {@const groupedFiles = (() => {
-    const groups = new Map<string, string[]>();
-    for (const file of ns.files) {
-      const parts = file.split('//');
-      const archive = parts[0];
-      const internal = parts[1] || '';
-      if (!groups.has(archive)) {
-        groups.set(archive, []);
-      }
-      groups.get(archive)!.push(internal);
-    }
-    return Array.from(groups.entries());
-  })()}
+  {@const fileTree = buildCompleteFileTree()}
   
   <div class="h-full flex flex-col overflow-hidden">
-    <div class="flex items-center justify-between mb-1 shrink-0">
-      <span class="cq-text-sm font-semibold">
-        {ns.files.length} 个文件
+    <div class="flex items-center justify-between cq-padding border-b bg-muted/30 shrink-0">
+      <span class="cq-text font-semibold flex items-center gap-1">
+        <Package class="cq-icon text-purple-500" />文件夹树
       </span>
-      {#if ns.files.length > 0}
-        <Button variant="ghost" size="icon" class="h-5 w-5" onclick={() => copyToClipboard(ns.files.join('\n'), v => copiedPath = v)}>
-          {#if copiedPath}<Check class="w-3 h-3 text-green-500" />{:else}<Copy class="w-3 h-3" />{/if}
-        </Button>
-      {/if}
+      <div class="flex items-center cq-gap cq-text-sm">
+        <span class="text-muted-foreground">{ns.files.length} 个文件</span>
+        {#if ns.files.length > 0}
+          <Button variant="ghost" size="icon" class="h-5 w-5" onclick={() => copyToClipboard(ns.files.join('\n'), v => copiedPath = v)}>
+            {#if copiedPath}<Check class="w-3 h-3 text-green-500" />{:else}<Copy class="w-3 h-3" />{/if}
+          </Button>
+        {/if}
+      </div>
     </div>
     
-    {#if ns.files.length > 0}
-      <div class="flex-1 overflow-y-auto space-y-0">
-        {#each groupedFiles as [archive, files], archiveIdx}
-          <div class="group">
-            <!-- 压缩包行 -->
-            <div class="flex items-center gap-1 px-2 py-1 hover:bg-muted/50 transition-colors">
-              <Package class="w-3 h-3 text-purple-500 shrink-0" />
-              <span class="flex-1 truncate font-mono text-xs text-muted-foreground" title={archive}>
-                {archive}
-              </span>
-              <span class="cq-text-xs text-muted-foreground shrink-0">
-                {files.length}
-              </span>
-              <button 
-                onclick={() => {
-                  ns.files = ns.files.filter(f => !f.startsWith(archive + '//'));
-                }}
-                disabled={isRunning} 
-                class="opacity-0 group-hover:opacity-100 transition-opacity"
-                title="删除此压缩包的所有文件"
-              >
-                <X class="w-3 h-3 text-muted-foreground hover:text-destructive" />
-              </button>
-            </div>
-            
-            <!-- 文件列表 -->
-            <div class="border-l border-muted/30 ml-1.5">
-              {#each files as internal, fileIdx}
-                {@const pathParts = internal.split('/')}
-                {@const fileName = pathParts[pathParts.length - 1]}
-                {@const fileIndex = ns.files.findIndex(f => f === `${archive}//${internal}`)}
-                
-                <div class="flex items-center gap-1 px-2 py-0.5 ml-2 hover:bg-muted/30 transition-colors group/file">
-                  <div class="w-3 h-3 flex items-center justify-center shrink-0">
-                    <div class="w-1 h-1 bg-cyan-500 rounded-full"></div>
-                  </div>
-                  <span class="flex-1 truncate font-mono text-xs text-cyan-600" title={internal}>
-                    {fileName}
-                  </span>
-                  <button 
-                    onclick={() => removeFile(fileIndex)}
-                    disabled={isRunning} 
-                    class="opacity-0 group-hover/file:opacity-100 transition-opacity"
-                    title="删除"
-                  >
-                    <X class="w-3 h-3 text-muted-foreground hover:text-destructive" />
-                  </button>
-                </div>
-              {/each}
-            </div>
-          </div>
+    <div class="flex-1 overflow-y-auto cq-padding">
+      {#if ns.files.length > 0}
+        {#each fileTree.children as child}
+          {@render renderTreeNode(child)}
         {/each}
-      </div>
-    {:else}
-      <div class="cq-text-sm text-muted-foreground text-center py-4">
-        无文件
-      </div>
-    {/if}
+      {:else}
+        <div class="cq-text text-muted-foreground text-center py-4">无文件</div>
+      {/if}
+    </div>
   </div>
 {/snippet}
 

@@ -205,18 +205,83 @@
       const { platform } = await import('$lib/api/platform');
       const text = await platform.readClipboard();
       if (text) {
-        pathInput = text.trim();
+        // 智能解析多路径
+        const paths = parseMultiplePaths(text);
+        
+        if (paths.length === 0) {
+          // 如果解析失败，直接放入输入框
+          pathInput = text.trim();
+        } else if (paths.length === 1) {
+          // 单个路径，放入输入框
+          pathInput = paths[0];
+        } else {
+          // 多个路径，直接添加到列表
+          let addedCount = 0;
+          for (const path of paths) {
+            if (!ns.targetPaths.includes(path)) {
+              ns.targetPaths = [...ns.targetPaths, path];
+              addedCount++;
+            }
+          }
+          log(`📋 从剪贴板添加了 ${addedCount} 个路径`);
+        }
       }
     } catch (e) { log(`读取剪贴板失败: ${e}`); }
   }
 
+  // 解析多路径文本
+  function parseMultiplePaths(text: string): string[] {
+    const paths: string[] = [];
+    
+    // 按行分割
+    const lines = text.split(/\r?\n/).map(line => line.trim()).filter(line => line);
+    
+    for (const line of lines) {
+      // 移除引号（支持双引号和单引号）
+      let path = line.replace(/^["']|["']$/g, '').trim();
+      
+      // 验证是否是有效路径（Windows 或 Unix 路径格式）
+      if (path && (
+        /^[a-zA-Z]:[\\\/]/.test(path) ||  // Windows 绝对路径 C:\ 或 C:/
+        /^[\\\/]/.test(path) ||            // Unix 绝对路径 /
+        /^\.\.?[\\\/]/.test(path) ||       // 相对路径 ./ 或 ../
+        /^[^\\\/]+$/.test(path)            // 相对路径（无斜杠）
+      )) {
+        paths.push(path);
+      }
+    }
+    
+    return paths;
+  }
+
   // 添加路径
   function addPath() {
-    const path = pathInput.trim();
-    if (path && !ns.targetPaths.includes(path)) {
-      ns.targetPaths = [...ns.targetPaths, path];
-      pathInput = '';
+    const text = pathInput.trim();
+    if (!text) return;
+    
+    // 尝试解析多路径
+    const paths = parseMultiplePaths(text);
+    
+    if (paths.length === 0) {
+      // 解析失败，作为单个路径处理
+      if (!ns.targetPaths.includes(text)) {
+        ns.targetPaths = [...ns.targetPaths, text];
+      }
+    } else {
+      // 批量添加
+      let addedCount = 0;
+      for (const path of paths) {
+        if (!ns.targetPaths.includes(path)) {
+          ns.targetPaths = [...ns.targetPaths, path];
+          addedCount++;
+        }
+      }
+      if (addedCount > 1) {
+        log(`➕ 添加了 ${addedCount} 个路径`);
+      }
     }
+    
+    pathInput = '';
   }
 
   // 移除路径
@@ -339,12 +404,24 @@
     {#if !hasInputConnection}
       <!-- 路径输入框 -->
       <div class="flex cq-gap mb-1">
-        <Input 
+        <textarea
           bind:value={pathInput} 
-          placeholder="输入路径..." 
+          placeholder="输入路径（支持多行粘贴）..." 
           disabled={isRunning} 
-          class="flex-1 cq-input"
-          onkeydown={(e) => e.key === 'Enter' && addPath()}
+          class="flex-1 cq-input resize-none"
+          rows="1"
+          onkeydown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault();
+              addPath();
+            }
+          }}
+          oninput={(e) => {
+            // 自动调整高度
+            const target = e.target as HTMLTextAreaElement;
+            target.style.height = 'auto';
+            target.style.height = Math.min(target.scrollHeight, 100) + 'px';
+          }}
         />
         <Button variant="outline" size="icon" class="cq-button-icon shrink-0" onclick={addPath} disabled={isRunning || !pathInput.trim()}>
           <Plus class="cq-icon" />

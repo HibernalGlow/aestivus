@@ -17,7 +17,8 @@
   import type { MvzNodeState, MvzAction } from './types';
   import { 
     Package, LoaderCircle, Trash2, Download, Move, Edit3, 
-    CircleCheck, CircleX, Copy, Check, RotateCcw, Clipboard, Plus, X
+    CircleCheck, CircleX, Copy, Check, RotateCcw, Clipboard, Plus, X,
+    ChevronDown, ChevronRight
   } from '@lucide/svelte';
 
   interface Props {
@@ -63,6 +64,8 @@
   let layoutRenderer = $state<any>(undefined);
   let fileInput = $state('');
   let copiedLogs = $state(false);
+  let copiedPath = $state(false);
+  let expandedArchives = $state<Set<string>>(new Set());
 
   // WebSocket 连接
   let ws: WebSocket | null = null;
@@ -162,6 +165,16 @@
     ns.files = [];
   }
 
+  // 切换压缩包展开状态
+  function toggleArchive(archive: string) {
+    if (expandedArchives.has(archive)) {
+      expandedArchives.delete(archive);
+    } else {
+      expandedArchives.add(archive);
+    }
+    expandedArchives = new Set(expandedArchives);
+  }
+
   // 执行操作
   async function execute() {
     if (!canExecute) return;
@@ -241,9 +254,23 @@
 
 <!-- 输入 -->
 {#snippet inputBlock()}
+  {@const groupedFiles = (() => {
+    const groups = new Map<string, string[]>();
+    for (const file of ns.files) {
+      const parts = file.split('//');
+      const archive = parts[0];
+      const internal = parts[1] || '';
+      if (!groups.has(archive)) {
+        groups.set(archive, []);
+      }
+      groups.get(archive)!.push(internal);
+    }
+    return Array.from(groups.entries());
+  })()}
+  
   <div class="h-full flex flex-col">
     <!-- 文件输入框 -->
-    <div class="flex flex-col cq-gap">
+    <div class="flex flex-col cq-gap mb-2">
       <textarea
         bind:value={fileInput}
         placeholder="粘贴文件路径（archive//internal 格式）..."
@@ -269,32 +296,150 @@
         </Button>
       </div>
     </div>
+    
+    <!-- 文件树显示 -->
+    {#if ns.files.length > 0}
+      <div class="flex-1 overflow-y-auto border-t pt-2">
+        {#each groupedFiles as [archive, files]}
+          {@const isExpanded = expandedArchives.has(archive)}
+          
+          <div class="select-none">
+            <!-- 压缩包行 -->
+            <div
+              class="flex items-center gap-1 py-0.5 px-1 rounded hover:bg-muted/50 cursor-pointer text-xs"
+              onclick={() => toggleArchive(archive)}
+              onkeydown={(e) => e.key === 'Enter' && toggleArchive(archive)}
+              role="button"
+              tabindex="0"
+            >
+              {#if isExpanded}
+                <ChevronDown class="w-3 h-3 text-muted-foreground shrink-0" />
+              {:else}
+                <ChevronRight class="w-3 h-3 text-muted-foreground shrink-0" />
+              {/if}
+              <Package class="w-3 h-3 text-purple-500 shrink-0" />
+              <span class="truncate flex-1" title={archive}>{archive}</span>
+              <span class="text-muted-foreground shrink-0">{files.length}</span>
+              <button 
+                onclick={(e) => {
+                  e.stopPropagation();
+                  ns.files = ns.files.filter(f => !f.startsWith(archive + '//'));
+                }}
+                disabled={isRunning} 
+                class="opacity-0 hover:opacity-100 transition-opacity"
+                title="删除此压缩包的所有文件"
+              >
+                <X class="w-3 h-3 text-muted-foreground hover:text-destructive" />
+              </button>
+            </div>
+            
+            <!-- 文件列表 -->
+            {#if isExpanded}
+              {#each files as internal, fileIdx}
+                {@const pathParts = internal.split('/')}
+                {@const fileName = pathParts[pathParts.length - 1]}
+                {@const fileIndex = ns.files.findIndex(f => f === `${archive}//${internal}`)}
+                
+                <div class="flex items-center gap-1 py-0.5 px-1 ml-3 rounded hover:bg-muted/30 text-xs group/file">
+                  <span class="w-3 h-3 shrink-0"></span>
+                  <div class="w-1.5 h-1.5 bg-cyan-500 rounded-full shrink-0"></div>
+                  <span class="truncate flex-1 text-cyan-600" title={internal}>{fileName}</span>
+                  <button 
+                    onclick={() => removeFile(fileIndex)}
+                    disabled={isRunning} 
+                    class="opacity-0 group-hover/file:opacity-100 transition-opacity"
+                    title="删除"
+                  >
+                    <X class="w-3 h-3 text-muted-foreground hover:text-destructive" />
+                  </button>
+                </div>
+              {/each}
+            {/if}
+          </div>
+        {/each}
+      </div>
+    {/if}
   </div>
 {/snippet}
 
 <!-- 文件列表树 -->
 {#snippet filesBlock()}
+  {@const groupedFiles = (() => {
+    const groups = new Map<string, string[]>();
+    for (const file of ns.files) {
+      const parts = file.split('//');
+      const archive = parts[0];
+      const internal = parts[1] || '';
+      if (!groups.has(archive)) {
+        groups.set(archive, []);
+      }
+      groups.get(archive)!.push(internal);
+    }
+    return Array.from(groups.entries());
+  })()}
+  
   <div class="h-full flex flex-col overflow-hidden">
     <div class="flex items-center justify-between mb-1 shrink-0">
       <span class="cq-text-sm font-semibold">
         {ns.files.length} 个文件
       </span>
+      {#if ns.files.length > 0}
+        <Button variant="ghost" size="icon" class="h-5 w-5" onclick={() => copyToClipboard(ns.files.join('\n'), v => copiedPath = v)}>
+          {#if copiedPath}<Check class="w-3 h-3 text-green-500" />{:else}<Copy class="w-3 h-3" />{/if}
+        </Button>
+      {/if}
     </div>
     
     {#if ns.files.length > 0}
-      <div class="flex-1 overflow-y-auto space-y-0.5">
-        {#each ns.files as file, index}
-          <div class="flex items-center gap-1 cq-text-sm bg-muted/50 cq-rounded px-2 py-1 group hover:bg-muted transition-colors">
-            <Package class="w-3 h-3 text-purple-500 shrink-0" />
-            <span class="flex-1 truncate font-mono text-xs" title={file}>{file}</span>
-            <button 
-              onclick={() => removeFile(index)} 
-              disabled={isRunning} 
-              class="opacity-0 group-hover:opacity-100 transition-opacity"
-              title="删除"
-            >
-              <X class="w-3 h-3 text-muted-foreground hover:text-destructive" />
-            </button>
+      <div class="flex-1 overflow-y-auto space-y-0">
+        {#each groupedFiles as [archive, files], archiveIdx}
+          <div class="group">
+            <!-- 压缩包行 -->
+            <div class="flex items-center gap-1 px-2 py-1 hover:bg-muted/50 transition-colors">
+              <Package class="w-3 h-3 text-purple-500 shrink-0" />
+              <span class="flex-1 truncate font-mono text-xs text-muted-foreground" title={archive}>
+                {archive}
+              </span>
+              <span class="cq-text-xs text-muted-foreground shrink-0">
+                {files.length}
+              </span>
+              <button 
+                onclick={() => {
+                  ns.files = ns.files.filter(f => !f.startsWith(archive + '//'));
+                }}
+                disabled={isRunning} 
+                class="opacity-0 group-hover:opacity-100 transition-opacity"
+                title="删除此压缩包的所有文件"
+              >
+                <X class="w-3 h-3 text-muted-foreground hover:text-destructive" />
+              </button>
+            </div>
+            
+            <!-- 文件列表 -->
+            <div class="border-l border-muted/30 ml-1.5">
+              {#each files as internal, fileIdx}
+                {@const pathParts = internal.split('/')}
+                {@const fileName = pathParts[pathParts.length - 1]}
+                {@const fileIndex = ns.files.findIndex(f => f === `${archive}//${internal}`)}
+                
+                <div class="flex items-center gap-1 px-2 py-0.5 ml-2 hover:bg-muted/30 transition-colors group/file">
+                  <div class="w-3 h-3 flex items-center justify-center shrink-0">
+                    <div class="w-1 h-1 bg-cyan-500 rounded-full"></div>
+                  </div>
+                  <span class="flex-1 truncate font-mono text-xs text-cyan-600" title={internal}>
+                    {fileName}
+                  </span>
+                  <button 
+                    onclick={() => removeFile(fileIndex)}
+                    disabled={isRunning} 
+                    class="opacity-0 group-hover/file:opacity-100 transition-opacity"
+                    title="删除"
+                  >
+                    <X class="w-3 h-3 text-muted-foreground hover:text-destructive" />
+                  </button>
+                </div>
+              {/each}
+            </div>
           </div>
         {/each}
       </div>

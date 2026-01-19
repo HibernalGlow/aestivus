@@ -324,6 +324,7 @@
       sqlValue={ns.whereClause}
       onchange={(_, sql) => { ns.whereClause = sql; }}
       onAdvancedChange={(adv) => advancedMode = adv}
+      onImageMetaChange={(enabled) => { ns.withImageMeta = enabled; }}
       disabled={isRunning}
     />
     <!-- 图片元数据开关 -->

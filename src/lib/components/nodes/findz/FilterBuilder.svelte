@@ -65,6 +65,8 @@
     sqlValue?: string;
     /** 高级模式切换回调 */
     onAdvancedChange?: (advanced: boolean) => void;
+    /** 图片元数据启用回调 */
+    onImageMetaChange?: (enabled: boolean) => void;
   }
 
   let { 
@@ -74,7 +76,8 @@
     showAdvanced = true,
     advancedMode = false,
     sqlValue = '1',
-    onAdvancedChange
+    onAdvancedChange,
+    onImageMetaChange
   }: Props = $props();
 
   // 默认配置（默认排除目录，只搜索文件）
@@ -248,6 +251,12 @@
   // 应用预设
   function applyPreset(preset: Preset) {
     config = { ...preset.config };
+    
+    // 如果预设启用了图片元数据，通知父组件
+    if (config.imageMetaEnabled && onImageMetaChange) {
+      onImageMetaChange(true);
+    }
+    
     emitChange();
     presetDialogOpen = false;
   }

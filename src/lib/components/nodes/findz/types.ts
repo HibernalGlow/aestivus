@@ -14,6 +14,12 @@ export interface FileData {
   ext: string;
   archive: string;
   container: string;
+  // 图片元数据（可选）
+  width?: number;
+  height?: number;
+  resolution?: string;
+  megapixels?: number;
+  aspect_ratio?: number;
 }
 
 /** 搜索结果统计 */
@@ -35,6 +41,7 @@ export interface FindzNodeState {
   targetPath: string;
   whereClause: string;
   logs: string[];
+  withImageMeta: boolean; // 是否启用图片元数据
 }
 
 /** 分组分析数据 */

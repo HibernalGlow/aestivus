@@ -41,6 +41,13 @@
     customExts: string[];
     // 排除的扩展名
     excludeExts: string[];
+    // 图片元数据
+    imageMetaEnabled: boolean;
+    widthMin: string;
+    widthMax: string;
+    heightMin: string;
+    heightMax: string;
+    resolutionPreset: string; // any, 1080p, 4k, custom
   }
 
   interface Props {
@@ -88,6 +95,12 @@
     itemType: 'file',  // 默认只搜索文件，排除目录
     customExts: [],
     excludeExts: [],
+    imageMetaEnabled: false,
+    widthMin: '',
+    widthMax: '',
+    heightMin: '',
+    heightMax: '',
+    resolutionPreset: 'any',
   };
 
   let config = $state<FilterConfig>(value ?? { ...defaultConfig });
@@ -136,6 +149,21 @@
         locationEnabled: true,
         inArchive: 'yes',
         itemType: 'file',
+      }
+    },
+    {
+      id: 'height-630-archive',
+      name: '压缩包内高度630',
+      isBuiltin: true,
+      config: {
+        ...defaultConfig,
+        fileTypes: ['images'],
+        locationEnabled: true,
+        inArchive: 'yes',
+        itemType: 'file',
+        imageMetaEnabled: true,
+        heightMin: '630',
+        heightMax: '630',
       }
     },
     {
@@ -465,6 +493,39 @@
     // 类型
     if (config.itemType !== 'any') {
       conditions.push(`type = "${config.itemType}"`);
+    }
+
+    // 图片元数据
+    if (config.imageMetaEnabled) {
+      // 宽度
+      if (config.widthMin && config.widthMax) {
+        conditions.push(`width BETWEEN ${config.widthMin} AND ${config.widthMax}`);
+      } else if (config.widthMin) {
+        conditions.push(`width >= ${config.widthMin}`);
+      } else if (config.widthMax) {
+        conditions.push(`width <= ${config.widthMax}`);
+      }
+      
+      // 高度
+      if (config.heightMin && config.heightMax) {
+        conditions.push(`height BETWEEN ${config.heightMin} AND ${config.heightMax}`);
+      } else if (config.heightMin) {
+        conditions.push(`height >= ${config.heightMin}`);
+      } else if (config.heightMax) {
+        conditions.push(`height <= ${config.heightMax}`);
+      }
+      
+      // 分辨率预设
+      if (config.resolutionPreset && config.resolutionPreset !== 'any') {
+        const presets: Record<string, string> = {
+          '1080p': 'resolution = "1920x1080"',
+          '4k': 'resolution = "3840x2160"',
+          '8k': 'resolution = "7680x4320"',
+        };
+        if (presets[config.resolutionPreset]) {
+          conditions.push(presets[config.resolutionPreset]);
+        }
+      }
     }
 
     return conditions.length > 0 ? conditions.join(' AND ') : '1';
@@ -925,6 +986,102 @@
             {disabled}
             oninput={emitChange}
           />
+        </div>
+      {/if}
+    </div>
+
+    <!-- 图片元数据 -->
+    <div>
+      <div class="flex items-center justify-between mb-1.5">
+        <label class="text-xs font-medium flex items-center gap-1">
+          <Image class="w-3 h-3" />图片尺寸
+        </label>
+        <input type="checkbox" bind:checked={config.imageMetaEnabled} onchange={emitChange} {disabled} class="w-3.5 h-3.5" />
+      </div>
+      {#if config.imageMetaEnabled}
+        <!-- 分辨率预设 -->
+        <div class="flex flex-wrap gap-1 mb-2">
+          <button
+            class="px-2 py-0.5 rounded text-xs transition-colors
+              {config.resolutionPreset === '1080p' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}"
+            onclick={() => { config.resolutionPreset = '1080p'; config.widthMin = ''; config.widthMax = ''; config.heightMin = ''; config.heightMax = ''; emitChange(); }}
+            {disabled}
+          >
+            1080p
+          </button>
+          <button
+            class="px-2 py-0.5 rounded text-xs transition-colors
+              {config.resolutionPreset === '4k' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}"
+            onclick={() => { config.resolutionPreset = '4k'; config.widthMin = ''; config.widthMax = ''; config.heightMin = ''; config.heightMax = ''; emitChange(); }}
+            {disabled}
+          >
+            4K
+          </button>
+          <button
+            class="px-2 py-0.5 rounded text-xs transition-colors
+              {config.resolutionPreset === '8k' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}"
+            onclick={() => { config.resolutionPreset = '8k'; config.widthMin = ''; config.widthMax = ''; config.heightMin = ''; config.heightMax = ''; emitChange(); }}
+            {disabled}
+          >
+            8K
+          </button>
+          <button
+            class="px-2 py-0.5 rounded text-xs bg-muted hover:bg-muted/80"
+            onclick={() => { config.resolutionPreset = 'any'; emitChange(); }}
+            {disabled}
+          >
+            自定义
+          </button>
+        </div>
+        
+        <!-- 宽度范围 -->
+        <div class="space-y-1.5">
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-muted-foreground w-10">宽度</span>
+            <Input 
+              bind:value={config.widthMin}
+              placeholder="最小"
+              type="number"
+              class="h-7 text-xs flex-1"
+              {disabled}
+              oninput={() => { config.resolutionPreset = 'any'; emitChange(); }}
+            />
+            <span class="text-xs text-muted-foreground">~</span>
+            <Input 
+              bind:value={config.widthMax}
+              placeholder="最大"
+              type="number"
+              class="h-7 text-xs flex-1"
+              {disabled}
+              oninput={() => { config.resolutionPreset = 'any'; emitChange(); }}
+            />
+          </div>
+          
+          <!-- 高度范围 -->
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-muted-foreground w-10">高度</span>
+            <Input 
+              bind:value={config.heightMin}
+              placeholder="最小"
+              type="number"
+              class="h-7 text-xs flex-1"
+              {disabled}
+              oninput={() => { config.resolutionPreset = 'any'; emitChange(); }}
+            />
+            <span class="text-xs text-muted-foreground">~</span>
+            <Input 
+              bind:value={config.heightMax}
+              placeholder="最大"
+              type="number"
+              class="h-7 text-xs flex-1"
+              {disabled}
+              oninput={() => { config.resolutionPreset = 'any'; emitChange(); }}
+            />
+          </div>
+        </div>
+        
+        <div class="text-[10px] text-muted-foreground mt-1">
+          💡 需要在节点中启用"图片元数据"选项
         </div>
       {/if}
     </div>

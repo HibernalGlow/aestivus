@@ -26,7 +26,7 @@
   import type { FileData, SearchResult, FindzNodeState } from './types';
   import { 
     Search, LoaderCircle, FolderOpen, Clipboard, CircleCheck, CircleX, 
-    File, Folder, Archive, Copy, Check, RotateCcw, Package, Layers
+    File, Folder, Archive, Copy, Check, RotateCcw, Package, Layers, Image
   } from '@lucide/svelte';
 
   /** NodeLayoutRenderer 组件实例类型 */
@@ -73,7 +73,8 @@
     byExtension: {},
     targetPath: configPath || '.',
     whereClause: configWhere || '1',
-    logs: []
+    logs: [],
+    withImageMeta: false
   });
 
   // 本地 UI 状态
@@ -219,7 +220,7 @@
     try {
       ns.progress = 10;
       const response = await api.executeNode('findz', {
-        path: ns.targetPath, where: ns.whereClause, action, long_format: true, max_results: 0
+        path: ns.targetPath, where: ns.whereClause, action, long_format: true, max_results: 0, with_image_meta: ns.withImageMeta
       }, { taskId: newTaskId, nodeId }) as any;
 
       if (response.logs) for (const m of response.logs) log(m);
@@ -325,6 +326,24 @@
       onAdvancedChange={(adv) => advancedMode = adv}
       disabled={isRunning}
     />
+    <!-- 图片元数据开关 -->
+    <div class="mt-2 pt-2 border-t">
+      <label class="flex items-center gap-2 cursor-pointer cq-text-sm">
+        <input 
+          type="checkbox" 
+          bind:checked={ns.withImageMeta} 
+          disabled={isRunning}
+          class="rounded border-gray-300"
+        />
+        <Image class="w-3.5 h-3.5 text-blue-500" />
+        <span>启用图片元数据</span>
+      </label>
+      {#if ns.withImageMeta}
+        <div class="text-xs text-muted-foreground mt-1 ml-6">
+          可用字段: width, height, resolution, megapixels, aspect
+        </div>
+      {/if}
+    </div>
   </div>
 {/snippet}
 
@@ -465,6 +484,9 @@
                 <File class="w-3 h-3 text-blue-500 shrink-0" />
               {/if}
               <span class="truncate flex-1">{file.name}</span>
+              {#if file.resolution && ns.withImageMeta}
+                <span class="cq-text-sm text-blue-600 shrink-0 font-mono">{file.resolution}</span>
+              {/if}
               <span class="cq-text-sm text-muted-foreground shrink-0">{file.size_formatted}</span>
             </div>
           {/each}

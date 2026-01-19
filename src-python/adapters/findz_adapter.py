@@ -58,6 +58,7 @@ class FindzInput(AdapterInput):
     max_results: int = Field(default=0, description="最大结果数量，0表示无限制")
     max_return_files: int = Field(default=5000, description="最大返回文件数（用于前端显示），0表示全部返回")
     continue_on_error: bool = Field(default=True, description="遇到错误继续搜索")
+    with_image_meta: bool = Field(default=False, description="启用图片元数据读取（width, height, resolution 等）")
 
 
 class FindzOutput(AdapterOutput):
@@ -93,7 +94,7 @@ class FindzAdapter(BaseAdapter):
         """懒加载导入 findz 模块"""
         from findz.filter.filter import create_filter
         from findz.filter.size import format_size
-        from findz.find.find import FileInfo, FIELDS
+        from findz.find.find import FileInfo, FIELDS, IMAGE_FIELDS
         from findz.find.walk import WalkParams, walk, is_archive
         from findz.find.index_cache import get_global_cache
         
@@ -109,6 +110,7 @@ class FindzAdapter(BaseAdapter):
             'format_size': format_size,
             'FileInfo': FileInfo,
             'FIELDS': FIELDS,
+            'IMAGE_FIELDS': IMAGE_FIELDS,
             'WalkParams': WalkParams,
             'walk': walk,
             'is_archive': is_archive,
@@ -172,9 +174,9 @@ class FindzAdapter(BaseAdapter):
                 valid_paths.append(p)
         return valid_paths if valid_paths else ["."]
     
-    def _file_info_to_dict(self, file_info, format_size) -> Dict[str, Any]:
+    def _file_info_to_dict(self, file_info, format_size, with_image_meta: bool = False) -> Dict[str, Any]:
         """将 FileInfo 转换为字典"""
-        return {
+        result = {
             'name': file_info.name,
             'path': file_info.path,
             'size': file_info.size,
@@ -187,6 +189,18 @@ class FindzAdapter(BaseAdapter):
             'archive': file_info.archive or '',
             'ext': os.path.splitext(file_info.name)[1].lstrip('.'),
         }
+        
+        # 添加图片元数据（如果启用）
+        if with_image_meta:
+            dims = file_info._get_image_dimensions()
+            if dims:
+                result['width'] = dims.width
+                result['height'] = dims.height
+                result['resolution'] = dims.resolution
+                result['megapixels'] = round(dims.megapixels, 2)
+                result['aspect_ratio'] = round(dims.aspect_ratio, 2)
+        
+        return result
 
     async def _search(
         self,
@@ -223,6 +237,13 @@ class FindzAdapter(BaseAdapter):
             walk = module['walk']
             is_archive = module['is_archive']
             get_global_cache = module['get_global_cache']
+            FileInfo = module['FileInfo']
+            
+            # 启用图片元数据（如果需要）
+            if input_data.with_image_meta:
+                FileInfo.enable_image_meta(True)
+                if on_log:
+                    on_log(f"🖼️ 图片元数据已启用")
             
             if on_log:
                 on_log(f"🔍 开始搜索: {', '.join(paths)}")
@@ -230,7 +251,7 @@ class FindzAdapter(BaseAdapter):
                     on_log(f"📝 过滤配置: JSON 模式")
                 else:
                     on_log(f"📝 过滤条件: {where}")
-                on_log(f"⚙️ 选项: no_archive={input_data.no_archive}, max_results={input_data.max_results}")
+                on_log(f"⚙️ 选项: no_archive={input_data.no_archive}, max_results={input_data.max_results}, with_image_meta={input_data.with_image_meta}")
             
             if on_progress:
                 on_progress(5, "解析过滤器...")
@@ -322,7 +343,7 @@ class FindzAdapter(BaseAdapter):
                             break
                         
                         # 转换为字典
-                        file_dict = self._file_info_to_dict(file_info, format_size)
+                        file_dict = self._file_info_to_dict(file_info, format_size, input_data.with_image_meta)
                         all_results.append(file_dict)
                         
                         # 统计

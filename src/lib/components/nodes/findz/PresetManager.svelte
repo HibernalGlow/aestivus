@@ -175,7 +175,7 @@
           <div
             class="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1"
           >
-            < Star class="w-3 h-3" />内置预设
+            <Star class="w-3 h-3" />内置预设
           </div>
           <div class="space-y-1">
             {#each BUILTIN_PRESETS as preset}

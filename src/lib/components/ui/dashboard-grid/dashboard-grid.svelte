@@ -82,7 +82,7 @@
     x: number,
     y: number,
     w: number,
-    h: number
+    h: number,
   ) {
     if (!grid) return;
     const el = gridElement?.querySelector(`[gs-id="${id}"]`) as HTMLElement;
@@ -101,7 +101,7 @@
 
     for (const item of newLayout) {
       const el = gridElement.querySelector(
-        `[gs-id="${item.id}"]`
+        `[gs-id="${item.id}"]`,
       ) as HTMLElement;
       if (el) {
         grid.update(el, { x: item.x, y: item.y, w: item.w, h: item.h });
@@ -121,7 +121,7 @@
 
     const currentGridItems = grid.getGridItems();
     const allDomItems = Array.from(
-      gridElement.querySelectorAll(".grid-stack-item")
+      gridElement.querySelectorAll(".grid-stack-item"),
     ) as HTMLElement[];
 
     // 构建 ID -> 元素 映射
@@ -156,7 +156,14 @@
 
     // 3. 找出位置不同步的元素（在两边都存在，但位置不一致或 DOM 元素不同）
     // 注意：需要同时保存 managedEl（用于移除）和 domEl（用于重新添加）
-    const toSync: { managedEl: HTMLElement; domEl: HTMLElement; x: number; y: number; w: number; h: number }[] = [];
+    const toSync: {
+      managedEl: HTMLElement;
+      domEl: HTMLElement;
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+    }[] = [];
     for (const [id, domEl] of domMap) {
       const managedEl = managedMap.get(id);
       if (managedEl) {
@@ -172,9 +179,22 @@
         const nodeH = node?.h ?? domH;
 
         // 检查位置是否不一致，或者 DOM 元素是否不同（Svelte 可能创建了新元素）
-        if (domX !== nodeX || domY !== nodeY || domW !== nodeW || domH !== nodeH || managedEl !== domEl) {
+        if (
+          domX !== nodeX ||
+          domY !== nodeY ||
+          domW !== nodeW ||
+          domH !== nodeH ||
+          managedEl !== domEl
+        ) {
           // 使用 GridStack node 的位置（正确的位置），而不是 DOM 属性
-          toSync.push({ managedEl, domEl, x: nodeX, y: nodeY, w: nodeW, h: nodeH });
+          toSync.push({
+            managedEl,
+            domEl,
+            x: nodeX,
+            y: nodeY,
+            w: nodeW,
+            h: nodeH,
+          });
         }
       }
     }
@@ -185,11 +205,16 @@
       managedCount: managedMap.size,
       domCount: domMap.size,
     });
-    
+
     console.log("[DashboardGrid] refresh - 操作:", {
-      toRemove: toRemove.map(el => el.getAttribute("gs-id")),
-      toAdd: toAdd.map(el => el.getAttribute("gs-id")),
-      toSync: toSync.map(item => ({ id: item.domEl.getAttribute("gs-id"), x: item.x, y: item.y, sameEl: item.managedEl === item.domEl })),
+      toRemove: toRemove.map((el) => el.getAttribute("gs-id")),
+      toAdd: toAdd.map((el) => el.getAttribute("gs-id")),
+      toSync: toSync.map((item) => ({
+        id: item.domEl.getAttribute("gs-id"),
+        x: item.x,
+        y: item.y,
+        sameEl: item.managedEl === item.domEl,
+      })),
     });
 
     if (toRemove.length === 0 && toAdd.length === 0 && toSync.length === 0) {
@@ -214,11 +239,21 @@
         const y = parseInt(el.getAttribute("gs-y") || "0");
         const w = parseInt(el.getAttribute("gs-w") || "1");
         const h = parseInt(el.getAttribute("gs-h") || "1");
-        const minW = el.getAttribute("gs-min-w") ? parseInt(el.getAttribute("gs-min-w")!) : undefined;
-        const minH = el.getAttribute("gs-min-h") ? parseInt(el.getAttribute("gs-min-h")!) : undefined;
+        const minW = el.getAttribute("gs-min-w")
+          ? parseInt(el.getAttribute("gs-min-w")!)
+          : undefined;
+        const minH = el.getAttribute("gs-min-h")
+          ? parseInt(el.getAttribute("gs-min-h")!)
+          : undefined;
 
-        console.log("[DashboardGrid] refresh - 注册新元素:", { id, x, y, w, h });
-        
+        console.log("[DashboardGrid] refresh - 注册新元素:", {
+          id,
+          x,
+          y,
+          w,
+          h,
+        });
+
         // GridStack V11: 先设置 DOM 属性，再用 makeWidget 注册
         el.setAttribute("gs-x", String(x));
         el.setAttribute("gs-y", String(y));
@@ -226,7 +261,7 @@
         el.setAttribute("gs-h", String(h));
         if (minW !== undefined) el.setAttribute("gs-min-w", String(minW));
         if (minH !== undefined) el.setAttribute("gs-min-h", String(minH));
-        
+
         grid.makeWidget(el);
         grid.update(el, { x, y, w, h, minW, minH });
         grid.movable(el, true);
@@ -237,8 +272,15 @@
       for (const { managedEl, domEl, x, y, w, h } of toSync) {
         const id = managedEl.getAttribute("gs-id");
         const sameElement = managedEl === domEl;
-        console.log("[DashboardGrid] refresh - 移除旧元素:", { id, x, y, w, h, sameElement });
-        
+        console.log("[DashboardGrid] refresh - 移除旧元素:", {
+          id,
+          x,
+          y,
+          w,
+          h,
+          sameElement,
+        });
+
         // 从 GridStack 移除旧元素
         // 如果 managedEl 和 domEl 是不同的元素，需要完全移除旧元素（包括 DOM）
         grid.removeWidget(managedEl, !sameElement);
@@ -250,14 +292,24 @@
     // 在 batchUpdate 之外重新添加需要同步的元素（使用新的 DOM 元素）
     if (toSync.length > 0) {
       await tick();
-      
+
       for (const { domEl, x, y, w, h } of toSync) {
         const id = domEl.getAttribute("gs-id");
-        const minW = domEl.getAttribute("gs-min-w") ? parseInt(domEl.getAttribute("gs-min-w")!) : undefined;
-        const minH = domEl.getAttribute("gs-min-h") ? parseInt(domEl.getAttribute("gs-min-h")!) : undefined;
-        
-        console.log("[DashboardGrid] refresh - 重新添加元素:", { id, x, y, w, h });
-        
+        const minW = domEl.getAttribute("gs-min-w")
+          ? parseInt(domEl.getAttribute("gs-min-w")!)
+          : undefined;
+        const minH = domEl.getAttribute("gs-min-h")
+          ? parseInt(domEl.getAttribute("gs-min-h")!)
+          : undefined;
+
+        console.log("[DashboardGrid] refresh - 重新添加元素:", {
+          id,
+          x,
+          y,
+          w,
+          h,
+        });
+
         // GridStack V11: 先设置 DOM 属性，再用 makeWidget 注册
         domEl.setAttribute("gs-x", String(x));
         domEl.setAttribute("gs-y", String(y));
@@ -265,7 +317,7 @@
         domEl.setAttribute("gs-h", String(h));
         if (minW !== undefined) domEl.setAttribute("gs-min-w", String(minW));
         if (minH !== undefined) domEl.setAttribute("gs-min-h", String(minH));
-        
+
         grid.makeWidget(domEl);
         grid.update(domEl, { x, y, w, h, minW, minH });
         grid.movable(domEl, true);
@@ -307,8 +359,9 @@
   function handleLayoutChange() {
     if (!grid || !onLayoutChange) return;
     const newLayout = getCurrentLayout();
-    console.log("[DashboardGrid] handleLayoutChange - 布局变化:", 
-      newLayout.map(i => ({ id: i.id, w: i.w, h: i.h }))
+    console.log(
+      "[DashboardGrid] handleLayoutChange - 布局变化:",
+      newLayout.map((i) => ({ id: i.id, w: i.w, h: i.h })),
     );
     onLayoutChange(newLayout);
   }
@@ -332,13 +385,32 @@
         animate: true,
         resizable: { handles: "se,sw,ne,nw,e,w,n,s" },
       },
-      gridElement
+      gridElement,
     );
 
     // 监听布局变化事件
     grid.on("change", handleLayoutChange);
-    grid.on("resizestop", handleLayoutChange);
     grid.on("dragstop", handleLayoutChange);
+
+    // 调整大小时临时锁定其他 block，防止布局被打乱
+    grid.on("resizestart", (_event: Event, el: HTMLElement) => {
+      if (!grid) return;
+      // 锁定所有其他 block
+      grid.getGridItems().forEach((item) => {
+        if (item !== el) {
+          grid!.update(item, { locked: true });
+        }
+      });
+    });
+
+    grid.on("resizestop", (_event: Event, _el: HTMLElement) => {
+      if (!grid) return;
+      // 解锁所有 block
+      grid.getGridItems().forEach((item) => {
+        grid!.update(item, { locked: false });
+      });
+      handleLayoutChange();
+    });
   });
 
   // 提供 context 给子组件
@@ -357,6 +429,7 @@
   onDestroy(() => {
     if (grid) {
       grid.off("change");
+      grid.off("resizestart");
       grid.off("resizestop");
       grid.off("dragstop");
       grid.destroy(false);

@@ -38,7 +38,7 @@
     maxH,
     noResize = false,
     noMove = false,
-    locked = true, // 默认锁定，防止被其他 block 推动
+    locked = false, // 默认不锁定，resize 时由 DashboardGrid 临时锁定
     class: className = "",
     children,
   }: Props = $props();

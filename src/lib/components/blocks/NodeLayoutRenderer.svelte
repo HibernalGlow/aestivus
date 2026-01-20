@@ -474,9 +474,27 @@
     if (itemIndex === -1) return;
     
     const item = layout[itemIndex];
-    // 全屏模式最大宽度 4，节点模式最大宽度 2
     const maxW = isFullscreen ? 4 : 2;
-    const newW = Math.max(1, Math.min(maxW, item.w + delta));
+    let newW = Math.max(1, Math.min(maxW, item.w + delta));
+
+    // 如果 delta 很大（长按），寻找右侧最近的障碍物
+    if (delta > 1) {
+      let nearestX = 4;
+      layout.forEach(other => {
+        if (other.id === blockId) return;
+        // 检查 Y 轴是否有重叠
+        if (item.y < (other.y + other.h) && (item.y + item.h) > other.y) {
+          if (other.x >= (item.x + item.w)) {
+            nearestX = Math.min(nearestX, other.x);
+          }
+        }
+      });
+      newW = Math.min(maxW, nearestX - item.x);
+    } else if (delta < -1) {
+      // 减小到最小
+      newW = 1;
+    }
+
     if (newW === item.w) return;
     
     layout[itemIndex] = { ...item, w: newW };
@@ -495,9 +513,29 @@
     if (itemIndex === -1) return;
     
     const item = layout[itemIndex];
-    // 全屏模式最大高度 6，节点模式最大高度 4
     const maxH = isFullscreen ? 6 : 4;
-    const newH = Math.max(1, Math.min(maxH, item.h + delta));
+    let newH = Math.max(1, Math.min(maxH, item.h + delta));
+
+    // 如果 delta 很大（长按），寻找下方最近的障碍物
+    if (delta > 1) {
+      let nearestY = 100; // 假设下方很远
+      layout.forEach(other => {
+        if (other.id === blockId) return;
+        // 检查 X 轴是否有重叠
+        if (item.x < (other.x + other.w) && (item.x + item.w) > other.x) {
+          if (other.y >= (item.y + item.h)) {
+            nearestY = Math.min(nearestY, other.y);
+          }
+        }
+      });
+      // 如果没有障碍物，跳到一个合理的增量或者固定边界
+      if (nearestY === 100) nearestY = item.y + item.h + 10;
+      newH = Math.min(maxH, nearestY - item.y);
+    } else if (delta < -1) {
+      // 减小到最小
+      newH = 1;
+    }
+
     if (newH === item.h) return;
     
     layout[itemIndex] = { ...item, h: newH };
@@ -518,9 +556,36 @@
     if (itemIndex === -1) return;
     
     const item = layout[itemIndex];
-    // X 范围：0 到 (4 - w)，确保不超出右边界
     const maxX = 4 - item.w;
-    const newX = Math.max(0, Math.min(maxX, item.x + delta));
+    let newX = Math.max(0, Math.min(maxX, item.x + delta));
+
+    // 长按左：跳到左侧最近障碍物
+    if (delta < -1) {
+      let nearestRight = 0;
+      layout.forEach(other => {
+        if (other.id === blockId) return;
+        if (item.y < (other.y + other.h) && (item.y + item.h) > other.y) {
+          if ((other.x + other.w) <= item.x) {
+            nearestRight = Math.max(nearestRight, other.x + other.w);
+          }
+        }
+      });
+      newX = nearestRight;
+    } 
+    // 长按右：跳到右侧最近障碍物
+    else if (delta > 1) {
+      let nearestLeft = 4;
+      layout.forEach(other => {
+        if (other.id === blockId) return;
+        if (item.y < (other.y + other.h) && (item.y + item.h) > other.y) {
+          if (other.x >= (item.x + item.w)) {
+            nearestLeft = Math.min(nearestLeft, other.x);
+          }
+        }
+      });
+      newX = nearestLeft - item.w;
+    }
+
     if (newX === item.x) return;
     
     layout[itemIndex] = { ...item, x: newX };
@@ -540,8 +605,39 @@
     if (itemIndex === -1) return;
     
     const item = layout[itemIndex];
-    // Y 范围：最小 0，无上限（可以向下滚动）
-    const newY = Math.max(0, item.y + delta);
+    let newY = Math.max(0, item.y + delta);
+
+    // 长按上：跳到上方最近障碍物
+    if (delta < -1) {
+      let nearestBottom = 0;
+      layout.forEach(other => {
+        if (other.id === blockId) return;
+        if (item.x < (other.x + other.w) && (item.x + item.w) > other.x) {
+          if ((other.y + other.h) <= item.y) {
+            nearestBottom = Math.max(nearestBottom, other.y + other.h);
+          }
+        }
+      });
+      newY = nearestBottom;
+    }
+    // 长天下：跳到下方最近障碍物
+    else if (delta > 1) {
+      let nearestTop = 100;
+      layout.forEach(other => {
+        if (other.id === blockId) return;
+        if (item.x < (other.x + other.w) && (item.x + item.w) > other.x) {
+          if (other.y >= (item.y + item.h)) {
+            nearestTop = Math.min(nearestTop, other.y);
+          }
+        }
+      });
+      if (nearestTop === 100) {
+        newY = item.y + delta; // 如果没障碍物，按原 delta 移动
+      } else {
+        newY = nearestTop - item.h;
+      }
+    }
+
     if (newY === item.y) return;
     
     layout[itemIndex] = { ...item, y: newY };

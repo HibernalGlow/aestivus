@@ -175,6 +175,93 @@
     }
   });
 
+  // ========== 长按检测和直接编辑功能 ==========
+  let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  const LONG_PRESS_DELAY = 500; // 长按阈值 500ms
+  
+  // 编辑模式状态
+  let editingPosition = $state(false);
+  let editingSize = $state(false);
+  let tempX = $state('');
+  let tempY = $state('');
+  let tempW = $state('');
+  let tempH = $state('');
+
+  // 创建长按处理函数
+  function createLongPressHandler(
+    normalAction: () => void,
+    longPressAction: () => void
+  ) {
+    let isLongPress = false;
+    
+    return {
+      onMouseDown: () => {
+        isLongPress = false;
+        longPressTimer = setTimeout(() => {
+          isLongPress = true;
+          longPressAction();
+        }, LONG_PRESS_DELAY);
+      },
+      onMouseUp: () => {
+        if (longPressTimer) {
+          clearTimeout(longPressTimer);
+          longPressTimer = null;
+        }
+        if (!isLongPress) {
+          normalAction();
+        }
+      },
+      onMouseLeave: () => {
+        if (longPressTimer) {
+          clearTimeout(longPressTimer);
+          longPressTimer = null;
+        }
+      }
+    };
+  }
+
+  // 位置编辑相关
+  function startEditPosition() {
+    tempX = String(currentX);
+    tempY = String(currentY);
+    editingPosition = true;
+  }
+
+  function confirmEditPosition() {
+    const newX = parseInt(tempX) || 0;
+    const newY = parseInt(tempY) || 0;
+    const deltaX = newX - currentX;
+    const deltaY = newY - currentY;
+    if (deltaX !== 0 && onXChange) onXChange(deltaX);
+    if (deltaY !== 0 && onYChange) onYChange(deltaY);
+    editingPosition = false;
+  }
+
+  function cancelEditPosition() {
+    editingPosition = false;
+  }
+
+  // 尺寸编辑相关
+  function startEditSize() {
+    tempW = String(currentW);
+    tempH = String(currentH);
+    editingSize = true;
+  }
+
+  function confirmEditSize() {
+    const newW = Math.max(1, Math.min(isFullscreen ? 4 : 2, parseInt(tempW) || 1));
+    const newH = Math.max(1, Math.min(isFullscreen ? 6 : 4, parseInt(tempH) || 1));
+    const deltaW = newW - currentW;
+    const deltaH = newH - currentH;
+    if (deltaW !== 0 && onWidthChange) onWidthChange(deltaW);
+    if (deltaH !== 0 && onHeightChange) onHeightChange(deltaH);
+    editingSize = false;
+  }
+
+  function cancelEditSize() {
+    editingSize = false;
+  }
+
   function toggleExpanded() {
     if (collapsible) isExpanded = !isExpanded;
   }
@@ -282,6 +369,12 @@
   
   <!-- 编辑模式：尺寸调整控制器覆盖层 -->
   {#if editMode && onWidthChange}
+    {@const maxW = isFullscreen ? 4 : 2}
+    {@const maxH = isFullscreen ? 6 : 4}
+    {@const sizeUpHandler = onHeightChange ? createLongPressHandler(() => onHeightChange(-1), () => onHeightChange(-(currentH - 1))) : null}
+    {@const sizeDownHandler = onHeightChange ? createLongPressHandler(() => onHeightChange(1), () => onHeightChange(maxH - currentH)) : null}
+    {@const sizeLeftHandler = createLongPressHandler(() => onWidthChange(-1), () => onWidthChange(-(currentW - 1)))}
+    {@const sizeRightHandler = createLongPressHandler(() => onWidthChange(1), () => onWidthChange(maxW - currentW))}
     <div class="absolute inset-0 z-50 pointer-events-none flex flex-col items-center justify-center p-2">
       <!-- 半透明背景 -->
       <div class="absolute inset-0 bg-primary/5 backdrop-blur-[2px] pointer-events-auto rounded-lg"></div>
@@ -291,6 +384,10 @@
         <div class="flex gap-4">
           <!-- 左侧：位置调整（十字方向键，仅全屏模式） -->
           {#if isFullscreen && onXChange && onYChange}
+            {@const upHandler = createLongPressHandler(() => onYChange(-1), () => onYChange(-currentY))}
+            {@const downHandler = createLongPressHandler(() => onYChange(1), () => onYChange(10))}
+            {@const leftHandler = createLongPressHandler(() => onXChange(-1), () => onXChange(-currentX))}
+            {@const rightHandler = createLongPressHandler(() => onXChange(1), () => onXChange(4 - currentW - currentX))}
             <div class="flex flex-col items-center gap-1">
               <span class="text-xs font-medium text-muted-foreground mb-1">位置</span>
               <div class="grid grid-cols-3 gap-0.5">
@@ -300,9 +397,11 @@
                 <button
                   type="button"
                   class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
-                  onclick={() => onYChange(-1)}
+                  onmousedown={upHandler.onMouseDown}
+                  onmouseup={upHandler.onMouseUp}
+                  onmouseleave={upHandler.onMouseLeave}
                   disabled={currentY <= 0}
-                  title="上移"
+                  title="上移 (长按跳到顶部)"
                 >
                   <ArrowUp class="w-3 h-3" />
                 </button>
@@ -312,23 +411,53 @@
                 <button
                   type="button"
                   class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
-                  onclick={() => onXChange(-1)}
+                  onmousedown={leftHandler.onMouseDown}
+                  onmouseup={leftHandler.onMouseUp}
+                  onmouseleave={leftHandler.onMouseLeave}
                   disabled={currentX <= 0}
-                  title="左移"
+                  title="左移 (长按跳到最左)"
                 >
                   <ArrowLeft class="w-3 h-3" />
                 </button>
-                <!-- 中心（显示坐标） -->
-                <div class="w-6 h-6 flex items-center justify-center text-[9px] font-mono text-muted-foreground">
-                  {currentX},{currentY}
-                </div>
+                <!-- 中心（显示坐标/编辑） -->
+                {#if editingPosition}
+                  <div class="w-12 h-6 flex items-center justify-center gap-0.5 col-span-1">
+                    <input
+                      type="number"
+                      bind:value={tempX}
+                      class="w-5 h-5 text-[9px] text-center bg-muted border border-primary rounded p-0"
+                      min="0"
+                      max={4 - currentW}
+                      onkeydown={(e) => e.key === 'Enter' && confirmEditPosition()}
+                    />
+                    <input
+                      type="number"
+                      bind:value={tempY}
+                      class="w-5 h-5 text-[9px] text-center bg-muted border border-primary rounded p-0"
+                      min="0"
+                      onkeydown={(e) => e.key === 'Enter' && confirmEditPosition()}
+                      onblur={confirmEditPosition}
+                    />
+                  </div>
+                {:else}
+                  <button
+                    type="button"
+                    class="w-6 h-6 flex items-center justify-center text-[9px] font-mono text-muted-foreground hover:bg-muted rounded cursor-pointer"
+                    onclick={startEditPosition}
+                    title="点击编辑坐标"
+                  >
+                    {currentX},{currentY}
+                  </button>
+                {/if}
                 <!-- 右 -->
                 <button
                   type="button"
                   class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
-                  onclick={() => onXChange(1)}
+                  onmousedown={rightHandler.onMouseDown}
+                  onmouseup={rightHandler.onMouseUp}
+                  onmouseleave={rightHandler.onMouseLeave}
                   disabled={currentX >= (4 - currentW)}
-                  title="右移"
+                  title="右移 (长按跳到最右)"
                 >
                   <ArrowRight class="w-3 h-3" />
                 </button>
@@ -338,8 +467,10 @@
                 <button
                   type="button"
                   class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
-                  onclick={() => onYChange(1)}
-                  title="下移"
+                  onmousedown={downHandler.onMouseDown}
+                  onmouseup={downHandler.onMouseUp}
+                  onmouseleave={downHandler.onMouseLeave}
+                  title="下移 (长按跳到更下方)"
                 >
                   <ArrowDown class="w-3 h-3" />
                 </button>
@@ -357,14 +488,16 @@
             <div class="grid grid-cols-3 gap-0.5">
               <!-- 空 -->
               <div class="w-6 h-6"></div>
-              <!-- 上：增加高度 -->
-              {#if onHeightChange}
+              <!-- 上：减小高度 -->
+              {#if onHeightChange && sizeUpHandler}
                 <button
                   type="button"
                   class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
-                  onclick={() => onHeightChange(-1)}
+                  onmousedown={sizeUpHandler.onMouseDown}
+                  onmouseup={sizeUpHandler.onMouseUp}
+                  onmouseleave={sizeUpHandler.onMouseLeave}
                   disabled={currentH <= 1}
-                  title="减小高度"
+                  title="减小高度 (长按到最小)"
                 >
                   <ArrowUp class="w-3 h-3" />
                 </button>
@@ -377,36 +510,69 @@
               <button
                 type="button"
                 class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
-                onclick={() => onWidthChange(-1)}
+                onmousedown={sizeLeftHandler.onMouseDown}
+                onmouseup={sizeLeftHandler.onMouseUp}
+                onmouseleave={sizeLeftHandler.onMouseLeave}
                 disabled={currentW <= 1}
-                title="减小宽度"
+                title="减小宽度 (长按到最小)"
               >
                 <ArrowLeft class="w-3 h-3" />
               </button>
-              <!-- 中心（显示尺寸） -->
-              <div class="w-6 h-6 flex items-center justify-center text-[9px] font-mono text-muted-foreground">
-                {currentW}×{currentH}
-              </div>
+              <!-- 中心（显示尺寸/编辑） -->
+              {#if editingSize}
+                <div class="w-12 h-6 flex items-center justify-center gap-0.5 col-span-1">
+                  <input
+                    type="number"
+                    bind:value={tempW}
+                    class="w-5 h-5 text-[9px] text-center bg-muted border border-primary rounded p-0"
+                    min="1"
+                    max={maxW}
+                    onkeydown={(e) => e.key === 'Enter' && confirmEditSize()}
+                  />
+                  <input
+                    type="number"
+                    bind:value={tempH}
+                    class="w-5 h-5 text-[9px] text-center bg-muted border border-primary rounded p-0"
+                    min="1"
+                    max={maxH}
+                    onkeydown={(e) => e.key === 'Enter' && confirmEditSize()}
+                    onblur={confirmEditSize}
+                  />
+                </div>
+              {:else}
+                <button
+                  type="button"
+                  class="w-6 h-6 flex items-center justify-center text-[9px] font-mono text-muted-foreground hover:bg-muted rounded cursor-pointer"
+                  onclick={startEditSize}
+                  title="点击编辑尺寸"
+                >
+                  {currentW}×{currentH}
+                </button>
+              {/if}
               <!-- 右：增加宽度 -->
               <button
                 type="button"
                 class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
-                onclick={() => onWidthChange(1)}
-                disabled={currentW >= (isFullscreen ? 4 : 2)}
-                title="增大宽度"
+                onmousedown={sizeRightHandler.onMouseDown}
+                onmouseup={sizeRightHandler.onMouseUp}
+                onmouseleave={sizeRightHandler.onMouseLeave}
+                disabled={currentW >= maxW}
+                title="增大宽度 (长按到最大)"
               >
                 <ArrowRight class="w-3 h-3" />
               </button>
               <!-- 空 -->
               <div class="w-6 h-6"></div>
               <!-- 下：增加高度 -->
-              {#if onHeightChange}
+              {#if onHeightChange && sizeDownHandler}
                 <button
                   type="button"
                   class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
-                  onclick={() => onHeightChange(1)}
-                  disabled={currentH >= (isFullscreen ? 6 : 4)}
-                  title="增大高度"
+                  onmousedown={sizeDownHandler.onMouseDown}
+                  onmouseup={sizeDownHandler.onMouseUp}
+                  onmouseleave={sizeDownHandler.onMouseLeave}
+                  disabled={currentH >= maxH}
+                  title="增大高度 (长按到最大)"
                 >
                   <ArrowDown class="w-3 h-3" />
                 </button>
@@ -461,5 +627,16 @@
   /* 全屏模式特殊边框 */
   .block-card:not(.bento-card).h-full {
     border-color: hsl(var(--primary) / 0.4);
+  }
+
+  /* 隐藏数字输入框的调节箭头 */
+  input::-webkit-outer-spin-button,
+  input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+    appearance: textfield;
   }
 </style>

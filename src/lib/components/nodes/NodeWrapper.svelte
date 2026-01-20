@@ -19,6 +19,7 @@
     Layout,
     Layers,
     Pencil,
+    MoreHorizontal,
   } from "@lucide/svelte";
   import { Badge } from "$lib/components/ui/badge";
   import { LayoutPresetSelector } from "$lib/components/ui/dashboard-grid";
@@ -30,14 +31,17 @@
   import { onMount, setContext } from "svelte";
   import { writable } from "svelte/store";
   import type { Snippet } from "svelte";
-  import { BLOCK_EDIT_MODE_KEY, type BlockEditModeContext } from "./blockEditContext";
+  import {
+    BLOCK_EDIT_MODE_KEY,
+    type BlockEditModeContext,
+  } from "./blockEditContext";
 
   // 获取面板设置（透明度和模糊）
   let panelSettings = $state(settingsManager.getSettings().panels);
-  
+
   // 计算节点样式 - 使用 color-mix 实现带颜色的透明效果
   let nodeStyle = $derived(
-    `background: color-mix(in srgb, var(--card) ${panelSettings.topToolbarOpacity}%, transparent); backdrop-filter: blur(${panelSettings.topToolbarBlur}px);`
+    `background: color-mix(in srgb, var(--card) ${panelSettings.topToolbarOpacity}%, transparent); backdrop-filter: blur(${panelSettings.topToolbarBlur}px);`,
   );
 
   onMount(() => {
@@ -97,15 +101,22 @@
     /** 当前布局（用于布局预设） */
     currentLayout?: GridItem[];
     /** 当前 Tab 分组（用于布局预设保存） */
-    currentTabGroups?: { id: string; blockIds: string[]; activeIndex: number }[];
+    currentTabGroups?: {
+      id: string;
+      blockIds: string[];
+      activeIndex: number;
+    }[];
     /** 应用布局回调（全屏模式，包含 Tab 分组） */
-    onApplyLayout?: (layout: GridItem[], tabGroups?: { id: string; blockIds: string[]; activeIndex: number }[]) => void;
+    onApplyLayout?: (
+      layout: GridItem[],
+      tabGroups?: { id: string; blockIds: string[]; activeIndex: number }[],
+    ) => void;
     /** 创建 Tab 区块回调（传入选中的区块 ID 列表） */
     onCreateTab?: (blockIds: string[]) => void;
     /** 是否支持创建 Tab 区块 */
     canCreateTab?: boolean;
     /** 当前布局模式（用于 Tab 配置） */
-    layoutMode?: 'fullscreen' | 'normal';
+    layoutMode?: "fullscreen" | "normal";
   }
 
   // 默认状态标签映射
@@ -163,37 +174,41 @@
     onApplyLayout,
     onCreateTab,
     canCreateTab = false,
-    layoutMode = 'fullscreen',
+    layoutMode = "fullscreen",
   }: Props = $props();
 
   // 状态
   let collapsed = $state.raw(false);
   let pinned = $state(false);
-  let showLayoutBar = $state(false);  // 布局预设栏展开状态
-  let showTabConfig = $state(false);  // Tab 配置面板展开状态
-  
+  let showLayoutBar = $state(false); // 布局预设栏展开状态
+  let showTabConfig = $state(false); // Tab 配置面板展开状态
+
   // 区块尺寸编辑模式（使用 writable store 以便通过 context 响应式传递）
   const blockEditModeStore = writable(false);
   let blockEditModeInternal = $state(false);
-  
+
   // 同步 store 和本地状态
-  blockEditModeStore.subscribe(v => { blockEditModeInternal = v; });
+  blockEditModeStore.subscribe((v) => {
+    blockEditModeInternal = v;
+  });
 
   // 切换区块编辑模式
   function toggleBlockEditMode() {
-    blockEditModeStore.update(v => !v);
+    blockEditModeStore.update((v) => !v);
   }
 
   // 通过 context 暴露编辑模式状态（供 NodeLayoutRenderer 使用）
   // 注意：isFullscreen 在组件生命周期内不会改变，所以直接使用 prop 值是安全的
   setContext<BlockEditModeContext>(BLOCK_EDIT_MODE_KEY, {
     editMode: blockEditModeStore,
-    get isFullscreen() { return isFullscreenRender; }
+    get isFullscreen() {
+      return isFullscreenRender;
+    },
   });
 
   // 检测是否在全屏模式（原节点需要变淡）
   let isNodeInFullscreen = $derived(
-    $fullscreenNodeStore.isOpen && $fullscreenNodeStore.nodeId === nodeId
+    $fullscreenNodeStore.isOpen && $fullscreenNodeStore.nodeId === nodeId,
   );
   // 原节点变淡：当节点在全屏模式但不是全屏渲染版本时
   let shouldFade = $derived(isNodeInFullscreen && !isFullscreenRender);
@@ -205,11 +220,11 @@
 
   // 计算状态显示
   let displayLabel = $derived(
-    statusLabel ?? (status ? (defaultStatusLabels[status] ?? status) : "")
+    statusLabel ?? (status ? (defaultStatusLabels[status] ?? status) : ""),
   );
   let displayVariant = $derived(
     statusVariant ??
-      (status ? (defaultStatusVariants[status] ?? "secondary") : "secondary")
+      (status ? (defaultStatusVariants[status] ?? "secondary") : "secondary"),
   );
 
   // 关闭节点
@@ -241,6 +256,23 @@
         fullscreenNodeStore.open(nodeId);
       }
     }
+  }
+
+  // 处理打开菜单
+  function handleOpenMenu(e: MouseEvent) {
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    // 派发自定义事件，让 FlowCanvas 处理菜单显示
+    // 使用 window 派发事件以确保能被捕获
+    window.dispatchEvent(
+      new CustomEvent("aestivus:open-node-menu", {
+        detail: {
+          nodeId,
+          x: rect.left,
+          y: rect.bottom + 4,
+        },
+      }),
+    );
   }
 </script>
 
@@ -300,9 +332,11 @@
       <!-- 区块尺寸编辑按钮（两种模式都支持） -->
       {#if nodeType}
         <button
-          class="p-1 rounded hover:bg-muted transition-colors {blockEditModeInternal ? 'text-primary' : 'text-muted-foreground'}"
+          class="p-1 rounded hover:bg-muted transition-colors {blockEditModeInternal
+            ? 'text-primary'
+            : 'text-muted-foreground'}"
           onclick={toggleBlockEditMode}
-          title={blockEditModeInternal ? '退出编辑' : '编辑区块尺寸'}
+          title={blockEditModeInternal ? "退出编辑" : "编辑区块尺寸"}
         >
           <Pencil class="w-3.5 h-3.5" />
         </button>
@@ -311,8 +345,10 @@
       <!-- 创建 Tab 区块按钮（两种模式都支持） -->
       {#if canCreateTab && onCreateTab && nodeType}
         <button
-          class="p-1 rounded hover:bg-muted transition-colors {showTabConfig ? 'text-primary' : 'text-muted-foreground'}"
-          onclick={() => showTabConfig = !showTabConfig}
+          class="p-1 rounded hover:bg-muted transition-colors {showTabConfig
+            ? 'text-primary'
+            : 'text-muted-foreground'}"
+          onclick={() => (showTabConfig = !showTabConfig)}
           title="创建 Tab 区块"
         >
           <Layers class="w-3.5 h-3.5" />
@@ -322,8 +358,10 @@
       <!-- 布局预设按钮（两种模式都支持） -->
       {#if nodeType && currentLayout && onApplyLayout}
         <button
-          class="p-1 rounded hover:bg-muted transition-colors {showLayoutBar ? 'text-primary' : 'text-muted-foreground'}"
-          onclick={() => showLayoutBar = !showLayoutBar}
+          class="p-1 rounded hover:bg-muted transition-colors {showLayoutBar
+            ? 'text-primary'
+            : 'text-muted-foreground'}"
+          onclick={() => (showLayoutBar = !showLayoutBar)}
           title="布局预设"
         >
           <Layout class="w-3.5 h-3.5" />
@@ -362,6 +400,14 @@
 
       {#if closable}
         <button
+          class="p-1 rounded hover:bg-muted transition-colors text-muted-foreground"
+          onclick={handleOpenMenu}
+          title="更多操作"
+        >
+          <MoreHorizontal class="w-3.5 h-3.5" />
+        </button>
+
+        <button
           class="p-1 rounded hover:bg-destructive hover:text-destructive-foreground transition-colors text-muted-foreground"
           onclick={handleClose}
           title="关闭"
@@ -376,7 +422,7 @@
   {#if showLayoutBar && nodeType && currentLayout && onApplyLayout}
     <div class="px-3 py-2 bg-muted/20 border-b shrink-0">
       <div class="flex items-center gap-2">
-        <LayoutPresetSelector 
+        <LayoutPresetSelector
           {nodeType}
           {currentLayout}
           {currentTabGroups}
@@ -412,11 +458,13 @@
   <!-- Tab 配置面板（两种模式都支持，标题栏下方） -->
   {#if showTabConfig && nodeType && onCreateTab}
     <div class="px-3 py-2 bg-muted/20 border-b shrink-0">
-      <TabConfigPanel 
+      <TabConfigPanel
         {nodeType}
         mode={layoutMode}
-        onCreate={(blockIds) => { onCreateTab(blockIds); }}
-        onCancel={() => showTabConfig = false}
+        onCreate={(blockIds) => {
+          onCreateTab(blockIds);
+        }}
+        onCancel={() => (showTabConfig = false)}
       />
     </div>
   {/if}
@@ -426,8 +474,12 @@
     <div class="nodrag flex-1 min-h-0 overflow-hidden relative">
       <!-- 编辑模式提示浮层 -->
       {#if blockEditModeInternal && nodeType}
-        <div class="absolute top-3 left-3 z-40 bg-primary/90 text-primary-foreground px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2 shadow-lg backdrop-blur-sm">
-          <div class="w-2 h-2 bg-primary-foreground rounded-full animate-pulse"></div>
+        <div
+          class="absolute top-3 left-3 z-40 bg-primary/90 text-primary-foreground px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2 shadow-lg backdrop-blur-sm"
+        >
+          <div
+            class="w-2 h-2 bg-primary-foreground rounded-full animate-pulse"
+          ></div>
           <span>
             {#if isFullscreenRender}
               编辑模式：拖拽已禁用，点击区块控制面板调整大小
@@ -437,14 +489,14 @@
           </span>
           <button
             class="ml-auto text-primary-foreground hover:opacity-70 transition-opacity cursor-pointer shrink-0"
-            onclick={() => blockEditModeStore.update(v => !v)}
+            onclick={() => blockEditModeStore.update((v) => !v)}
             title="退出编辑"
           >
             <X class="w-3.5 h-3.5" />
           </button>
         </div>
       {/if}
-      
+
       {@render children()}
     </div>
   {/if}

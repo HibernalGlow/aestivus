@@ -154,20 +154,35 @@
         miniMapHeight = h;
       } catch (e) {}
     }
+
+    // 监听来自 NodeWrapper 的菜单打开请求
+    const handleOpenMenuRequest = (e: any) => {
+      const { nodeId, x, y } = e.detail;
+      canvasContextMenu = null;
+      nodeContextMenu = { id: nodeId, x, y };
+    };
+    window.addEventListener("aestivus:open-node-menu", handleOpenMenuRequest);
+
+    return () => {
+      window.removeEventListener(
+        "aestivus:open-node-menu",
+        handleOpenMenuRequest,
+      );
+    };
   });
 
   $effect(() => {
     if (!isResizing) {
       localStorage.setItem(
         "aestivus-minimap-size",
-        JSON.stringify({ w: miniMapWidth, h: miniMapHeight })
+        JSON.stringify({ w: miniMapWidth, h: miniMapHeight }),
       );
     }
   });
 
   // 右键菜单状态
   let nodeContextMenu = $state<{ id: string; x: number; y: number } | null>(
-    null
+    null,
   );
   let canvasContextMenu = $state<{ x: number; y: number } | null>(null);
 
@@ -326,26 +341,6 @@
         }}
       />
 
-      {#if nodeContextMenu}
-        <NodeContextMenu
-          id={nodeContextMenu.id}
-          x={nodeContextMenu.x}
-          y={nodeContextMenu.y}
-          onClose={() => (nodeContextMenu = null)}
-          onDelete={(id) => flowStore.removeNode(id)}
-          onDuplicate={(id) => flowStore.duplicateNode(id)}
-        />
-      {/if}
-
-      {#if canvasContextMenu}
-        <CanvasContextMenu
-          x={canvasContextMenu.x}
-          y={canvasContextMenu.y}
-          onClose={() => (canvasContextMenu = null)}
-          onAutoLayout={handleAutoLayout}
-        />
-      {/if}
-
       <!-- Minimap Resize Handle -->
       <div
         class="minimap-resize-handle"
@@ -374,6 +369,26 @@
         >
       </div>
     </SvelteFlow>
+
+    {#if nodeContextMenu}
+      <NodeContextMenu
+        id={nodeContextMenu.id}
+        x={nodeContextMenu.x}
+        y={nodeContextMenu.y}
+        onClose={() => (nodeContextMenu = null)}
+        onDelete={(id) => flowStore.removeNode(id)}
+        onDuplicate={(id) => flowStore.duplicateNode(id)}
+      />
+    {/if}
+
+    {#if canvasContextMenu}
+      <CanvasContextMenu
+        x={canvasContextMenu.x}
+        y={canvasContextMenu.y}
+        onClose={() => (canvasContextMenu = null)}
+        onAutoLayout={handleAutoLayout}
+      />
+    {/if}
   </div>
 </SvelteFlowProvider>
 

@@ -664,7 +664,27 @@
       }
     }
 
-    return conditions.length > 0 ? conditions.join(" AND ") : "1";
+    // 重新排序条件以优化性能：先做低开销的过滤（ext, type, size, date），最后做高开销的（name regex, image meta）
+    const cheapConditions: string[] = [];
+    const expensiveConditions: string[] = [];
+
+    for (const cond of conditions) {
+      if (
+        cond.includes("width") ||
+        cond.includes("height") ||
+        cond.includes("resolution") ||
+        cond.includes("megapixels") ||
+        cond.includes("aspect") ||
+        cond.includes("RLIKE")
+      ) {
+        expensiveConditions.push(cond);
+      } else {
+        cheapConditions.push(cond);
+      }
+    }
+
+    const finalConditions = [...cheapConditions, ...expensiveConditions];
+    return finalConditions.length > 0 ? finalConditions.join(" AND ") : "1";
   }
 
   // 生成 JSON 配置

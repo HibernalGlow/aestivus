@@ -16,6 +16,12 @@
     maxH?: number;
     noResize?: boolean;
     noMove?: boolean;
+    /**
+     * If true, prevents this block from being pushed by other widgets during drag/resize.
+     * User can still manually move/resize this block.
+     * Default: true to prevent layout disruption.
+     */
+    locked?: boolean;
     class?: string;
     children?: Snippet;
   }
@@ -32,6 +38,7 @@
     maxH,
     noResize = false,
     noMove = false,
+    locked = true, // 默认锁定，防止被其他 block 推动
     class: className = "",
     children,
   }: Props = $props();
@@ -50,6 +57,7 @@
   gs-max-h={maxH}
   gs-no-resize={noResize || undefined}
   gs-no-move={noMove || undefined}
+  gs-locked={locked || undefined}
 >
   <div class="grid-stack-item-content">
     {#if children}

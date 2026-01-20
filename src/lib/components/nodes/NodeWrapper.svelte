@@ -122,6 +122,8 @@
     canCreateTab?: boolean;
     /** 当前布局模式（用于 Tab 配置） */
     layoutMode?: "fullscreen" | "normal";
+    /** 自定义菜单项（右键/更多菜单），接受默认项作为参数 */
+    menuItems?: Snippet<[Snippet]>;
   }
 
   // 默认状态标签映射
@@ -180,6 +182,7 @@
     onCreateTab,
     canCreateTab = false,
     layoutMode = "fullscreen",
+    menuItems,
   }: Props = $props();
 
   // 状态
@@ -268,7 +271,7 @@
   const duplicateNode = () => flowStore.duplicateNode(nodeId);
 </script>
 
-{#snippet NodeMenuItems()}
+{#snippet DefaultNodeMenuItems()}
   <DropdownMenu.Item
     onclick={deleteNode}
     class="text-destructive focus:text-destructive"
@@ -287,6 +290,14 @@
   </DropdownMenu.Item>
 {/snippet}
 
+{#snippet NodeMenuItems()}
+  {#if menuItems}
+    {@render menuItems(DefaultNodeMenuItems)}
+  {:else}
+    {@render DefaultNodeMenuItems()}
+  {/if}
+{/snippet}
+
 <!-- 全屏时原节点变淡，页面级别会渲染全屏版本 -->
 <div
   class="{shouldFade
@@ -297,7 +308,7 @@
   style={nodeStyle}
 >
   <ContextMenu.Root>
-    <ContextMenu.Trigger class="contents">
+    <ContextMenu.Trigger class="flex flex-col flex-1 min-h-0 relative">
       <!-- 标题栏 -->
       <div
         class="flex items-center justify-between px-3 py-2 border-b select-none {pinned

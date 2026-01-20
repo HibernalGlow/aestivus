@@ -44,6 +44,7 @@
     ChevronDown,
     RotateCcw,
   } from "@lucide/svelte";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
 
   interface Props {
     id: string;
@@ -165,13 +166,13 @@
 
   // 响应式派生值
   let canAnalyze = $derived(
-    ns.phase === "idle" && (ns.path.trim() !== "" || ns.hasInputConnection)
+    ns.phase === "idle" && (ns.path.trim() !== "" || ns.hasInputConnection),
   );
   let canCompress = $derived(
-    ns.phase === "analyzed" && ns.analysisResult !== null
+    ns.phase === "analyzed" && ns.analysisResult !== null,
   );
   let isRunning = $derived(
-    ns.phase === "analyzing" || ns.phase === "compressing"
+    ns.phase === "analyzing" || ns.phase === "compressing",
   );
   let borderClass = $derived(
     {
@@ -181,7 +182,7 @@
       compressing: "border-primary shadow-sm",
       completed: "border-primary/50",
       error: "border-destructive/50",
-    }[ns.phase]
+    }[ns.phase],
   );
 
   // 状态变化时自动保存
@@ -273,7 +274,7 @@
         };
         log(`✅ 分析完成`);
         log(
-          `📊 整体压缩: ${ns.analysisResult.entireCount}, 选择性: ${ns.analysisResult.selectiveCount}, 跳过: ${ns.analysisResult.skipCount}`
+          `📊 整体压缩: ${ns.analysisResult.entireCount}, 选择性: ${ns.analysisResult.selectiveCount}, 跳过: ${ns.analysisResult.skipCount}`,
         );
       } else {
         ns.phase = "error";
@@ -300,13 +301,13 @@
 
     try {
       const wsUrl = `${getWsBaseUrl()}/v1/ws/tasks/${taskId}`;
-      console.log('[Repacku] Connecting to WebSocket:', wsUrl);
+      console.log("[Repacku] Connecting to WebSocket:", wsUrl);
       ws = new WebSocket(wsUrl);
 
       ws.onmessage = (event) => {
         try {
           const msg = JSON.parse(event.data);
-          console.log('[Repacku] WS Message:', msg);
+          console.log("[Repacku] WS Message:", msg);
           if (msg.type === "progress" && ns.phase === "compressing") {
             ns.progress = msg.progress;
             ns.progressText = msg.message;
@@ -317,7 +318,7 @@
       };
 
       ws.onerror = (e) => {
-        console.error('[Repacku] WebSocket error event:', e);
+        console.error("[Repacku] WebSocket error event:", e);
       };
 
       // 等待 WebSocket 连接成功（最多 2 秒）
@@ -340,7 +341,7 @@
         };
       });
     } catch (err) {
-      console.error('[Repacku] WebSocket initialization failed:', err);
+      console.error("[Repacku] WebSocket initialization failed:", err);
       log("⚠️ WebSocket 初始化失败");
     }
 
@@ -353,7 +354,7 @@
           config_path: ns.analysisResult.configPath,
           delete_after: ns.deleteAfter,
         },
-        { taskId, nodeId }
+        { taskId, nodeId },
       )) as any;
 
       // 关闭 WebSocket
@@ -373,7 +374,7 @@
         };
         log(`✅ ${response.message}`);
         log(
-          `📊 成功: ${ns.compressionResult.compressed}, 失败: ${ns.compressionResult.failed}`
+          `📊 成功: ${ns.compressionResult.compressed}, 失败: ${ns.compressionResult.failed}`,
         );
       } else {
         ns.phase = "error";
@@ -527,7 +528,7 @@
     {#each typeOptions as option}
       <button
         class="cq-px cq-py cq-text cq-rounded border transition-colors {ns.selectedTypes.includes(
-          option.value
+          option.value,
         )
           ? 'bg-primary text-primary-foreground border-primary'
           : 'bg-background border-border hover:border-primary'}"
@@ -798,7 +799,32 @@
     canCreateTab={true}
     onCreateTab={(blockIds) => layoutRenderer?.createTab(blockIds)}
     layoutMode={isFullscreenRender ? "fullscreen" : "normal"}
+    menuItems={nodeMenuItems}
   >
+    {#snippet nodeMenuItems(DefaultItems: any)}
+      <DropdownMenu.Item
+        onclick={handleAnalyze}
+        disabled={!canAnalyze || isRunning}
+      >
+        <Search class="mr-2 h-4 w-4" />
+        <span>扫描分析</span>
+      </DropdownMenu.Item>
+      <DropdownMenu.Item
+        onclick={handleCompress}
+        disabled={!canCompress || isRunning}
+      >
+        <FileArchive class="mr-2 h-4 w-4" />
+        <span>开始压缩</span>
+      </DropdownMenu.Item>
+      <DropdownMenu.Separator />
+      <DropdownMenu.Item onclick={handleReset} disabled={isRunning}>
+        <RotateCcw class="mr-2 h-4 w-4" />
+        <span>重置状态</span>
+      </DropdownMenu.Item>
+      <DropdownMenu.Separator />
+      {@render DefaultItems()}
+    {/snippet}
+
     {#snippet children()}
       <NodeLayoutRenderer
         bind:this={layoutRenderer}

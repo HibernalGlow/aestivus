@@ -24,7 +24,9 @@
     Copy,
     Check,
     Download,
+    RotateCcw,
   } from "@lucide/svelte";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
 
   interface Props {
     id: string;
@@ -451,7 +453,29 @@
     canCreateTab={true}
     onCreateTab={(blockIds) => layoutRenderer?.createTab(blockIds)}
     layoutMode={isFullscreenRender ? "fullscreen" : "normal"}
+    menuItems={nodeMenuItems}
   >
+    {#snippet nodeMenuItems(DefaultItems: any)}
+      <DropdownMenu.Item onclick={handleScan} disabled={!canScan || isRunning}>
+        <Search class="mr-2 h-4 w-4" />
+        <span>扫描项目</span>
+      </DropdownMenu.Item>
+      <DropdownMenu.Item
+        onclick={handleInstall}
+        disabled={!canInstall || isRunning}
+      >
+        <Download class="mr-2 h-4 w-4" />
+        <span>安装选中</span>
+      </DropdownMenu.Item>
+      <DropdownMenu.Separator />
+      <DropdownMenu.Item onclick={handleReset} disabled={isRunning}>
+        <RotateCcw class="mr-2 h-4 w-4" />
+        <span>重置状态</span>
+      </DropdownMenu.Item>
+      <DropdownMenu.Separator />
+      {@render DefaultItems()}
+    {/snippet}
+
     {#snippet children()}
       <NodeLayoutRenderer
         bind:this={layoutRenderer}

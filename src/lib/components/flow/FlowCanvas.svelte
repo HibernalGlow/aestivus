@@ -265,7 +265,6 @@
       }}
       onpaneclick={() => {
         flowStore.selectNode(null);
-        nodeContextMenu = null;
         canvasContextMenu = null;
       }}
       onpanecontextmenu={handlePaneContextMenu}

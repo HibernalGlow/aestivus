@@ -298,61 +298,71 @@
             <div class="w-px bg-border/60 self-stretch"></div>
           {/if}
           
-          <!-- 右侧：尺寸调整 -->
-          <div class="flex flex-col items-center gap-2">
-            <!-- 宽度调整 -->
-            <div class="flex flex-col items-center gap-1 w-full">
-              <span class="text-xs font-medium text-muted-foreground">宽度</span>
-              <div class="flex items-center gap-1">
+          <!-- 右侧：尺寸调整（十字方向键风格） -->
+          <div class="flex flex-col items-center gap-1">
+            <span class="text-xs font-medium text-muted-foreground mb-1">尺寸</span>
+            <div class="grid grid-cols-3 gap-0.5">
+              <!-- 空 -->
+              <div class="w-6 h-6"></div>
+              <!-- 上：减小高度 -->
+              {#if onHeightChange}
                 <button
                   type="button"
-                  class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center shrink-0"
-                  onclick={() => onWidthChange(-1)}
-                  disabled={currentW <= 1}
-                  title="减小宽度"
+                  class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
+                  onclick={() => onHeightChange(-1)}
+                  disabled={currentH <= 1}
+                  title="减小高度"
                 >
-                  <Minus class="w-3 h-3" />
+                  <ArrowUp class="w-3 h-3" />
                 </button>
-                <span class="text-sm font-semibold min-w-5 text-center">{currentW}</span>
-                <button
-                  type="button"
-                  class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center shrink-0"
-                  onclick={() => onWidthChange(1)}
-                  disabled={currentW >= (isFullscreen ? 4 : 2)}
-                  title="增大宽度"
-                >
-                  <Plus class="w-3 h-3" />
-                </button>
+              {:else}
+                <div class="w-6 h-6"></div>
+              {/if}
+              <!-- 空 -->
+              <div class="w-6 h-6"></div>
+              <!-- 左：减小宽度 -->
+              <button
+                type="button"
+                class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
+                onclick={() => onWidthChange(-1)}
+                disabled={currentW <= 1}
+                title="减小宽度"
+              >
+                <ArrowLeft class="w-3 h-3" />
+              </button>
+              <!-- 中心（显示尺寸） -->
+              <div class="w-6 h-6 flex items-center justify-center text-[9px] font-mono text-muted-foreground">
+                {currentW}×{currentH}
               </div>
+              <!-- 右：增加宽度 -->
+              <button
+                type="button"
+                class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
+                onclick={() => onWidthChange(1)}
+                disabled={currentW >= (isFullscreen ? 4 : 2)}
+                title="增大宽度"
+              >
+                <ArrowRight class="w-3 h-3" />
+              </button>
+              <!-- 空 -->
+              <div class="w-6 h-6"></div>
+              <!-- 下：增加高度 -->
+              {#if onHeightChange}
+                <button
+                  type="button"
+                  class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
+                  onclick={() => onHeightChange(1)}
+                  disabled={currentH >= (isFullscreen ? 6 : 4)}
+                  title="增大高度"
+                >
+                  <ArrowDown class="w-3 h-3" />
+                </button>
+              {:else}
+                <div class="w-6 h-6"></div>
+              {/if}
+              <!-- 空 -->
+              <div class="w-6 h-6"></div>
             </div>
-            
-            <!-- 高度调整 -->
-            {#if onHeightChange}
-              <div class="flex flex-col items-center gap-1 w-full">
-                <span class="text-xs font-medium text-muted-foreground">高度</span>
-                <div class="flex items-center gap-1">
-                  <button
-                    type="button"
-                    class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center shrink-0"
-                    onclick={() => onHeightChange(-1)}
-                    disabled={currentH <= 1}
-                    title="减小高度"
-                  >
-                    <Minus class="w-3 h-3" />
-                  </button>
-                  <span class="text-sm font-semibold min-w-5 text-center">{currentH}</span>
-                  <button
-                    type="button"
-                    class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center shrink-0"
-                    onclick={() => onHeightChange(1)}
-                    disabled={currentH >= (isFullscreen ? 6 : 4)}
-                    title="增大高度"
-                  >
-                    <Plus class="w-3 h-3" />
-                  </button>
-                </div>
-              </div>
-            {/if}
           </div>
         </div>
       </div>

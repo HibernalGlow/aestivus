@@ -256,6 +256,8 @@
         fileTypes: ["images"],
         imageMetaEnabled: true,
         resolutionPreset: "social-cover",
+        sizeEnabled: true,
+        sizeMax: "320K",
         itemType: "file",
       },
     },

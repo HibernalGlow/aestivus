@@ -247,6 +247,18 @@
         itemType: "file",
       },
     },
+    {
+      id: "social-cover",
+      name: "封面图 (1200x630)",
+      isBuiltin: true,
+      config: {
+        ...defaultConfig,
+        fileTypes: ["images"],
+        imageMetaEnabled: true,
+        resolutionPreset: "social-cover",
+        itemType: "file",
+      },
+    },
   ];
 
   const STORAGE_KEY = "findz-filter-presets";
@@ -642,6 +654,7 @@
           "1080p": 'resolution = "1920x1080"',
           "4k": 'resolution = "3840x2160"',
           "8k": 'resolution = "7680x4320"',
+          "social-cover": 'resolution IN ("1200x630", "630x1200")',
         };
         if (presets[config.resolutionPreset]) {
           conditions.push(presets[config.resolutionPreset]);
@@ -1302,6 +1315,24 @@
             {disabled}
           >
             8K
+          </button>
+          <button
+            class="px-2 py-0.5 rounded text-xs transition-colors
+              {config.resolutionPreset === 'social-cover'
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-muted hover:bg-muted/80'}"
+            onclick={() => {
+              config.resolutionPreset = "social-cover";
+              config.widthMin = "";
+              config.widthMax = "";
+              config.heightMin = "";
+              config.heightMax = "";
+              emitChange();
+            }}
+            {disabled}
+            title="1200x630 或 630x1200"
+          >
+            封面
           </button>
           <button
             class="px-2 py-0.5 rounded text-xs bg-muted hover:bg-muted/80"

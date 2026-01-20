@@ -294,6 +294,18 @@ class FindzAdapter(BaseAdapter):
             last_log_count = 0
             start_time = time.time()
             
+            # 进度回调
+            def progress_cb(scanned_val: int, matched_val: int, current_path: str):
+                nonlocal scanned_files, last_progress_time
+                scanned_files = scanned_val
+                
+                current_time = time.time()
+                if current_time - last_progress_time >= PROGRESS_INTERVAL:
+                    progress = min(10 + int(80 * (1 - 1 / (1 + scanned_val / 10000))), 90)
+                    if on_progress:
+                        on_progress(progress, f"扫描中: {scanned_val} 文件, {matched_val} 匹配")
+                    last_progress_time = current_time
+
             for search_path in paths:
                 if on_log:
                     on_log(f"📂 扫描目录: {search_path}")
@@ -306,28 +318,14 @@ class FindzAdapter(BaseAdapter):
                     use_cache=True,
                     max_workers=4,
                     error_handler=error_handler,
+                    progress_callback=progress_cb,
                 )
                 
                 try:
                     for file_info in walk(search_path, params):
-                        scanned_files += 1
-                        
                         # 定期让出控制权，避免阻塞
-                        if scanned_files % YIELD_INTERVAL == 0:
+                        if len(all_results) % 100 == 0:
                             await asyncio.sleep(0)
-                        
-                        # 实时进度更新（基于时间间隔）
-                        current_time = time.time()
-                        if current_time - last_progress_time >= PROGRESS_INTERVAL:
-                            # 动态计算进度（10-90%）
-                            elapsed = current_time - start_time
-                            # 基于扫描速度估算进度
-                            progress = min(10 + int(80 * (1 - 1 / (1 + scanned_files / 10000))), 90)
-                            
-                            if on_progress:
-                                on_progress(progress, f"扫描中: {scanned_files} 文件, {len(all_results)} 匹配")
-                            
-                            last_progress_time = current_time
                         
                         # 批量日志（每 BATCH_SIZE 个文件记录一次）
                         if scanned_files - last_log_count >= BATCH_SIZE:
@@ -470,6 +468,12 @@ class FindzAdapter(BaseAdapter):
             # 收集包含嵌套压缩包的外层压缩包
             nested_containers = set()
             
+            # 进度回调
+            def progress_cb(scanned, matched, current_path):
+                if on_progress:
+                    progress = min(10 + int(80 * (1 - 1 / (1 + scanned / 10000))), 90)
+                    on_progress(progress, f"扫描嵌套中: {scanned} 文件, {len(nested_containers)} 匹配")
+
             for search_path in paths:
                 params = WalkParams(
                     filter_expr=filter_expr,
@@ -479,6 +483,7 @@ class FindzAdapter(BaseAdapter):
                     use_cache=True,
                     max_workers=4,
                     error_handler=error_handler,
+                    progress_callback=progress_cb,
                 )
                 
                 try:
@@ -597,6 +602,12 @@ class FindzAdapter(BaseAdapter):
             all_results = []
             by_extension: Dict[str, int] = {}
             
+            # 进度回调
+            def progress_cb(scanned, matched, current_path):
+                if on_progress:
+                    progress = min(10 + int(80 * (1 - 1 / (1 + scanned / 10000))), 90)
+                    on_progress(progress, f"扫描压缩包中: {scanned} 文件, {len(all_results)} 匹配")
+
             for search_path in paths:
                 params = WalkParams(
                     filter_expr=filter_expr,
@@ -606,6 +617,7 @@ class FindzAdapter(BaseAdapter):
                     use_cache=True,
                     max_workers=4,
                     error_handler=error_handler,
+                    progress_callback=progress_cb,
                 )
                 
                 try:

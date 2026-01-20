@@ -330,7 +330,7 @@ class FindzAdapter(BaseAdapter):
                         # 批量日志（每 BATCH_SIZE 个文件记录一次）
                         if scanned_files - last_log_count >= BATCH_SIZE:
                             if on_log:
-                                speed = scanned_files / max(current_time - start_time, 0.1)
+                                speed = scanned_files / max(time.time() - start_time, 0.1)
                                 on_log(f"📊 已扫描 {scanned_files} 文件 ({speed:.0f}/s)，找到 {len(all_results)} 匹配")
                             last_log_count = scanned_files
                         

@@ -566,7 +566,7 @@
             target.style.height = "auto";
             target.style.height = Math.min(target.scrollHeight, 100) + "px";
           }}
-        />
+        ></textarea>
         <Button
           variant="outline"
           size="icon"

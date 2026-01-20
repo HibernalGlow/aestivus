@@ -234,6 +234,19 @@
         itemType: "dir",
       },
     },
+    {
+      id: "ad-images",
+      name: "广告/宣传图",
+      isBuiltin: true,
+      config: {
+        ...defaultConfig,
+        nameEnabled: true,
+        nameMode: "regex",
+        namePattern:
+          "招募|credit|广告|宣传|招新|绅士快乐|粉丝群|無邪気|[Cc]redit[s]|ver\\.\\d+\\.\\d+|YZv\\.\\d+\\.\\d+|z{3,}",
+        itemType: "file",
+      },
+    },
   ];
 
   const STORAGE_KEY = "findz-filter-presets";

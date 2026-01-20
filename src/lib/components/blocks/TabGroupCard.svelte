@@ -216,7 +216,7 @@
   </div>
   
   <!-- 编辑模式：尺寸调整控制器覆盖层 -->
-  {#if sizeEditMode && !isFullscreen && onWidthChange}
+  {#if sizeEditMode && onWidthChange}
     <div class="absolute inset-0 z-50 pointer-events-none flex flex-col items-center justify-center p-2">
       <!-- 半透明背景 -->
       <div class="absolute inset-0 bg-primary/5 backdrop-blur-[2px] pointer-events-auto rounded-lg"></div>
@@ -242,7 +242,7 @@
                 type="button"
                 class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center flex-shrink-0"
                 onclick={() => onWidthChange(1)}
-                disabled={currentW >= 2}
+                disabled={currentW >= (isFullscreen ? 4 : 2)}
                 title="增大宽度"
               >
                 <ChevronRight class="w-3 h-3" />
@@ -269,7 +269,7 @@
                   type="button"
                   class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center flex-shrink-0"
                   onclick={() => onHeightChange(1)}
-                  disabled={currentH >= 4}
+                  disabled={currentH >= (isFullscreen ? 6 : 4)}
                   title="增大高度"
                 >
                   <ChevronDown class="w-3 h-3" />

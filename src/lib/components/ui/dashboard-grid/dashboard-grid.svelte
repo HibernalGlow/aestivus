@@ -76,6 +76,15 @@
     }
   }
 
+  /** 启用/禁用拖拽（保留 resize） */
+  export function setDragEnabled(enabled: boolean) {
+    if (!grid || !gridElement) return;
+    const items = grid.getGridItems();
+    for (const el of items) {
+      grid.movable(el, enabled);
+    }
+  }
+
   /** 更新单个 item 的布局 */
   export function updateItem(
     id: string,

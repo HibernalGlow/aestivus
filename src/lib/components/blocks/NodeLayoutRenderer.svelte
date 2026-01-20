@@ -320,7 +320,16 @@
     compact: () => void;
     applyLayout: (layout: GridItem[]) => void;
     refresh?: () => Promise<void>;
+    setDragEnabled?: (enabled: boolean) => void;
   } | undefined>(undefined);
+
+  // 响应编辑模式变化，禁用/启用拖拽
+  $effect(() => {
+    if (isFullscreen && dashboardGrid?.setDragEnabled) {
+      // 编辑模式下禁用拖拽，只允许 resize
+      dashboardGrid.setDragEnabled(!editMode);
+    }
+  });
 
   function handleLayoutChange(newLayout: GridItem[]) {
     updateGridLayout(nodeType, mode, newLayout);
@@ -457,32 +466,46 @@
     return tabGroups;
   }
 
-  /** 处理区块宽度变化（节点模式下） */
+  /** 处理区块宽度变化 */
   function handleWidthChange(blockId: string, delta: number) {
     const layout = [...currentLayout];
     const itemIndex = layout.findIndex(item => item.id === blockId);
     if (itemIndex === -1) return;
     
     const item = layout[itemIndex];
-    const newW = Math.max(1, Math.min(2, item.w + delta));
+    // 全屏模式最大宽度 4，节点模式最大宽度 2
+    const maxW = isFullscreen ? 4 : 2;
+    const newW = Math.max(1, Math.min(maxW, item.w + delta));
     if (newW === item.w) return;
     
     layout[itemIndex] = { ...item, w: newW };
     updateGridLayout(nodeType, mode, layout);
+    
+    // 全屏模式下同步 DashboardGrid
+    if (isFullscreen && dashboardGrid) {
+      dashboardGrid.applyLayout(layout);
+    }
   }
 
-  /** 处理区块高度变化（节点模式下） */
+  /** 处理区块高度变化 */
   function handleHeightChange(blockId: string, delta: number) {
     const layout = [...currentLayout];
     const itemIndex = layout.findIndex(item => item.id === blockId);
     if (itemIndex === -1) return;
     
     const item = layout[itemIndex];
-    const newH = Math.max(1, Math.min(4, item.h + delta));
+    // 全屏模式最大高度 6，节点模式最大高度 4
+    const maxH = isFullscreen ? 6 : 4;
+    const newH = Math.max(1, Math.min(maxH, item.h + delta));
     if (newH === item.h) return;
     
     layout[itemIndex] = { ...item, h: newH };
     updateGridLayout(nodeType, mode, layout);
+    
+    // 全屏模式下同步 DashboardGrid
+    if (isFullscreen && dashboardGrid) {
+      dashboardGrid.applyLayout(layout);
+    }
   }
 
   /** 根据高度值计算 CSS 高度样式 */
@@ -532,6 +555,11 @@
               onDissolve={() => handleDissolveTabGroup(tabGroup.id)}
               onRemoveBlock={(blockId) => handleRemoveBlockFromGroup(tabGroup.id, blockId)}
               onReorder={(newOrder) => handleReorderTabGroup(tabGroup.id, newOrder)}
+              sizeEditMode={editMode}
+              currentW={item.w}
+              currentH={item.h}
+              onWidthChange={(delta) => handleWidthChange(gridItem.id, delta)}
+              onHeightChange={(delta) => handleHeightChange(gridItem.id, delta)}
             >
               {#snippet renderContent(blockId: string)}
                 {@render renderBlock(blockId)}
@@ -549,6 +577,11 @@
                 isFullscreen={true}
                 fullHeight={blockDef.fullHeight}
                 hideHeader={blockDef.hideHeader}
+                {editMode}
+                currentW={item.w}
+                currentH={item.h}
+                onWidthChange={(delta) => handleWidthChange(gridItem.id, delta)}
+                onHeightChange={(delta) => handleHeightChange(gridItem.id, delta)}
               >
                 {#snippet children()}
                   {@render renderBlock(gridItem.id)}

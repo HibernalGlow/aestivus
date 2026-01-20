@@ -25,34 +25,51 @@ export function buildCompleteFileTree(files: string[]): TreeNode {
     children: []
   };
 
-  // 按压缩包分组
-  const groupedFiles = new Map<string, string[]>();
-  for (const file of files) {
-    const parts = file.split('//');
-    const archive = parts[0];
-    const internal = parts[1] || '';
+  // 使用 Map 缓存每一层级的子节点，加速查找
+  const childrenMaps = new Map<TreeNode, Map<string, TreeNode>>();
+  function getChildrenMap(node: TreeNode) {
+    if (!childrenMaps.has(node)) {
+      childrenMaps.set(node, new Map());
+    }
+    return childrenMaps.get(node)!;
+  }
+
+  // 1. 按压缩包分组，同时保留原始索引
+  const groupedFiles = new Map<string, { internal: string, index: number }[]>();
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const sepIndex = file.indexOf('//');
+    if (sepIndex === -1) {
+      // 纯外部文件或路径
+      const archive = file;
+      if (!groupedFiles.has(archive)) groupedFiles.set(archive, []);
+      groupedFiles.get(archive)!.push({ internal: '', index: i });
+      continue;
+    }
+    const archive = file.substring(0, sepIndex);
+    const internal = file.substring(sepIndex + 2);
     if (!groupedFiles.has(archive)) {
       groupedFiles.set(archive, []);
     }
-    groupedFiles.get(archive)!.push(internal);
+    groupedFiles.get(archive)!.push({ internal, index: i });
   }
 
-  // 为每个压缩包构建树
-  for (const [archivePath, internalFiles] of groupedFiles.entries()) {
-    // 解析压缩包的外部路径（支持 Windows 和 Unix 路径）
+  // 2. 为每个压缩包构建树
+  for (const [archivePath, items] of groupedFiles.entries()) {
     const normalizedPath = archivePath.replace(/\\/g, '/');
     const archiveParts = normalizedPath.split('/').filter(p => p);
     
     let current = root;
 
-    // 构建外部路径树（递归创建文件夹节点）
+    // 构建外部路径树
     for (let i = 0; i < archiveParts.length; i++) {
       const part = archiveParts[i];
       const isLastPart = i === archiveParts.length - 1;
-      const fullPath = archiveParts.slice(0, i + 1).join('/');
-
-      let child = current.children.find(c => c.name === part);
+      const currentMap = getChildrenMap(current);
+      
+      let child = currentMap.get(part);
       if (!child) {
+        const fullPath = archiveParts.slice(0, i + 1).join('/');
         child = {
           name: part,
           path: fullPath,
@@ -62,32 +79,35 @@ export function buildCompleteFileTree(files: string[]): TreeNode {
           archivePath: isLastPart ? archivePath : undefined
         };
         current.children.push(child);
+        currentMap.set(part, child);
       }
       current = child;
     }
 
-    // 构建压缩包内部文件树（递归创建文件夹节点）
-    for (const internal of internalFiles) {
-      if (!internal) continue;
+    // 构建压缩包内部文件树
+    for (const item of items) {
+      if (!item.internal) continue;
       
-      const parts = internal.split('/').filter(p => p);
+      const parts = item.internal.split('/').filter(p => p);
       let innerCurrent = current;
 
       for (let i = 0; i < parts.length; i++) {
         const part = parts[i];
         const isLastPart = i === parts.length - 1;
-        const fullPath = `${archivePath}//${parts.slice(0, i + 1).join('/')}`;
+        const currentMap = getChildrenMap(innerCurrent);
 
-        let child = innerCurrent.children.find(c => c.name === part);
+        let child = currentMap.get(part);
         if (!child) {
+          const fullPath = `${archivePath}//${parts.slice(0, i + 1).join('/')}`;
           child = {
             name: part,
             path: fullPath,
             isFolder: !isLastPart,
             children: [],
-            fileIndex: isLastPart ? files.findIndex(f => f === `${archivePath}//${internal}`) : undefined
+            fileIndex: isLastPart ? item.index : undefined
           };
           innerCurrent.children.push(child);
+          currentMap.set(part, child);
         }
         innerCurrent = child;
       }
@@ -184,10 +204,11 @@ function countFiles(node: TreeNode): number {
 function expandPathToRoot(path: string, expanded: Set<string>, excludeSelf: boolean = false) {
   const parts = path.split('//')[0].replace(/\\/g, '/').split('/').filter(p => p);
   
-  for (let i = 1; i <= parts.length; i++) {
-    const parentPath = parts.slice(0, i).join('/');
-    if (!excludeSelf || i < parts.length) {
-      expanded.add(parentPath);
+  let currentPath = '';
+  for (let i = 0; i < parts.length; i++) {
+    currentPath = currentPath ? `${currentPath}/${parts[i]}` : parts[i];
+    if (!excludeSelf || i < parts.length - 1) {
+      expanded.add(currentPath);
     }
   }
 }
@@ -199,36 +220,21 @@ function expandPathToRoot(path: string, expanded: Set<string>, excludeSelf: bool
  * - 折叠有多个子节点的文件夹（避免混乱）
  */
 function expandArchiveContent(archiveNode: TreeNode, expanded: Set<string>) {
-  function shouldAutoExpand(node: TreeNode): boolean {
-    // 如果只有一个子节点，自动展开
-    if (node.children.length === 1) {
-      return true;
-    }
-    
-    // 如果所有子节点都是文件（没有文件夹），也展开
-    if (node.children.length > 0 && node.children.every(c => !c.isFolder)) {
-      return true;
-    }
-    
-    return false;
-  }
-  
   function expandNode(node: TreeNode) {
     if (!node.isFolder && !node.isArchive) {
       return;
     }
     
-    if (shouldAutoExpand(node)) {
+    // 快速判断：如果子节点数量多于1，通常不自动展开（除非全是文件且不多）
+    if (node.children.length === 1) {
       expanded.add(node.path);
-      
-      // 递归展开子节点
-      for (const child of node.children) {
-        expandNode(child);
-      }
+      expandNode(node.children[0]);
+    } else if (node.children.length > 0 && node.children.length <= 10 && node.children.every(c => !c.isFolder)) {
+      // 如果子节点全是文件且数量适中，自动展开
+      expanded.add(node.path);
     }
   }
   
-  // 从压缩包的子节点开始展开
   for (const child of archiveNode.children) {
     expandNode(child);
   }
@@ -248,23 +254,25 @@ export function getTreeStats(root: TreeNode): {
   let totalArchives = 0;
   let maxDepth = 0;
   
-  function traverse(node: TreeNode, depth: number = 0) {
+  // 使用迭代代替深层递归，防止栈溢出并提高性能
+  const stack: { node: TreeNode, depth: number }[] = [{ node: root, depth: 0 }];
+  
+  while (stack.length > 0) {
+    const { node, depth } = stack.pop()!;
     maxDepth = Math.max(maxDepth, depth);
     
     if (node.isArchive) {
       totalArchives++;
     } else if (node.isFolder) {
       totalFolders++;
-    } else {
+    } else if (node.fileIndex !== undefined) {
       totalFiles++;
     }
     
     for (const child of node.children) {
-      traverse(child, depth + 1);
+      stack.push({ node: child, depth: depth + 1 });
     }
   }
-  
-  traverse(root);
   
   return { totalFiles, totalFolders, totalArchives, maxDepth };
 }

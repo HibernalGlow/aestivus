@@ -321,6 +321,7 @@
     applyLayout: (layout: GridItem[]) => void;
     refresh?: () => Promise<void>;
     setDragEnabled?: (enabled: boolean) => void;
+    updateItem?: (id: string, x: number, y: number, w: number, h: number) => void;
   } | undefined>(undefined);
 
   // 响应编辑模式变化，禁用/启用拖拽
@@ -481,9 +482,9 @@
     layout[itemIndex] = { ...item, w: newW };
     updateGridLayout(nodeType, mode, layout);
     
-    // 全屏模式下同步 DashboardGrid
-    if (isFullscreen && dashboardGrid) {
-      dashboardGrid.applyLayout(layout);
+    // 全屏模式下使用 updateItem 更新单个区块（触发正确的碰撞处理）
+    if (isFullscreen && dashboardGrid?.updateItem) {
+      dashboardGrid.updateItem(blockId, item.x, item.y, newW, item.h);
     }
   }
 
@@ -502,9 +503,9 @@
     layout[itemIndex] = { ...item, h: newH };
     updateGridLayout(nodeType, mode, layout);
     
-    // 全屏模式下同步 DashboardGrid
-    if (isFullscreen && dashboardGrid) {
-      dashboardGrid.applyLayout(layout);
+    // 全屏模式下使用 updateItem 更新单个区块（触发正确的碰撞处理）
+    if (isFullscreen && dashboardGrid?.updateItem) {
+      dashboardGrid.updateItem(blockId, item.x, item.y, item.w, newH);
     }
   }
 

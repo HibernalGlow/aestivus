@@ -3,6 +3,7 @@
 
   let {
     ref = $bindable(null),
+    children,
     ...restProps
   }: ContextMenuPrimitive.TriggerProps = $props();
 </script>
@@ -11,4 +12,6 @@
   bind:ref
   data-slot="context-menu-trigger"
   {...restProps}
-/>
+>
+  {@render children?.()}
+</ContextMenuPrimitive.Trigger>

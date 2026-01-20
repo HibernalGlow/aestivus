@@ -20,7 +20,12 @@
     Layers,
     Pencil,
     MoreHorizontal,
+    Trash2,
+    Copy,
+    Info,
   } from "@lucide/svelte";
+  import * as ContextMenu from "$lib/components/ui/context-menu";
+  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import { Badge } from "$lib/components/ui/badge";
   import { LayoutPresetSelector } from "$lib/components/ui/dashboard-grid";
   import { TabConfigPanel } from "$lib/components/blocks";
@@ -258,246 +263,262 @@
     }
   }
 
-  // 处理打开菜单
-  function handleOpenMenu(e: MouseEvent) {
-    e.stopPropagation();
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    // 派发自定义事件，让 FlowCanvas 处理菜单显示
-    // 使用 window 派发事件以确保能被捕获
-    window.dispatchEvent(
-      new CustomEvent("aestivus:open-node-menu", {
-        detail: {
-          nodeId,
-          x: rect.left,
-          y: rect.bottom + 4,
-        },
-      }),
-    );
-  }
+  // 菜单项片段，同时用于右键菜单和下拉菜单
+  const deleteNode = () => flowStore.removeNode(nodeId);
+  const duplicateNode = () => flowStore.duplicateNode(nodeId);
 </script>
 
+{#snippet NodeMenuItems()}
+  <DropdownMenu.Item
+    onclick={deleteNode}
+    class="text-destructive focus:text-destructive"
+  >
+    <Trash2 class="mr-2 h-4 w-4" />
+    <span>删除节点</span>
+  </DropdownMenu.Item>
+  <DropdownMenu.Item onclick={duplicateNode}>
+    <Copy class="mr-2 h-4 w-4" />
+    <span>复制节点</span>
+  </DropdownMenu.Item>
+  <DropdownMenu.Separator />
+  <DropdownMenu.Item>
+    <Info class="mr-2 h-4 w-4" />
+    <span>所有属性</span>
+  </DropdownMenu.Item>
+{/snippet}
+
 <!-- 全屏时原节点变淡，页面级别会渲染全屏版本 -->
-<!-- 边框颜色变化功能已关闭，统一使用默认边框 -->
 <div
   class="{shouldFade
     ? 'opacity-30 pointer-events-none'
     : ''} {isFullscreenRender
     ? 'h-full flex flex-col'
-    : 'h-full flex flex-col min-w-[160px]'} border rounded-lg shadow-lg overflow-hidden border-border"
+    : 'h-full flex flex-col min-w-[160px]'} border rounded-lg shadow-lg overflow-hidden border-border z-10"
   style={nodeStyle}
 >
-  <!-- 标题栏 -->
-  <div
-    class="flex items-center justify-between px-3 py-2 border-b select-none {pinned
-      ? 'cursor-not-allowed'
-      : 'cursor-move'} shrink-0"
-  >
-    <!-- 左侧：折叠按钮 + 图标 + 标题 + 状态 -->
-    <div class="flex items-center gap-2 flex-1 min-w-0">
-      {#if collapsible}
-        <button
-          class="p-0.5 rounded hover:bg-muted transition-colors"
-          onclick={toggleCollapse}
-          title={collapsed ? "展开" : "折叠"}
-        >
-          {#if collapsed}
-            <ChevronRight class="w-4 h-4" />
-          {:else}
-            <ChevronDown class="w-4 h-4" />
+  <ContextMenu.Root>
+    <ContextMenu.Trigger class="contents">
+      <!-- 标题栏 -->
+      <div
+        class="flex items-center justify-between px-3 py-2 border-b select-none {pinned
+          ? 'cursor-not-allowed'
+          : 'cursor-move'} shrink-0"
+      >
+        <!-- 左侧：折叠按钮 + 图标 + 标题 + 状态 -->
+        <div class="flex items-center gap-2 flex-1 min-w-0">
+          {#if collapsible}
+            <button
+              class="p-0.5 rounded hover:bg-muted transition-colors"
+              onclick={toggleCollapse}
+              title={collapsed ? "展开" : "折叠"}
+            >
+              {#if collapsed}
+                <ChevronRight class="w-4 h-4" />
+              {:else}
+                <ChevronDown class="w-4 h-4" />
+              {/if}
+            </button>
           {/if}
-        </button>
-      {/if}
 
-      {#if emoji}
-        <span class="text-lg shrink-0">{emoji}</span>
-      {:else if Icon}
-        <Icon class="w-4 h-4 text-muted-foreground shrink-0" />
-      {/if}
-
-      <span class="text-sm font-semibold truncate">{title}</span>
-
-      {#if status && displayLabel}
-        <Badge variant={displayVariant} class="text-xs ml-1">
-          {displayLabel}
-        </Badge>
-      {/if}
-    </div>
-
-    <!-- 右侧：操作按钮 -->
-    <div class="flex items-center gap-0.5 ml-2">
-      {#if headerExtra}
-        {@render headerExtra()}
-      {/if}
-
-      <!-- 区块尺寸编辑按钮（两种模式都支持） -->
-      {#if nodeType}
-        <button
-          class="p-1 rounded hover:bg-muted transition-colors {blockEditModeInternal
-            ? 'text-primary'
-            : 'text-muted-foreground'}"
-          onclick={toggleBlockEditMode}
-          title={blockEditModeInternal ? "退出编辑" : "编辑区块尺寸"}
-        >
-          <Pencil class="w-3.5 h-3.5" />
-        </button>
-      {/if}
-
-      <!-- 创建 Tab 区块按钮（两种模式都支持） -->
-      {#if canCreateTab && onCreateTab && nodeType}
-        <button
-          class="p-1 rounded hover:bg-muted transition-colors {showTabConfig
-            ? 'text-primary'
-            : 'text-muted-foreground'}"
-          onclick={() => (showTabConfig = !showTabConfig)}
-          title="创建 Tab 区块"
-        >
-          <Layers class="w-3.5 h-3.5" />
-        </button>
-      {/if}
-
-      <!-- 布局预设按钮（两种模式都支持） -->
-      {#if nodeType && currentLayout && onApplyLayout}
-        <button
-          class="p-1 rounded hover:bg-muted transition-colors {showLayoutBar
-            ? 'text-primary'
-            : 'text-muted-foreground'}"
-          onclick={() => (showLayoutBar = !showLayoutBar)}
-          title="布局预设"
-        >
-          <Layout class="w-3.5 h-3.5" />
-        </button>
-      {/if}
-
-      {#if hasFullscreen}
-        <button
-          class="p-1 rounded hover:bg-muted transition-colors text-muted-foreground"
-          onclick={toggleFullscreen}
-          title={isNodeInFullscreen ? "退出全屏" : "全屏"}
-        >
-          {#if isNodeInFullscreen}
-            <Minimize2 class="w-3.5 h-3.5" />
-          {:else}
-            <Maximize2 class="w-3.5 h-3.5" />
+          {#if emoji}
+            <span class="text-lg shrink-0">{emoji}</span>
+          {:else if Icon}
+            <Icon class="w-4 h-4 text-muted-foreground shrink-0" />
           {/if}
-        </button>
-      {/if}
 
-      {#if pinnable}
-        <button
-          class="p-1 rounded hover:bg-muted transition-colors {pinned
-            ? 'text-primary'
-            : 'text-muted-foreground'}"
-          onclick={togglePin}
-          title={pinned ? "取消固定" : "固定"}
-        >
-          {#if pinned}
-            <Pin class="w-3.5 h-3.5" />
-          {:else}
-            <PinOff class="w-3.5 h-3.5" />
+          <span class="text-sm font-semibold truncate">{title}</span>
+
+          {#if status && displayLabel}
+            <Badge variant={displayVariant} class="text-xs ml-1">
+              {displayLabel}
+            </Badge>
           {/if}
-        </button>
-      {/if}
+        </div>
 
-      {#if closable}
-        <button
-          class="p-1 rounded hover:bg-muted transition-colors text-muted-foreground"
-          onclick={handleOpenMenu}
-          title="更多操作"
-        >
-          <MoreHorizontal class="w-3.5 h-3.5" />
-        </button>
+        <!-- 右侧：操作按钮 -->
+        <div class="flex items-center gap-0.5 ml-2">
+          {#if headerExtra}
+            {@render headerExtra()}
+          {/if}
 
-        <button
-          class="p-1 rounded hover:bg-destructive hover:text-destructive-foreground transition-colors text-muted-foreground"
-          onclick={handleClose}
-          title="关闭"
-        >
-          <X class="w-3.5 h-3.5" />
-        </button>
-      {/if}
-    </div>
-  </div>
+          <!-- 区块尺寸编辑按钮（两种模式都支持） -->
+          {#if nodeType}
+            <button
+              class="p-1 rounded hover:bg-muted transition-colors {blockEditModeInternal
+                ? 'text-primary'
+                : 'text-muted-foreground'}"
+              onclick={toggleBlockEditMode}
+              title={blockEditModeInternal ? "退出编辑" : "编辑区块尺寸"}
+            >
+              <Pencil class="w-3.5 h-3.5" />
+            </button>
+          {/if}
 
-  <!-- 布局预设横向展开栏（两种模式都支持，标题栏下方） -->
-  {#if showLayoutBar && nodeType && currentLayout && onApplyLayout}
-    <div class="px-3 py-2 bg-muted/20 border-b shrink-0">
-      <div class="flex items-center gap-2">
-        <LayoutPresetSelector
-          {nodeType}
-          {currentLayout}
-          {currentTabGroups}
-          onApply={onApplyLayout}
-          currentMode={layoutMode}
-        />
-        <!-- 重置布局按钮 -->
-        {#if onResetLayout}
-          <button
-            class="px-2 py-1 text-xs rounded border border-border hover:bg-muted transition-colors flex items-center gap-1"
-            onclick={onResetLayout}
-            title="重置布局"
-          >
-            <RotateCcw class="w-3 h-3" />
-            重置
-          </button>
-        {/if}
-        <!-- 整理布局按钮（全屏模式） -->
-        {#if isFullscreenRender && onCompact}
-          <button
-            class="px-2 py-1 text-xs rounded border border-border hover:bg-muted transition-colors flex items-center gap-1"
-            onclick={onCompact}
-            title="整理布局"
-          >
-            <LayoutGrid class="w-3 h-3" />
-            整理
-          </button>
-        {/if}
+          <!-- 创建 Tab 区块按钮（两种模式都支持） -->
+          {#if canCreateTab && onCreateTab && nodeType}
+            <button
+              class="p-1 rounded hover:bg-muted transition-colors {showTabConfig
+                ? 'text-primary'
+                : 'text-muted-foreground'}"
+              onclick={() => (showTabConfig = !showTabConfig)}
+              title="创建 Tab 区块"
+            >
+              <Layers class="w-3.5 h-3.5" />
+            </button>
+          {/if}
+
+          <!-- 布局预设按钮（两种模式都支持） -->
+          {#if nodeType && currentLayout && onApplyLayout}
+            <button
+              class="p-1 rounded hover:bg-muted transition-colors {showLayoutBar
+                ? 'text-primary'
+                : 'text-muted-foreground'}"
+              onclick={() => (showLayoutBar = !showLayoutBar)}
+              title="布局预设"
+            >
+              <Layout class="w-3.5 h-3.5" />
+            </button>
+          {/if}
+
+          {#if hasFullscreen}
+            <button
+              class="p-1 rounded hover:bg-muted transition-colors text-muted-foreground"
+              onclick={toggleFullscreen}
+              title={isNodeInFullscreen ? "退出全屏" : "全屏"}
+            >
+              {#if isNodeInFullscreen}
+                <Minimize2 class="w-3.5 h-3.5" />
+              {:else}
+                <Maximize2 class="w-3.5 h-3.5" />
+              {/if}
+            </button>
+          {/if}
+
+          {#if pinnable}
+            <button
+              class="p-1 rounded hover:bg-muted transition-colors {pinned
+                ? 'text-primary'
+                : 'text-muted-foreground'}"
+              onclick={togglePin}
+              title={pinned ? "取消固定" : "固定"}
+            >
+              {#if pinned}
+                <Pin class="w-3.5 h-3.5" />
+              {:else}
+                <PinOff class="w-3.5 h-3.5" />
+              {/if}
+            </button>
+          {/if}
+
+          {#if closable}
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger
+                class="p-1 rounded hover:bg-muted transition-colors text-muted-foreground cursor-pointer"
+                title="更多操作"
+              >
+                <MoreHorizontal class="w-3.5 h-3.5" />
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Content class="w-48 z-100" align="end">
+                {@render NodeMenuItems()}
+              </DropdownMenu.Content>
+            </DropdownMenu.Root>
+
+            <button
+              class="p-1 rounded hover:bg-destructive hover:text-destructive-foreground transition-colors text-muted-foreground"
+              onclick={handleClose}
+              title="关闭"
+            >
+              <X class="w-3.5 h-3.5" />
+            </button>
+          {/if}
+        </div>
       </div>
-    </div>
-  {/if}
 
-  <!-- Tab 配置面板（两种模式都支持，标题栏下方） -->
-  {#if showTabConfig && nodeType && onCreateTab}
-    <div class="px-3 py-2 bg-muted/20 border-b shrink-0">
-      <TabConfigPanel
-        {nodeType}
-        mode={layoutMode}
-        onCreate={(blockIds) => {
-          onCreateTab(blockIds);
-        }}
-        onCancel={() => (showTabConfig = false)}
-      />
-    </div>
-  {/if}
-
-  <!-- 内容区 -->
-  {#if !collapsed || isFullscreenRender}
-    <div class="nodrag flex-1 min-h-0 overflow-hidden relative">
-      <!-- 编辑模式提示浮层 -->
-      {#if blockEditModeInternal && nodeType}
-        <div
-          class="absolute top-3 left-3 z-40 bg-primary/90 text-primary-foreground px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2 shadow-lg backdrop-blur-sm"
-        >
-          <div
-            class="w-2 h-2 bg-primary-foreground rounded-full animate-pulse"
-          ></div>
-          <span>
-            {#if isFullscreenRender}
-              编辑模式：拖拽已禁用，点击区块控制面板调整大小
-            {:else}
-              编辑模式：点击区块中的控制面板调整大小
+      <!-- 布局预设横向展开栏（两种模式都支持，标题栏下方） -->
+      {#if showLayoutBar && nodeType && currentLayout && onApplyLayout}
+        <div class="px-3 py-2 bg-muted/20 border-b shrink-0">
+          <div class="flex items-center gap-2">
+            <LayoutPresetSelector
+              {nodeType}
+              {currentLayout}
+              {currentTabGroups}
+              onApply={onApplyLayout}
+              currentMode={layoutMode}
+            />
+            <!-- 重置布局按钮 -->
+            {#if onResetLayout}
+              <button
+                class="px-2 py-1 text-xs rounded border border-border hover:bg-muted transition-colors flex items-center gap-1"
+                onclick={onResetLayout}
+                title="重置布局"
+              >
+                <RotateCcw class="w-3 h-3" />
+                重置
+              </button>
             {/if}
-          </span>
-          <button
-            class="ml-auto text-primary-foreground hover:opacity-70 transition-opacity cursor-pointer shrink-0"
-            onclick={() => blockEditModeStore.update((v) => !v)}
-            title="退出编辑"
-          >
-            <X class="w-3.5 h-3.5" />
-          </button>
+            <!-- 整理布局按钮（全屏模式） -->
+            {#if isFullscreenRender && onCompact}
+              <button
+                class="px-2 py-1 text-xs rounded border border-border hover:bg-muted transition-colors flex items-center gap-1"
+                onclick={onCompact}
+                title="整理布局"
+              >
+                <LayoutGrid class="w-3 h-3" />
+                整理
+              </button>
+            {/if}
+          </div>
         </div>
       {/if}
 
-      {@render children()}
-    </div>
-  {/if}
+      <!-- Tab 配置面板（两种模式都支持，标题栏下方） -->
+      {#if showTabConfig && nodeType && onCreateTab}
+        <div class="px-3 py-2 bg-muted/20 border-b shrink-0">
+          <TabConfigPanel
+            {nodeType}
+            mode={layoutMode}
+            onCreate={(blockIds) => {
+              onCreateTab(blockIds);
+            }}
+            onCancel={() => (showTabConfig = false)}
+          />
+        </div>
+      {/if}
+
+      <!-- 内容区 -->
+      {#if !collapsed || isFullscreenRender}
+        <div class="nodrag flex-1 min-h-0 overflow-hidden relative">
+          <!-- 编辑模式提示浮层 -->
+          {#if blockEditModeInternal && nodeType}
+            <div
+              class="absolute top-3 left-3 z-40 bg-primary/90 text-primary-foreground px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2 shadow-lg backdrop-blur-sm"
+            >
+              <div
+                class="w-2 h-2 bg-primary-foreground rounded-full animate-pulse"
+              ></div>
+              <span>
+                {#if isFullscreenRender}
+                  编辑模式：拖拽已禁用，点击区块控制面板调整大小
+                {:else}
+                  编辑模式：点击区块中的控制面板调整大小
+                {/if}
+              </span>
+              <button
+                class="ml-auto text-primary-foreground hover:opacity-70 transition-opacity cursor-pointer shrink-0"
+                onclick={() => blockEditModeStore.update((v) => !v)}
+                title="退出编辑"
+              >
+                <X class="w-3.5 h-3.5" />
+              </button>
+            </div>
+          {/if}
+
+          {@render children()}
+        </div>
+      {/if}
+    </ContextMenu.Trigger>
+    <ContextMenu.Content class="w-48 z-100">
+      {@render NodeMenuItems()}
+    </ContextMenu.Content>
+  </ContextMenu.Root>
 </div>

@@ -155,20 +155,8 @@
       } catch (e) {}
     }
 
-    // 监听来自 NodeWrapper 的菜单打开请求
-    const handleOpenMenuRequest = (e: any) => {
-      const { nodeId, x, y } = e.detail;
-      canvasContextMenu = null;
-      nodeContextMenu = { id: nodeId, x, y };
-    };
-    window.addEventListener("aestivus:open-node-menu", handleOpenMenuRequest);
-
-    return () => {
-      window.removeEventListener(
-        "aestivus:open-node-menu",
-        handleOpenMenuRequest,
-      );
-    };
+    // TODO: 节点内右键菜单已由 NodeWrapper 接管以修复全屏模式下的定位问题
+    // 依然保留 Canvas 层的事件阻止以防干扰
   });
 
   $effect(() => {
@@ -181,30 +169,10 @@
   });
 
   // 右键菜单状态
-  let nodeContextMenu = $state<{ id: string; x: number; y: number } | null>(
-    null,
-  );
   let canvasContextMenu = $state<{ x: number; y: number } | null>(null);
-
-  function handleNodeContextMenu({
-    event,
-    node,
-  }: {
-    event: MouseEvent;
-    node: any;
-  }) {
-    event.preventDefault();
-    canvasContextMenu = null; // 关闭画布菜单
-    nodeContextMenu = {
-      id: node.id,
-      x: event.clientX,
-      y: event.clientY,
-    };
-  }
 
   function handlePaneContextMenu({ event }: { event: MouseEvent }) {
     event.preventDefault();
-    nodeContextMenu = null; // 关闭节点菜单
     canvasContextMenu = {
       x: event.clientX,
       y: event.clientY,
@@ -280,7 +248,6 @@
       {edges}
       {nodeTypes}
       onnodeclick={({ node }) => flowStore.selectNode(node.id)}
-      onnodecontextmenu={handleNodeContextMenu}
       selectionMode={SelectionMode.Partial}
       selectionOnDrag={true}
       onnodedragstop={({ targetNode }) => {
@@ -369,17 +336,6 @@
         >
       </div>
     </SvelteFlow>
-
-    {#if nodeContextMenu}
-      <NodeContextMenu
-        id={nodeContextMenu.id}
-        x={nodeContextMenu.x}
-        y={nodeContextMenu.y}
-        onClose={() => (nodeContextMenu = null)}
-        onDelete={(id) => flowStore.removeNode(id)}
-        onDuplicate={(id) => flowStore.duplicateNode(id)}
-      />
-    {/if}
 
     {#if canvasContextMenu}
       <CanvasContextMenu

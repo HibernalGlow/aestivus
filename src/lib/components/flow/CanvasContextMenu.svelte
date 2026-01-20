@@ -21,12 +21,12 @@
 
 <ContextMenu.Root bind:open>
   <div
-    style="position: fixed; left: {x}px; top: {y}px; width: 0; height: 0; visibility: hidden;"
+    style="position: absolute; left: {x}px; top: {y}px; width: 1px; height: 1px; opacity: 0; pointer-events: none;"
     aria-hidden="true"
   >
     <ContextMenu.Trigger />
   </div>
-  <ContextMenu.Content class="w-48">
+  <ContextMenu.Content class="w-48 z-1000">
     <ContextMenu.Item
       onclick={() => {
         onAutoLayout();

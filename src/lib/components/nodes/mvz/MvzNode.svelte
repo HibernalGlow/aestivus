@@ -3,30 +3,49 @@
    * MvzNode - 压缩包文件操作节点
    * 支持删除、提取、移动、重命名压缩包内的文件
    */
-  import { Handle, Position, NodeResizer } from '@xyflow/svelte';
-  import { Button } from '$lib/components/ui/button';
-  import { Input } from '$lib/components/ui/input';
-  import { onDestroy } from 'svelte';
+  import { Handle, Position, NodeResizer } from "@xyflow/svelte";
+  import { Button } from "$lib/components/ui/button";
+  import { Input } from "$lib/components/ui/input";
+  import { Progress } from "$lib/components/ui/progress";
+  import { onDestroy } from "svelte";
 
-  import { NodeLayoutRenderer } from '$lib/components/blocks';
-  import { MVZ_DEFAULT_GRID_LAYOUT } from './blocks';
-  import { api } from '$lib/services/api';
-  import { getNodeState } from '$lib/stores/nodeState.svelte';
-  import { getWsBaseUrl } from '$lib/stores/backend';
-  import NodeWrapper from '../NodeWrapper.svelte';
-  import type { MvzNodeState, MvzAction } from './types';
-  import { buildCompleteFileTree, calculateSmartExpansion, type TreeNode } from './treeUtils';
-  import { 
-    Package, LoaderCircle, Trash2, Download, Move, Edit3, 
-    CircleCheck, CircleX, Copy, Check, RotateCcw, Clipboard, Plus, X,
-    ChevronDown, ChevronRight, Sparkles
-  } from '@lucide/svelte';
+  import { NodeLayoutRenderer } from "$lib/components/blocks";
+  import { MVZ_DEFAULT_GRID_LAYOUT } from "./blocks";
+  import { api } from "$lib/services/api";
+  import { getNodeState } from "$lib/stores/nodeState.svelte";
+  import { getWsBaseUrl } from "$lib/stores/backend";
+  import NodeWrapper from "../NodeWrapper.svelte";
+  import type { MvzNodeState, MvzAction } from "./types";
+  import {
+    buildCompleteFileTree,
+    calculateSmartExpansion,
+    type TreeNode,
+  } from "./treeUtils";
+  import {
+    Package,
+    LoaderCircle,
+    Trash2,
+    Download,
+    Move,
+    Edit3,
+    CircleCheck,
+    CircleX,
+    Copy,
+    Check,
+    RotateCcw,
+    Clipboard,
+    Plus,
+    X,
+    ChevronDown,
+    ChevronRight,
+    Sparkles,
+  } from "@lucide/svelte";
 
   interface Props {
     id: string;
     data?: {
       config?: any;
-      status?: 'idle' | 'running' | 'completed' | 'error';
+      status?: "idle" | "running" | "completed" | "error";
       hasInputConnection?: boolean;
       logs?: string[];
     };
@@ -41,16 +60,16 @@
 
   // 获取共享的响应式状态
   const ns = getNodeState<MvzNodeState>(id, {
-    phase: 'idle',
+    phase: "idle",
     progress: 0,
-    action: 'extract',
+    action: "extract",
     files: [],
-    output: '.',
+    output: ".",
     near: false,
     autoDir: false,
     flatten: false,
-    pattern: '',
-    replacement: '',
+    pattern: "",
+    replacement: "",
     dryRun: false,
     logs: [],
     totalFiles: 0,
@@ -58,16 +77,17 @@
     successCount: 0,
     failedCount: 0,
     results: [],
-    preview: []
+    preview: [],
   });
 
   let hasInputConnection = $state(false);
   let layoutRenderer = $state<any>(undefined);
-  let fileInput = $state('');
+  let fileInput = $state("");
   let copiedLogs = $state(false);
   let copiedPath = $state(false);
   let expandedArchives = $state<Set<string>>(new Set());
   let autoExpandApplied = $state(false);
+  let progressMessage = $state("");
 
   // WebSocket 连接
   let ws: WebSocket | null = null;
@@ -81,28 +101,31 @@
     if (ws) ws.close();
     const wsUrl = `${getWsBaseUrl()}/v1/ws/tasks/${tid}`;
     ws = new WebSocket(wsUrl);
-    ws.onopen = () => log('📡 WebSocket 已连接');
+    ws.onopen = () => log("📡 WebSocket 已连接");
     ws.onmessage = (event) => {
       try {
         const msg = JSON.parse(event.data);
-        if (msg.type === 'progress') {
+        if (msg.type === "progress") {
           ns.progress = msg.progress;
-        } else if (msg.type === 'log') {
+          progressMessage = msg.message || "";
+        } else if (msg.type === "log") {
           log(msg.message);
-        } else if (msg.type === 'status') {
-          if (msg.status === 'completed') {
-            ns.phase = 'completed';
+        } else if (msg.type === "status") {
+          if (msg.status === "completed") {
+            ns.phase = "completed";
             ns.progress = 100;
-          } else if (msg.status === 'error') {
-            ns.phase = 'error';
+          } else if (msg.status === "error") {
+            ns.phase = "error";
           }
         }
       } catch (e) {
-        console.error('WebSocket 消息解析失败:', e);
+        console.error("WebSocket 消息解析失败:", e);
       }
     };
-    ws.onerror = (error) => console.error('WebSocket 错误:', error);
-    ws.onclose = () => { ws = null; };
+    ws.onerror = (error) => console.error("WebSocket 错误:", error);
+    ws.onclose = () => {
+      ws = null;
+    };
   }
 
   function disconnectWebSocket() {
@@ -114,49 +137,58 @@
 
   onDestroy(() => disconnectWebSocket());
 
-  let canExecute = $derived(ns.phase === 'idle' && ns.files.length > 0);
-  let isRunning = $derived(ns.phase === 'processing');
-  let borderClass = $derived({
-    idle: 'border-border',
-    processing: 'border-blue-500 shadow-sm',
-    completed: 'border-primary/50',
-    error: 'border-destructive/50'
-  }[ns.phase]);
+  let canExecute = $derived(ns.phase === "idle" && ns.files.length > 0);
+  let isRunning = $derived(ns.phase === "processing");
+  let borderClass = $derived(
+    {
+      idle: "border-border",
+      processing: "border-blue-500 shadow-sm",
+      completed: "border-primary/50",
+      error: "border-destructive/50",
+    }[ns.phase],
+  );
 
-  function log(msg: string) { ns.logs = [...ns.logs.slice(-30), msg]; }
+  function log(msg: string) {
+    ns.logs = [...ns.logs.slice(-30), msg];
+  }
 
   // 添加文件
   function addFile() {
     const text = fileInput.trim();
     if (!text) return;
-    
+
     // 支持多行粘贴
-    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(l => l);
+    const lines = text
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l);
     let added = 0;
     for (const line of lines) {
-      if (line.includes('//') && !ns.files.includes(line)) {
+      if (line.includes("//") && !ns.files.includes(line)) {
         ns.files = [...ns.files, line];
         added++;
       }
     }
-    
+
     if (added > 0) {
       log(`➕ 添加了 ${added} 个文件`);
       // 重置自动展开标记，以便重新应用智能展开
       autoExpandApplied = false;
     }
-    fileInput = '';
+    fileInput = "";
   }
 
   // 从剪贴板粘贴
   async function pasteFromClipboard() {
     try {
-      const { platform } = await import('$lib/api/platform');
+      const { platform } = await import("$lib/api/platform");
       const text = await platform.readClipboard();
       if (text) {
         fileInput = text.trim();
       }
-    } catch (e) { log(`读取剪贴板失败: ${e}`); }
+    } catch (e) {
+      log(`读取剪贴板失败: ${e}`);
+    }
   }
 
   // 移除文件
@@ -186,7 +218,7 @@
   // 应用智能展开
   function applySmartExpansion() {
     if (ns.files.length === 0) return;
-    
+
     const tree = buildCompleteFileTree(ns.files);
     const smartExpanded = calculateSmartExpansion(tree);
     expandedArchives = smartExpanded;
@@ -198,7 +230,7 @@
   function expandAll() {
     const tree = buildCompleteFileTree(ns.files);
     const allPaths = new Set<string>();
-    
+
     function collectPaths(node: TreeNode) {
       if (node.path) {
         allPaths.add(node.path);
@@ -207,7 +239,7 @@
         collectPaths(child);
       }
     }
-    
+
     collectPaths(tree);
     expandedArchives = allPaths;
     log(`📂 全部展开: ${allPaths.size} 个节点`);
@@ -230,7 +262,7 @@
   // 执行操作
   async function execute() {
     if (!canExecute) return;
-    ns.phase = 'processing';
+    ns.phase = "processing";
     ns.progress = 0;
     ns.results = [];
     ns.preview = [];
@@ -241,22 +273,26 @@
     log(`🚀 开始执行 ${ns.action} 操作...`);
 
     try {
-      const response = await api.executeNode('mvz', {
-        action: ns.action,
-        files: ns.files,
-        output: ns.output,
-        near: ns.near,
-        auto_dir: ns.autoDir,
-        flatten: ns.flatten,
-        pattern: ns.pattern,
-        replacement: ns.replacement,
-        dry_run: ns.dryRun
-      }, { taskId: newTaskId, nodeId }) as any;
+      const response = (await api.executeNode(
+        "mvz",
+        {
+          action: ns.action,
+          files: ns.files,
+          output: ns.output,
+          near: ns.near,
+          auto_dir: ns.autoDir,
+          flatten: ns.flatten,
+          pattern: ns.pattern,
+          replacement: ns.replacement,
+          dry_run: ns.dryRun,
+        },
+        { taskId: newTaskId, nodeId },
+      )) as any;
 
       if (response.logs) for (const m of response.logs) log(m);
 
       if (response.success) {
-        ns.phase = 'completed';
+        ns.phase = "completed";
         ns.progress = 100;
         ns.totalFiles = response.total_files || 0;
         ns.totalArchives = response.total_archives || 0;
@@ -266,12 +302,12 @@
         ns.preview = response.preview || [];
         log(`✅ ${response.message}`);
       } else {
-        ns.phase = 'error';
+        ns.phase = "error";
         ns.progress = 0;
         log(`❌ 失败: ${response.message}`);
       }
     } catch (error) {
-      ns.phase = 'error';
+      ns.phase = "error";
       ns.progress = 0;
       log(`❌ 失败: ${error}`);
     } finally {
@@ -280,7 +316,7 @@
   }
 
   function handleReset() {
-    ns.phase = 'idle';
+    ns.phase = "idle";
     ns.progress = 0;
     ns.results = [];
     ns.preview = [];
@@ -292,15 +328,17 @@
       await navigator.clipboard.writeText(text);
       setter(true);
       setTimeout(() => setter(false), 2000);
-    } catch (e) { console.error('复制失败:', e); }
+    } catch (e) {
+      console.error("复制失败:", e);
+    }
   }
 
   // 操作选项
   const actions: Array<{ value: MvzAction; label: string; icon: any }> = [
-    { value: 'extract', label: '提取', icon: Download },
-    { value: 'delete', label: '删除', icon: Trash2 },
-    { value: 'move', label: '移动', icon: Move },
-    { value: 'rename', label: '重命名', icon: Edit3 }
+    { value: "extract", label: "提取", icon: Download },
+    { value: "delete", label: "删除", icon: Trash2 },
+    { value: "move", label: "移动", icon: Move },
+    { value: "rename", label: "重命名", icon: Edit3 },
   ];
 </script>
 
@@ -316,20 +354,41 @@
         class="flex-1 cq-input resize-none"
         rows="3"
         onkeydown={(e) => {
-          if (e.key === 'Enter' && !e.shiftKey) {
+          if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             addFile();
           }
         }}
       />
       <div class="flex cq-gap">
-        <Button variant="outline" size="icon" class="cq-button-icon shrink-0" onclick={addFile} disabled={isRunning || !fileInput.trim()} title="添加文件">
+        <Button
+          variant="outline"
+          size="icon"
+          class="cq-button-icon shrink-0"
+          onclick={addFile}
+          disabled={isRunning || !fileInput.trim()}
+          title="添加文件"
+        >
           <Plus class="cq-icon" />
         </Button>
-        <Button variant="outline" size="icon" class="cq-button-icon shrink-0" onclick={pasteFromClipboard} disabled={isRunning} title="从剪贴板粘贴">
+        <Button
+          variant="outline"
+          size="icon"
+          class="cq-button-icon shrink-0"
+          onclick={pasteFromClipboard}
+          disabled={isRunning}
+          title="从剪贴板粘贴"
+        >
           <Clipboard class="cq-icon" />
         </Button>
-        <Button variant="outline" size="icon" class="cq-button-icon shrink-0" onclick={clearFiles} disabled={isRunning || ns.files.length === 0} title="清空所有文件">
+        <Button
+          variant="outline"
+          size="icon"
+          class="cq-button-icon shrink-0"
+          onclick={clearFiles}
+          disabled={isRunning || ns.files.length === 0}
+          title="清空所有文件"
+        >
           <Trash2 class="cq-icon" />
         </Button>
       </div>
@@ -341,13 +400,14 @@
 {#snippet renderTreeNode(node: TreeNode, depth: number = 0)}
   {@const isExpanded = expandedArchives.has(node.path)}
   {@const hasChildren = node.children && node.children.length > 0}
-  
+
   <div class="select-none">
     <div
       class="flex items-center gap-1 py-0.5 px-1 rounded hover:bg-muted/50 cursor-pointer text-xs"
       style="padding-left: {depth * 12}px"
       onclick={() => hasChildren && toggleArchive(node.path)}
-      onkeydown={(e) => e.key === 'Enter' && hasChildren && toggleArchive(node.path)}
+      onkeydown={(e) =>
+        e.key === "Enter" && hasChildren && toggleArchive(node.path)}
       role="button"
       tabindex="0"
     >
@@ -372,16 +432,18 @@
       <span class="truncate flex-1" title={node.path}>{node.name}</span>
 
       {#if hasChildren}
-        <span class="text-muted-foreground shrink-0 text-xs">{node.children.length}</span>
+        <span class="text-muted-foreground shrink-0 text-xs"
+          >{node.children.length}</span
+        >
       {/if}
 
       {#if !node.isFolder && !node.isArchive && node.fileIndex !== undefined}
-        <button 
+        <button
           onclick={(e) => {
             e.stopPropagation();
             removeFile(node.fileIndex!);
           }}
-          disabled={isRunning} 
+          disabled={isRunning}
           class="opacity-0 hover:opacity-100 transition-opacity"
           title="删除"
         >
@@ -401,57 +463,64 @@
 <!-- 文件夹树 Block -->
 {#snippet filesBlock()}
   {@const fileTree = buildCompleteFileTree(ns.files)}
-  
+
   <div class="h-full flex flex-col overflow-hidden">
-    <div class="flex items-center justify-between cq-padding border-b bg-muted/30 shrink-0">
+    <div
+      class="flex items-center justify-between cq-padding border-b bg-muted/30 shrink-0"
+    >
       <span class="cq-text font-semibold flex items-center gap-1">
         <Package class="cq-icon text-purple-500" />文件夹树
       </span>
       <div class="flex items-center cq-gap">
-        <span class="cq-text-sm text-muted-foreground">{ns.files.length} 个文件</span>
+        <span class="cq-text-sm text-muted-foreground"
+          >{ns.files.length} 个文件</span
+        >
         <div class="flex items-center gap-0.5">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            class="h-5 w-5" 
+          <Button
+            variant="ghost"
+            size="icon"
+            class="h-5 w-5"
             onclick={applySmartExpansion}
             title="智能展开"
           >
             <Sparkles class="w-3 h-3 text-yellow-500" />
           </Button>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            class="h-5 w-5" 
+          <Button
+            variant="ghost"
+            size="icon"
+            class="h-5 w-5"
             onclick={expandAll}
             title="全部展开"
           >
             <ChevronDown class="w-3 h-3" />
           </Button>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            class="h-5 w-5" 
+          <Button
+            variant="ghost"
+            size="icon"
+            class="h-5 w-5"
             onclick={collapseAll}
             title="全部折叠"
           >
             <ChevronRight class="w-3 h-3" />
           </Button>
           {#if ns.files.length > 0}
-            <Button 
-              variant="ghost" 
-              size="icon" 
-              class="h-5 w-5" 
-              onclick={() => copyToClipboard(ns.files.join('\n'), v => copiedPath = v)}
+            <Button
+              variant="ghost"
+              size="icon"
+              class="h-5 w-5"
+              onclick={() =>
+                copyToClipboard(ns.files.join("\n"), (v) => (copiedPath = v))}
               title="复制路径"
             >
-              {#if copiedPath}<Check class="w-3 h-3 text-green-500" />{:else}<Copy class="w-3 h-3" />{/if}
+              {#if copiedPath}<Check
+                  class="w-3 h-3 text-green-500"
+                />{:else}<Copy class="w-3 h-3" />{/if}
             </Button>
           {/if}
         </div>
       </div>
     </div>
-    
+
     <div class="flex-1 overflow-y-auto cq-padding">
       {#if ns.files.length > 0}
         {#each fileTree.children as child}
@@ -474,8 +543,10 @@
         {#each actions as act}
           <button
             class="flex items-center gap-1 px-2 py-1.5 rounded text-xs transition-colors
-              {ns.action === act.value ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}"
-            onclick={() => ns.action = act.value}
+              {ns.action === act.value
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-muted hover:bg-muted/80'}"
+            onclick={() => (ns.action = act.value)}
             disabled={isRunning}
           >
             <act.icon class="w-3 h-3" />
@@ -486,20 +557,40 @@
     </div>
 
     <!-- 提取/移动选项 -->
-    {#if ns.action === 'extract' || ns.action === 'move'}
+    {#if ns.action === "extract" || ns.action === "move"}
       <div class="space-y-1">
-        <Input bind:value={ns.output} placeholder="输出目录" disabled={isRunning} class="cq-input" />
+        <Input
+          bind:value={ns.output}
+          placeholder="输出目录"
+          disabled={isRunning}
+          class="cq-input"
+        />
         <div class="flex items-center gap-2 text-xs">
           <label class="flex items-center gap-1 cursor-pointer">
-            <input type="checkbox" bind:checked={ns.near} disabled={isRunning} class="w-3 h-3" />
+            <input
+              type="checkbox"
+              bind:checked={ns.near}
+              disabled={isRunning}
+              class="w-3 h-3"
+            />
             <span>就近提取</span>
           </label>
           <label class="flex items-center gap-1 cursor-pointer">
-            <input type="checkbox" bind:checked={ns.autoDir} disabled={isRunning} class="w-3 h-3" />
+            <input
+              type="checkbox"
+              bind:checked={ns.autoDir}
+              disabled={isRunning}
+              class="w-3 h-3"
+            />
             <span>自动目录</span>
           </label>
           <label class="flex items-center gap-1 cursor-pointer">
-            <input type="checkbox" bind:checked={ns.flatten} disabled={isRunning} class="w-3 h-3" />
+            <input
+              type="checkbox"
+              bind:checked={ns.flatten}
+              disabled={isRunning}
+              class="w-3 h-3"
+            />
             <span>扁平化</span>
           </label>
         </div>
@@ -507,64 +598,135 @@
     {/if}
 
     <!-- 重命名选项 -->
-    {#if ns.action === 'rename'}
+    {#if ns.action === "rename"}
       <div class="space-y-1">
-        <Input bind:value={ns.pattern} placeholder="正则模式" disabled={isRunning} class="cq-input" />
-        <Input bind:value={ns.replacement} placeholder="替换为" disabled={isRunning} class="cq-input" />
+        <Input
+          bind:value={ns.pattern}
+          placeholder="正则模式"
+          disabled={isRunning}
+          class="cq-input"
+        />
+        <Input
+          bind:value={ns.replacement}
+          placeholder="替换为"
+          disabled={isRunning}
+          class="cq-input"
+        />
       </div>
     {/if}
 
     <!-- 预览模式 -->
     <label class="flex items-center gap-2 cursor-pointer cq-text-sm">
-      <input type="checkbox" bind:checked={ns.dryRun} disabled={isRunning} class="w-3.5 h-3.5" />
+      <input
+        type="checkbox"
+        bind:checked={ns.dryRun}
+        disabled={isRunning}
+        class="w-3.5 h-3.5"
+      />
       <span>预览模式（不实际执行）</span>
     </label>
 
     <!-- 执行和重置按钮 -->
     <div class="flex cq-gap">
-      <Button class="flex-1 cq-button" onclick={execute} disabled={!canExecute || isRunning}>
-        {#if isRunning}<LoaderCircle class="cq-icon mr-1 animate-spin" />{:else}<Package class="cq-icon mr-1" />{/if}
+      <Button
+        class="flex-1 cq-button"
+        onclick={execute}
+        disabled={!canExecute || isRunning}
+      >
+        {#if isRunning}<LoaderCircle
+            class="cq-icon mr-1 animate-spin"
+          />{:else}<Package class="cq-icon mr-1" />{/if}
         <span>执行</span>
       </Button>
-      <Button variant="outline" size="icon" class="cq-button-icon shrink-0" onclick={handleReset} disabled={ns.phase === 'idle'} title="重置状态">
+      <Button
+        variant="outline"
+        size="icon"
+        class="cq-button-icon shrink-0"
+        onclick={handleReset}
+        disabled={ns.phase === "idle"}
+        title="重置状态"
+      >
         <RotateCcw class="cq-icon" />
       </Button>
     </div>
+
+    <!-- 进度条 -->
+    {#if isRunning || ns.phase === "completed" || ns.phase === "error"}
+      <div class="flex flex-col cq-gap cq-padding bg-muted/30 cq-rounded">
+        <div class="flex items-center cq-gap">
+          {#if isRunning}
+            <LoaderCircle class="cq-icon text-primary animate-spin shrink-0" />
+          {:else if ns.phase === "completed"}
+            <CircleCheck class="cq-icon text-green-500 shrink-0" />
+          {:else if ns.phase === "error"}
+            <CircleX class="cq-icon text-red-500 shrink-0" />
+          {/if}
+          <div class="flex-1 flex flex-col gap-0.5">
+            <Progress value={ns.progress} class="h-1.5" />
+            <div
+              class="flex items-center justify-between cq-text-sm text-muted-foreground"
+            >
+              <span class="truncate"
+                >{progressMessage ||
+                  (isRunning
+                    ? "处理中..."
+                    : ns.phase === "completed"
+                      ? "完成"
+                      : "失败")}</span
+              >
+              <span class="tabular-nums shrink-0">{ns.progress}%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    {/if}
   </div>
 {/snippet}
 
 <!-- 统计 -->
 {#snippet statsBlock()}
-  {#if ns.phase === 'completed'}
+  {#if ns.phase === "completed"}
     <div class="grid grid-cols-2 cq-gap">
       <div class="cq-stat-card bg-blue-500/10">
         <div class="cq-stat-label text-muted-foreground">总文件</div>
-        <div class="cq-stat-value text-blue-600 tabular-nums">{ns.totalFiles}</div>
+        <div class="cq-stat-value text-blue-600 tabular-nums">
+          {ns.totalFiles}
+        </div>
       </div>
       <div class="cq-stat-card bg-purple-500/10">
         <div class="cq-stat-label text-muted-foreground">压缩包</div>
-        <div class="cq-stat-value text-purple-600 tabular-nums">{ns.totalArchives}</div>
+        <div class="cq-stat-value text-purple-600 tabular-nums">
+          {ns.totalArchives}
+        </div>
       </div>
       <div class="cq-stat-card bg-green-500/10">
         <div class="cq-stat-label text-muted-foreground">成功</div>
-        <div class="cq-stat-value text-green-600 tabular-nums">{ns.successCount}</div>
+        <div class="cq-stat-value text-green-600 tabular-nums">
+          {ns.successCount}
+        </div>
       </div>
       <div class="cq-stat-card bg-red-500/10">
         <div class="cq-stat-label text-muted-foreground">失败</div>
-        <div class="cq-stat-value text-red-600 tabular-nums">{ns.failedCount}</div>
+        <div class="cq-stat-value text-red-600 tabular-nums">
+          {ns.failedCount}
+        </div>
       </div>
     </div>
   {:else}
-    <div class="cq-text text-muted-foreground text-center py-2">执行后显示统计</div>
+    <div class="cq-text text-muted-foreground text-center py-2">
+      执行后显示统计
+    </div>
   {/if}
 {/snippet}
 
 <!-- 结果 -->
 {#snippet resultsBlock()}
   <div class="h-full flex flex-col overflow-hidden">
-    <div class="flex items-center justify-between cq-padding border-b bg-muted/30 shrink-0">
+    <div
+      class="flex items-center justify-between cq-padding border-b bg-muted/30 shrink-0"
+    >
       <span class="cq-text font-semibold">
-        {ns.dryRun ? '预览' : '结果'}
+        {ns.dryRun ? "预览" : "结果"}
       </span>
       <span class="cq-text-sm text-muted-foreground">
         {ns.dryRun ? ns.preview.length : ns.results.length} 项
@@ -577,9 +739,13 @@
             <div class="cq-padding bg-muted/30 cq-rounded">
               <div class="cq-text-sm font-medium truncate">{item.archive}</div>
               {#if item.output}
-                <div class="cq-text-sm text-muted-foreground">→ {item.output}</div>
+                <div class="cq-text-sm text-muted-foreground">
+                  → {item.output}
+                </div>
               {/if}
-              <div class="cq-text-sm text-muted-foreground">{item.count} 个文件</div>
+              <div class="cq-text-sm text-muted-foreground">
+                {item.count} 个文件
+              </div>
             </div>
           {/each}
         </div>
@@ -593,14 +759,20 @@
                 {:else}
                   <CircleX class="w-3 h-3 text-red-500 shrink-0" />
                 {/if}
-                <span class="cq-text-sm font-medium truncate flex-1">{result.archive}</span>
+                <span class="cq-text-sm font-medium truncate flex-1"
+                  >{result.archive}</span
+                >
               </div>
-              <div class="cq-text-sm text-muted-foreground mt-0.5">{result.message}</div>
+              <div class="cq-text-sm text-muted-foreground mt-0.5">
+                {result.message}
+              </div>
             </div>
           {/each}
         </div>
       {:else}
-        <div class="cq-text text-muted-foreground text-center py-4">执行后显示结果</div>
+        <div class="cq-text text-muted-foreground text-center py-4">
+          执行后显示结果
+        </div>
       {/if}
     </div>
   </div>
@@ -611,11 +783,21 @@
   <div class="h-full flex flex-col">
     <div class="flex items-center justify-between mb-1 shrink-0">
       <span class="cq-text font-semibold">日志</span>
-      <Button variant="ghost" size="icon" class="h-5 w-5" onclick={() => copyToClipboard(ns.logs.join('\n'), v => copiedLogs = v)}>
-        {#if copiedLogs}<Check class="w-3 h-3 text-green-500" />{:else}<Copy class="w-3 h-3" />{/if}
+      <Button
+        variant="ghost"
+        size="icon"
+        class="h-5 w-5"
+        onclick={() =>
+          copyToClipboard(ns.logs.join("\n"), (v) => (copiedLogs = v))}
+      >
+        {#if copiedLogs}<Check class="w-3 h-3 text-green-500" />{:else}<Copy
+            class="w-3 h-3"
+          />{/if}
       </Button>
     </div>
-    <div class="flex-1 overflow-y-auto bg-muted/30 cq-rounded cq-padding font-mono cq-text-sm space-y-0.5">
+    <div
+      class="flex-1 overflow-y-auto bg-muted/30 cq-rounded cq-padding font-mono cq-text-sm space-y-0.5"
+    >
       {#if ns.logs.length > 0}
         {#each ns.logs.slice(-10) as logItem}
           <div class="text-muted-foreground break-all">{logItem}</div>
@@ -629,43 +811,47 @@
 
 <!-- 区块渲染器 -->
 {#snippet renderBlockContent(blockId: string)}
-  {#if blockId === 'input'}{@render inputBlock()}
-  {:else if blockId === 'files'}{@render filesBlock()}
-  {:else if blockId === 'operation'}{@render operationBlock()}
-  {:else if blockId === 'stats'}{@render statsBlock()}
-  {:else if blockId === 'results'}{@render resultsBlock()}
-  {:else if blockId === 'log'}{@render logBlock()}
+  {#if blockId === "input"}{@render inputBlock()}
+  {:else if blockId === "files"}{@render filesBlock()}
+  {:else if blockId === "operation"}{@render operationBlock()}
+  {:else if blockId === "stats"}{@render statsBlock()}
+  {:else if blockId === "results"}{@render resultsBlock()}
+  {:else if blockId === "log"}{@render logBlock()}
   {/if}
 {/snippet}
 
 <!-- 主渲染 -->
-<div class="h-full w-full flex flex-col overflow-hidden" style={!isFullscreenRender ? 'max-width: 420px;' : ''}>
+<div
+  class="h-full w-full flex flex-col overflow-hidden"
+  style={!isFullscreenRender ? "max-width: 420px;" : ""}
+>
   {#if !isFullscreenRender}
     <NodeResizer minWidth={300} minHeight={400} maxWidth={420} />
     <Handle type="target" position={Position.Left} class="bg-primary!" />
   {/if}
 
-  <NodeWrapper 
-    nodeId={nodeId} 
-    title="mvz" 
-    icon={Package} 
-    status={ns.phase} 
-    {borderClass} 
-    isFullscreenRender={isFullscreenRender}
+  <NodeWrapper
+    {nodeId}
+    title="mvz"
+    icon={Package}
+    status={ns.phase}
+    {borderClass}
+    {isFullscreenRender}
     onCompact={() => layoutRenderer?.compact()}
     onResetLayout={() => layoutRenderer?.resetLayout()}
-    nodeType="mvz" 
+    nodeType="mvz"
     currentLayout={layoutRenderer?.getCurrentLayout()}
     currentTabGroups={layoutRenderer?.getCurrentTabGroups()}
-    onApplyLayout={(layout, tabGroups) => layoutRenderer?.applyLayout(layout, tabGroups)}
+    onApplyLayout={(layout, tabGroups) =>
+      layoutRenderer?.applyLayout(layout, tabGroups)}
     canCreateTab={true}
     onCreateTab={(blockIds) => layoutRenderer?.createTab(blockIds)}
-    layoutMode={isFullscreenRender ? 'fullscreen' : 'normal'}
+    layoutMode={isFullscreenRender ? "fullscreen" : "normal"}
   >
     {#snippet children()}
       <NodeLayoutRenderer
         bind:this={layoutRenderer}
-        nodeId={nodeId}
+        {nodeId}
         nodeType="mvz"
         isFullscreen={isFullscreenRender}
         defaultFullscreenLayout={MVZ_DEFAULT_GRID_LAYOUT}

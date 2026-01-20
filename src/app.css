@@ -3,6 +3,20 @@
 @import "$lib/styles/container-responsive.css";
 @import "$lib/styles/scrollbar.css";
 
+/* LXGW WenKai Screen 字体 - 从 Google Fonts 加载 */
+@import url("https://fonts.googleapis.com/css2?family=LXGW+WenKai+Screen&display=swap");
+
+/* 定义默认字体栈 */
+:root {
+  --font-default-sans:
+    "LXGW WenKai Screen", "LXGW WenKai", "霞鹜文楷", system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  --font-default-mono:
+    "JetBrains Mono", "Fira Code", Consolas, Monaco, "Andale Mono",
+    "Ubuntu Mono", monospace;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -118,7 +132,27 @@
   }
   body {
     @apply bg-background text-foreground;
+    /* 默认使用 LXGW WenKai Screen */
+    font-family: var(--font-default-sans);
   }
+  
+  /* 等宽字体区域 */
+  code, pre, kbd, samp, .font-mono {
+    font-family: var(--font-default-mono);
+  }
+}
+
+/* 自定义字体覆盖 - 当 data-custom-font="enabled" 时生效 */
+:root[data-custom-font="enabled"] body {
+  font-family: var(--font-custom-sans, var(--font-default-sans));
+}
+
+:root[data-custom-font="enabled"] code,
+:root[data-custom-font="enabled"] pre,
+:root[data-custom-font="enabled"] kbd,
+:root[data-custom-font="enabled"] samp,
+:root[data-custom-font="enabled"] .font-mono {
+  font-family: var(--font-custom-mono, var(--font-default-mono));
 }
 
 /* NodeResizer 样式覆盖 - 使用主题色替代默认蓝色 */

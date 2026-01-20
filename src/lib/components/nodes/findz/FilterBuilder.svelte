@@ -6,6 +6,8 @@
    */
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
+  import { Checkbox } from "$lib/components/ui/checkbox";
+  import { Label } from "$lib/components/ui/label";
   import * as Select from "$lib/components/ui/select";
   import * as Dialog from "$lib/components/ui/dialog";
   import {
@@ -67,7 +69,13 @@
     widthMax: string;
     heightMin: string;
     heightMax: string;
-    resolutionPreset: string; // any, 1080p, 4k, custom
+    resolutionPreset: string; // any, 1080p, 4k, social-cover, custom
+    // 容器平均大小
+    avgSizeEnabled: boolean;
+    avgSizeFormat: "images" | "videos" | "custom";
+    avgSizeCustomExts: string;
+    avgSizeMin: string;
+    avgSizeMax: string;
   }
 
   interface Props {
@@ -124,6 +132,12 @@
     heightMin: "",
     heightMax: "",
     resolutionPreset: "any",
+    // 容器平均大小
+    avgSizeEnabled: false,
+    avgSizeFormat: "images",
+    avgSizeCustomExts: "",
+    avgSizeMin: "",
+    avgSizeMax: "",
   };
 
   let config = $state<FilterConfig>(value ?? { ...defaultConfig });
@@ -259,6 +273,19 @@
         sizeEnabled: true,
         sizeMax: "320K",
         itemType: "file",
+      },
+    },
+    {
+      id: "high-quality-archives",
+      name: "高质量图片档 (平均 > 500K)",
+      isBuiltin: true,
+      config: {
+        ...defaultConfig,
+        avgSizeEnabled: true,
+        avgSizeFormat: "images",
+        avgSizeMin: "500K",
+        itemType: "file",
+        inArchive: "yes",
       },
     },
   ];
@@ -661,6 +688,35 @@
         if (presets[config.resolutionPreset]) {
           conditions.push(presets[config.resolutionPreset]);
         }
+      }
+    }
+
+    // 容器平均大小
+    if (config.avgSizeEnabled) {
+      let field = "avg_img_size";
+      if (config.avgSizeFormat === "videos") {
+        field = "avg_vid_size";
+      } else if (
+        config.avgSizeFormat === "custom" &&
+        config.avgSizeCustomExts
+      ) {
+        const exts = config.avgSizeCustomExts
+          .split(/[,，\s]+/)
+          .map((e) => e.trim().replace(/^\./, ""))
+          .filter((e) => e);
+        if (exts.length > 0) {
+          field = `avg_size_${exts.join("_")}`;
+        }
+      }
+
+      if (config.avgSizeMin && config.avgSizeMax) {
+        conditions.push(
+          `${field} BETWEEN ${config.avgSizeMin} AND ${config.avgSizeMax}`,
+        );
+      } else if (config.avgSizeMin) {
+        conditions.push(`${field} >= ${config.avgSizeMin}`);
+      } else if (config.avgSizeMax) {
+        conditions.push(`${field} <= ${config.avgSizeMax}`);
       }
     }
 
@@ -1428,6 +1484,94 @@
 
         <div class="text-[10px] text-muted-foreground mt-1">
           💡 需要在节点中启用"图片元数据"选项
+        </div>
+      {/if}
+    </div>
+
+    <!-- 容器内平均大小 -->
+    <div class="space-y-1 pt-2 border-t mt-1">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-1.5 font-medium text-xs">
+          <Checkbox
+            id="avgSizeEnabled"
+            bind:checked={config.avgSizeEnabled}
+            {disabled}
+            onCheckedChange={emitChange}
+          />
+          <Label for="avgSizeEnabled" class="text-[11px] cursor-pointer"
+            >按容器内平均大小筛选</Label
+          >
+        </div>
+        {#if config.avgSizeEnabled}
+          <div class="flex items-center gap-1">
+            <Select.Root
+              type="single"
+              bind:value={config.avgSizeFormat}
+              disabled={!config.avgSizeEnabled || disabled}
+              onSelectedChange={(v) => {
+                if (v) config.avgSizeFormat = v.value as any;
+                emitChange();
+              }}
+            >
+              <Select.Trigger class="h-6 w-16 text-[10px] px-1.5 capitalize">
+                {config.avgSizeFormat === "images"
+                  ? "图片"
+                  : config.avgSizeFormat === "videos"
+                    ? "视频"
+                    : "自定义"}
+              </Select.Trigger>
+              <Select.Content>
+                <Select.Item value="images">图片</Select.Item>
+                <Select.Item value="videos">视频</Select.Item>
+                <Select.Item value="custom">自定义扩展名</Select.Item>
+              </Select.Content>
+            </Select.Root>
+          </div>
+        {/if}
+      </div>
+
+      {#if config.avgSizeEnabled}
+        <div class="grid grid-cols-2 gap-2 pl-6 pt-1 mb-2">
+          {#if config.avgSizeFormat === "custom"}
+            <div class="col-span-2">
+              <Input
+                bind:value={config.avgSizeCustomExts}
+                placeholder="扩展名 (如 jpg, png)"
+                class="h-7 text-xs"
+                {disabled}
+                oninput={emitChange}
+              />
+            </div>
+          {/if}
+          <div class="flex items-center gap-1.5">
+            <span
+              class="text-[10px] text-muted-foreground whitespace-nowrap min-w-[24px]"
+              >最小</span
+            >
+            <Input
+              bind:value={config.avgSizeMin}
+              placeholder="500K"
+              class="h-7 text-xs flex-1"
+              {disabled}
+              oninput={emitChange}
+            />
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span
+              class="text-[10px] text-muted-foreground whitespace-nowrap min-w-[24px]"
+              >最大</span
+            >
+            <Input
+              bind:value={config.avgSizeMax}
+              placeholder="无"
+              class="h-7 text-xs flex-1"
+              {disabled}
+              oninput={emitChange}
+            />
+          </div>
+          <div class="col-span-2 text-[10px] text-muted-foreground italic">
+            💡 针对压缩包，计算其内部指定格式文件的平均大小。
+          </div>
         </div>
       {/if}
     </div>

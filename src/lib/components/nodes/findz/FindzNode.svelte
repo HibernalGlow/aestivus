@@ -43,7 +43,15 @@
     Plus,
     X,
     Trash2,
+    ChevronDown,
+    ChevronRight,
+    Sparkles,
   } from "@lucide/svelte";
+  import {
+    buildCompleteFileTree,
+    calculateSmartExpansion,
+    type TreeNode,
+  } from "$lib/utils/treeUtils";
 
   /** NodeLayoutRenderer 组件实例类型 */
   interface LayoutRendererInstance {
@@ -122,6 +130,10 @@
   // 复制状态
   let copiedLogs = $state(false);
   let copiedPath = $state(false);
+
+  // 文件树展开状态
+  let expandedArchives = $state<Set<string>>(new Set());
+  let autoExpandApplied = $state(false);
 
   // 同步外部状态
   $effect(() => {
@@ -451,6 +463,72 @@
   function getOutsideArchiveCount(): number {
     return ns.files.filter((f) => !f.archive && !f.container).length;
   }
+
+  // --- 文件树逻辑 ---
+  const filePaths = $derived(
+    ns.files.map((f) => (f.container ? `${f.container}//${f.path}` : f.path)),
+  );
+
+  // 切换压缩包展开状态
+  function toggleArchive(archive: string) {
+    if (expandedArchives.has(archive)) {
+      expandedArchives.delete(archive);
+    } else {
+      expandedArchives.add(archive);
+    }
+    expandedArchives = new Set(expandedArchives);
+  }
+
+  // 应用智能展开
+  function applySmartExpansion() {
+    if (ns.files.length === 0) return;
+
+    const tree = buildCompleteFileTree(filePaths);
+    const smartExpanded = calculateSmartExpansion(tree);
+    expandedArchives = smartExpanded;
+    autoExpandApplied = true;
+    log(`✨ 智能展开: 已展开 ${smartExpanded.size} 个节点`);
+  }
+
+  // 全部展开
+  function expandAll() {
+    const tree = buildCompleteFileTree(filePaths);
+    const allPaths = new Set<string>();
+
+    function collectPaths(node: TreeNode) {
+      if (node.path) {
+        allPaths.add(node.path);
+      }
+      for (const child of node.children) {
+        collectPaths(child);
+      }
+    }
+
+    collectPaths(tree);
+    expandedArchives = allPaths;
+    log(`📂 全部展开: ${allPaths.size} 个节点`);
+  }
+
+  // 全部折叠
+  function collapseAll() {
+    expandedArchives.clear();
+    expandedArchives = new Set();
+    log(`📁 全部折叠`);
+  }
+
+  // 当文件列表变化时，自动应用智能展开
+  $effect(() => {
+    if (ns.files.length > 0 && !autoExpandApplied) {
+      applySmartExpansion();
+    }
+  });
+
+  // 当重置时，重置展开状态
+  $effect(() => {
+    if (ns.files.length === 0) {
+      autoExpandApplied = false;
+    }
+  });
 </script>
 
 <!-- ========== 统一 UI 结构的区块 ========== -->
@@ -751,19 +829,80 @@
   {/if}
 {/snippet}
 
-<!-- 文件列表 -->
+<!-- 文件夹树渲染 -->
+{#snippet renderTreeNode(node: TreeNode, depth: number = 0)}
+  {@const isExpanded = expandedArchives.has(node.path)}
+  {@const hasChildren = node.children && node.children.length > 0}
+
+  <div class="select-none">
+    <div
+      class="flex items-center gap-1 py-0.5 px-1 rounded hover:bg-muted/50 cursor-pointer text-xs"
+      style="padding-left: {depth * 12}px"
+      onclick={() => hasChildren && toggleArchive(node.path)}
+      onkeydown={(e) =>
+        e.key === "Enter" && hasChildren && toggleArchive(node.path)}
+      role="button"
+      tabindex="0"
+    >
+      {#if hasChildren}
+        {#if isExpanded}
+          <ChevronDown class="w-3 h-3 text-muted-foreground shrink-0" />
+        {:else}
+          <ChevronRight class="w-3 h-3 text-muted-foreground shrink-0" />
+        {/if}
+      {:else}
+        <span class="w-3 h-3 shrink-0"></span>
+      {/if}
+
+      {#if node.isArchive}
+        <Package class="w-3 h-3 text-purple-500 shrink-0" />
+      {:else if node.isFolder}
+        <span class="text-yellow-500 shrink-0">📁</span>
+      {:else}
+        <File class="w-3 h-3 text-blue-500 shrink-0" />
+      {/if}
+
+      <span class="truncate flex-1" title={node.path}>{node.name}</span>
+
+      {#if !node.isFolder && !node.isArchive && node.fileIndex !== undefined}
+        {@const file = ns.files[node.fileIndex]}
+        {#if file}
+          {#if file.resolution && ns.withImageMeta}
+            <span class="cq-text-sm text-blue-600 shrink-0 font-mono"
+              >{file.resolution}</span
+            >
+          {/if}
+          <span class="cq-text-sm text-muted-foreground shrink-0"
+            >{file.size_formatted}</span
+          >
+        {/if}
+      {:else if hasChildren}
+        <span class="text-muted-foreground shrink-0 text-xs"
+          >{node.children.length}</span
+        >
+      {/if}
+    </div>
+
+    {#if hasChildren && isExpanded}
+      {#each node.children as child}
+        {@render renderTreeNode(child, depth + 1)}
+      {/each}
+    {/if}
+  </div>
+{/snippet}
+
+<!-- 文件树 -->
 {#snippet treeBlock()}
-  {@const displayLimit = 200}
-  {@const displayFiles = ns.files.slice(0, displayLimit)}
+  {@const fileTree = buildCompleteFileTree(filePaths)}
   {@const totalCount = ns.searchResult?.total_count ?? ns.files.length}
   <div class="h-full flex flex-col overflow-hidden">
     <div
       class="flex items-center justify-between cq-padding border-b bg-muted/30 shrink-0"
     >
       <span class="cq-text font-semibold flex items-center gap-1">
-        <Folder class="cq-icon text-yellow-500" />文件列表
+        <Folder class="cq-icon text-yellow-500" />文件树
       </span>
-      <div class="flex items-center gap-1">
+      <div class="flex items-center cq-gap">
         <span class="cq-text-sm text-muted-foreground">
           {#if totalCount > ns.files.length}
             {ns.files.length.toLocaleString()}/{totalCount.toLocaleString()}
@@ -771,64 +910,76 @@
             {ns.files.length.toLocaleString()}
           {/if}
         </span>
-        {#if ns.files.length > 0}
+        <div class="flex items-center gap-0.5">
           <Button
             variant="ghost"
             size="icon"
             class="h-5 w-5"
-            onclick={() =>
-              copyToClipboard(
-                ns.files
-                  .map((f) =>
-                    f.container ? `${f.container}//${f.path}` : f.path,
-                  )
-                  .join("\n"),
-                (v) => (copiedPath = v),
-              )}
+            onclick={applySmartExpansion}
+            title="智能展开"
           >
-            {#if copiedPath}<Check class="w-3 h-3 text-green-500" />{:else}<Copy
-                class="w-3 h-3"
-              />{/if}
+            <Sparkles class="w-3 h-3 text-yellow-500" />
           </Button>
-        {/if}
+          <Button
+            variant="ghost"
+            size="icon"
+            class="h-5 w-5"
+            onclick={expandAll}
+            title="全部展开"
+          >
+            <ChevronDown class="w-3 h-3" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            class="h-5 w-5"
+            onclick={collapseAll}
+            title="全部折叠"
+          >
+            <ChevronRight class="w-3 h-3" />
+          </Button>
+
+          {#if ns.files.length > 0}
+            <Button
+              variant="ghost"
+              size="icon"
+              class="h-5 w-5"
+              onclick={() =>
+                copyToClipboard(
+                  ns.files
+                    .map((f) =>
+                      f.container ? `${f.container}//${f.path}` : f.path,
+                    )
+                    .join("\n"),
+                  (v) => (copiedPath = v),
+                )}
+              title="复制路径"
+            >
+              {#if copiedPath}<Check
+                  class="w-3 h-3 text-green-500"
+                />{:else}<Copy class="w-3 h-3" />{/if}
+            </Button>
+          {/if}
+        </div>
       </div>
     </div>
     <div class="flex-1 overflow-y-auto cq-padding">
       {#if ns.files.length > 0}
-        <div class="space-y-0.5">
-          {#each displayFiles as file, idx (file.container ? `${file.container}//${file.path}//${idx}` : `${file.path}//${idx}`)}
-            <div
-              class="flex items-center gap-1 cq-text truncate py-0.5 hover:bg-muted/50 rounded px-1"
-            >
-              {#if file.container}
-                <Package class="w-3 h-3 text-purple-500 shrink-0" />
-              {:else}
-                <File class="w-3 h-3 text-blue-500 shrink-0" />
-              {/if}
-              <span class="truncate flex-1">{file.name}</span>
-              {#if file.resolution && ns.withImageMeta}
-                <span class="cq-text-sm text-blue-600 shrink-0 font-mono"
-                  >{file.resolution}</span
-                >
-              {/if}
-              <span class="cq-text-sm text-muted-foreground shrink-0"
-                >{file.size_formatted}</span
+        {#each fileTree.children as child}
+          {@render renderTreeNode(child)}
+        {/each}
+        {#if ns.files.length > 500}
+          <div
+            class="cq-text-sm text-muted-foreground text-center py-2 border-t mt-1"
+          >
+            共 {ns.files.length.toLocaleString()} 条
+            {#if totalCount > ns.files.length}
+              <br /><span class="text-orange-500"
+                >（总计 {totalCount.toLocaleString()} 条，已截断）</span
               >
-            </div>
-          {/each}
-          {#if ns.files.length > displayLimit}
-            <div
-              class="cq-text-sm text-muted-foreground text-center py-2 border-t mt-1"
-            >
-              显示前 {displayLimit} 条，共 {ns.files.length.toLocaleString()} 条
-              {#if totalCount > ns.files.length}
-                <br /><span class="text-orange-500"
-                  >（总计 {totalCount.toLocaleString()} 条，已截断）</span
-                >
-              {/if}
-            </div>
-          {/if}
-        </div>
+            {/if}
+          </div>
+        {/if}
       {:else}
         <div class="cq-text text-muted-foreground text-center py-4">
           搜索后显示

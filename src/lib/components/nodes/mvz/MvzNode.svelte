@@ -20,7 +20,7 @@
     buildCompleteFileTree,
     calculateSmartExpansion,
     type TreeNode,
-  } from "./treeUtils";
+  } from "$lib/utils/treeUtils";
   import {
     Package,
     LoaderCircle,

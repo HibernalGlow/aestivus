@@ -1,6 +1,7 @@
 /**
- * MVZ 文件树工具函数
+ * 共享文件树工具函数
  * 包含树构建和智能展开算法
+ * 用于 MvzNode, FindzNode 等多个节点
  */
 
 export interface TreeNode {

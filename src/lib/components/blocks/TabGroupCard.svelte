@@ -8,7 +8,7 @@
   import type { Snippet, Component } from 'svelte';
   import type { TabGroup } from '$lib/stores/nodeLayoutStore';
   import { getBlockDefinition } from './blockRegistry';
-  import { X, GripVertical, Ungroup, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Plus, Minus } from '@lucide/svelte';
+  import { X, GripVertical, Ungroup, ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Plus, Minus, ArrowUp, ArrowDown, ArrowLeft, ArrowRight } from '@lucide/svelte';
   import { flip } from 'svelte/animate';
   import { dndzone } from 'svelte-dnd-action';
   import { settingsManager } from '$lib/settings/settingsManager';
@@ -33,12 +33,20 @@
     /** 渲染区块内容 */
     renderContent: Snippet<[string]>;
     class?: string;
-    /** 是否启用区块尺寸编辑模式（节点模式下） */
+    /** 是否启用区块尺寸编辑模式 */
     sizeEditMode?: boolean;
-    /** 当前宽度（节点模式下） */
+    /** 当前 X 位置（全屏模式） */
+    currentX?: number;
+    /** 当前 Y 位置（全屏模式） */
+    currentY?: number;
+    /** 当前宽度 */
     currentW?: number;
-    /** 当前高度（节点模式下） */
+    /** 当前高度 */
     currentH?: number;
+    /** X 位置变化回调（全屏模式） */
+    onXChange?: (delta: number) => void;
+    /** Y 位置变化回调（全屏模式） */
+    onYChange?: (delta: number) => void;
     /** 宽度变化回调 */
     onWidthChange?: (delta: number) => void;
     /** 高度变化回调 */
@@ -56,8 +64,12 @@
     renderContent, 
     class: className = '',
     sizeEditMode = false,
+    currentX = 0,
+    currentY = 0,
     currentW = 1,
     currentH = 1,
+    onXChange,
+    onYChange,
     onWidthChange,
     onHeightChange
   }: Props = $props();
@@ -221,62 +233,127 @@
       <!-- 半透明背景 -->
       <div class="absolute inset-0 bg-primary/5 backdrop-blur-[2px] pointer-events-auto rounded-lg"></div>
       
-      <!-- 调整控制面板 - 竖排显示，自适应宽度 -->
-      <div class="relative pointer-events-auto bg-card/95 backdrop-blur-sm border-2 border-primary rounded-lg shadow-xl p-2 max-w-full">
-        <div class="flex flex-col items-center gap-2">
-          <!-- 宽度调整 -->
-          <div class="flex flex-col items-center gap-1 w-full">
-            <span class="text-xs font-medium text-muted-foreground">宽度</span>
-            <div class="flex items-center gap-1">
-              <button
-                type="button"
-                class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center flex-shrink-0"
-                onclick={() => onWidthChange(-1)}
-                disabled={currentW <= 1}
-                title="减小宽度"
-              >
-                <ChevronLeft class="w-3 h-3" />
-              </button>
-              <span class="text-sm font-semibold min-w-[1.25rem] text-center">{currentW}</span>
-              <button
-                type="button"
-                class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center flex-shrink-0"
-                onclick={() => onWidthChange(1)}
-                disabled={currentW >= (isFullscreen ? 4 : 2)}
-                title="增大宽度"
-              >
-                <ChevronRight class="w-3 h-3" />
-              </button>
+      <!-- 调整控制面板 -->
+      <div class="relative pointer-events-auto bg-card/95 backdrop-blur-sm border-2 border-primary rounded-lg shadow-xl p-3 max-w-full">
+        <div class="flex gap-4">
+          <!-- 左侧：位置调整（十字方向键，仅全屏模式） -->
+          {#if isFullscreen && onXChange && onYChange}
+            <div class="flex flex-col items-center gap-1">
+              <span class="text-xs font-medium text-muted-foreground mb-1">位置</span>
+              <div class="grid grid-cols-3 gap-0.5">
+                <!-- 空 -->
+                <div class="w-6 h-6"></div>
+                <!-- 上 -->
+                <button
+                  type="button"
+                  class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
+                  onclick={() => onYChange(-1)}
+                  disabled={currentY <= 0}
+                  title="上移"
+                >
+                  <ArrowUp class="w-3 h-3" />
+                </button>
+                <!-- 空 -->
+                <div class="w-6 h-6"></div>
+                <!-- 左 -->
+                <button
+                  type="button"
+                  class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
+                  onclick={() => onXChange(-1)}
+                  disabled={currentX <= 0}
+                  title="左移"
+                >
+                  <ArrowLeft class="w-3 h-3" />
+                </button>
+                <!-- 中心（显示坐标） -->
+                <div class="w-6 h-6 flex items-center justify-center text-[9px] font-mono text-muted-foreground">
+                  {currentX},{currentY}
+                </div>
+                <!-- 右 -->
+                <button
+                  type="button"
+                  class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
+                  onclick={() => onXChange(1)}
+                  disabled={currentX >= (4 - currentW)}
+                  title="右移"
+                >
+                  <ArrowRight class="w-3 h-3" />
+                </button>
+                <!-- 空 -->
+                <div class="w-6 h-6"></div>
+                <!-- 下 -->
+                <button
+                  type="button"
+                  class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center"
+                  onclick={() => onYChange(1)}
+                  title="下移"
+                >
+                  <ArrowDown class="w-3 h-3" />
+                </button>
+                <!-- 空 -->
+                <div class="w-6 h-6"></div>
+              </div>
             </div>
-          </div>
+            <!-- 分隔线 -->
+            <div class="w-px bg-border/60 self-stretch"></div>
+          {/if}
           
-          <!-- 高度调整 -->
-          {#if onHeightChange}
+          <!-- 右侧：尺寸调整 -->
+          <div class="flex flex-col items-center gap-2">
+            <!-- 宽度调整 -->
             <div class="flex flex-col items-center gap-1 w-full">
-              <span class="text-xs font-medium text-muted-foreground">高度</span>
+              <span class="text-xs font-medium text-muted-foreground">宽度</span>
               <div class="flex items-center gap-1">
                 <button
                   type="button"
-                  class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center flex-shrink-0"
-                  onclick={() => onHeightChange(-1)}
-                  disabled={currentH <= 1}
-                  title="减小高度"
+                  class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center shrink-0"
+                  onclick={() => onWidthChange(-1)}
+                  disabled={currentW <= 1}
+                  title="减小宽度"
                 >
-                  <ChevronUp class="w-3 h-3" />
+                  <Minus class="w-3 h-3" />
                 </button>
-                <span class="text-sm font-semibold min-w-[1.25rem] text-center">{currentH}</span>
+                <span class="text-sm font-semibold min-w-5 text-center">{currentW}</span>
                 <button
                   type="button"
-                  class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center flex-shrink-0"
-                  onclick={() => onHeightChange(1)}
-                  disabled={currentH >= (isFullscreen ? 6 : 4)}
-                  title="增大高度"
+                  class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center shrink-0"
+                  onclick={() => onWidthChange(1)}
+                  disabled={currentW >= (isFullscreen ? 4 : 2)}
+                  title="增大宽度"
                 >
-                  <ChevronDown class="w-3 h-3" />
+                  <Plus class="w-3 h-3" />
                 </button>
               </div>
             </div>
-          {/if}
+            
+            <!-- 高度调整 -->
+            {#if onHeightChange}
+              <div class="flex flex-col items-center gap-1 w-full">
+                <span class="text-xs font-medium text-muted-foreground">高度</span>
+                <div class="flex items-center gap-1">
+                  <button
+                    type="button"
+                    class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center shrink-0"
+                    onclick={() => onHeightChange(-1)}
+                    disabled={currentH <= 1}
+                    title="减小高度"
+                  >
+                    <Minus class="w-3 h-3" />
+                  </button>
+                  <span class="text-sm font-semibold min-w-5 text-center">{currentH}</span>
+                  <button
+                    type="button"
+                    class="w-6 h-6 rounded-md bg-muted hover:bg-primary hover:text-primary-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center shrink-0"
+                    onclick={() => onHeightChange(1)}
+                    disabled={currentH >= (isFullscreen ? 6 : 4)}
+                    title="增大高度"
+                  >
+                    <Plus class="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            {/if}
+          </div>
         </div>
       </div>
       

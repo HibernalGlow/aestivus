@@ -509,6 +509,49 @@
     }
   }
 
+  /** 处理区块 X 位置变化（仅全屏模式） */
+  function handleXChange(blockId: string, delta: number) {
+    if (!isFullscreen) return;
+    
+    const layout = [...currentLayout];
+    const itemIndex = layout.findIndex(item => item.id === blockId);
+    if (itemIndex === -1) return;
+    
+    const item = layout[itemIndex];
+    // X 范围：0 到 (4 - w)，确保不超出右边界
+    const maxX = 4 - item.w;
+    const newX = Math.max(0, Math.min(maxX, item.x + delta));
+    if (newX === item.x) return;
+    
+    layout[itemIndex] = { ...item, x: newX };
+    updateGridLayout(nodeType, mode, layout);
+    
+    if (dashboardGrid?.updateItem) {
+      dashboardGrid.updateItem(blockId, newX, item.y, item.w, item.h);
+    }
+  }
+
+  /** 处理区块 Y 位置变化（仅全屏模式） */
+  function handleYChange(blockId: string, delta: number) {
+    if (!isFullscreen) return;
+    
+    const layout = [...currentLayout];
+    const itemIndex = layout.findIndex(item => item.id === blockId);
+    if (itemIndex === -1) return;
+    
+    const item = layout[itemIndex];
+    // Y 范围：最小 0，无上限（可以向下滚动）
+    const newY = Math.max(0, item.y + delta);
+    if (newY === item.y) return;
+    
+    layout[itemIndex] = { ...item, y: newY };
+    updateGridLayout(nodeType, mode, layout);
+    
+    if (dashboardGrid?.updateItem) {
+      dashboardGrid.updateItem(blockId, item.x, newY, item.w, item.h);
+    }
+  }
+
   /** 根据高度值计算 CSS 高度样式 */
   function getHeightStyle(h: number): string {
     // h=1 表示自动高度，h>1 表示固定高度（每单位约 80px）
@@ -557,8 +600,12 @@
               onRemoveBlock={(blockId) => handleRemoveBlockFromGroup(tabGroup.id, blockId)}
               onReorder={(newOrder) => handleReorderTabGroup(tabGroup.id, newOrder)}
               sizeEditMode={editMode}
+              currentX={item.x}
+              currentY={item.y}
               currentW={item.w}
               currentH={item.h}
+              onXChange={(delta) => handleXChange(gridItem.id, delta)}
+              onYChange={(delta) => handleYChange(gridItem.id, delta)}
               onWidthChange={(delta) => handleWidthChange(gridItem.id, delta)}
               onHeightChange={(delta) => handleHeightChange(gridItem.id, delta)}
             >
@@ -579,8 +626,12 @@
                 fullHeight={blockDef.fullHeight}
                 hideHeader={blockDef.hideHeader}
                 {editMode}
+                currentX={item.x}
+                currentY={item.y}
                 currentW={item.w}
                 currentH={item.h}
+                onXChange={(delta) => handleXChange(gridItem.id, delta)}
+                onYChange={(delta) => handleYChange(gridItem.id, delta)}
                 onWidthChange={(delta) => handleWidthChange(gridItem.id, delta)}
                 onHeightChange={(delta) => handleHeightChange(gridItem.id, delta)}
               >

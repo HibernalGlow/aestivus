@@ -4,16 +4,36 @@
    * 不是 SQL 可视化，而是重新设计的易用交互
    * 支持预设保存/加载系统
    */
-  import { Button } from '$lib/components/ui/button';
-  import { Input } from '$lib/components/ui/input';
-  import * as Select from '$lib/components/ui/select';
-  import * as Dialog from '$lib/components/ui/dialog';
-  import { 
-    Plus, X, Code, Sparkles, FileText, Calendar, HardDrive,
-    Archive, Folder, Image, Video, Music, FileCode, File,
-    Save, FolderOpen, Trash2, Star, Package, Pencil, Check,
-    GripVertical, ArrowUp, ArrowDown
-  } from '@lucide/svelte';
+  import { Button } from "$lib/components/ui/button";
+  import { Input } from "$lib/components/ui/input";
+  import * as Select from "$lib/components/ui/select";
+  import * as Dialog from "$lib/components/ui/dialog";
+  import {
+    Plus,
+    X,
+    Code,
+    Sparkles,
+    FileText,
+    Calendar,
+    HardDrive,
+    Archive,
+    Folder,
+    Image,
+    Video,
+    Music,
+    FileCode,
+    File,
+    Save,
+    FolderOpen,
+    Trash2,
+    Star,
+    Package,
+    Pencil,
+    Check,
+    GripVertical,
+    ArrowUp,
+    ArrowDown,
+  } from "@lucide/svelte";
 
   // 过滤器配置类型
   interface FilterConfig {
@@ -31,12 +51,12 @@
     // 名称匹配
     nameEnabled: boolean;
     namePattern: string;
-    nameMode: 'contains' | 'starts' | 'ends' | 'regex';
+    nameMode: "contains" | "starts" | "ends" | "regex";
     // 位置
     locationEnabled: boolean;
-    inArchive: 'any' | 'yes' | 'no';
+    inArchive: "any" | "yes" | "no";
     // 类型
-    itemType: 'any' | 'file' | 'dir';
+    itemType: "any" | "file" | "dir";
     // 自定义扩展名（包含）
     customExts: string[];
     // 排除的扩展名
@@ -69,46 +89,46 @@
     onImageMetaChange?: (enabled: boolean) => void;
   }
 
-  let { 
+  let {
     value,
     onchange,
     disabled = false,
     showAdvanced = true,
     advancedMode = false,
-    sqlValue = '1',
+    sqlValue = "1",
     onAdvancedChange,
-    onImageMetaChange
+    onImageMetaChange,
   }: Props = $props();
 
   // 默认配置（默认排除目录，只搜索文件）
   const defaultConfig: FilterConfig = {
     fileTypes: [],
     sizeEnabled: false,
-    sizeMin: '',
-    sizeMax: '',
+    sizeMin: "",
+    sizeMax: "",
     dateEnabled: false,
-    datePreset: 'any',
-    dateStart: '',
-    dateEnd: '',
+    datePreset: "any",
+    dateStart: "",
+    dateEnd: "",
     nameEnabled: false,
-    namePattern: '',
-    nameMode: 'contains',
+    namePattern: "",
+    nameMode: "contains",
     locationEnabled: false,
-    inArchive: 'any',
-    itemType: 'file',  // 默认只搜索文件，排除目录
+    inArchive: "any",
+    itemType: "file", // 默认只搜索文件，排除目录
     customExts: [],
     excludeExts: [],
     imageMetaEnabled: false,
-    widthMin: '',
-    widthMax: '',
-    heightMin: '',
-    heightMax: '',
-    resolutionPreset: 'any',
+    widthMin: "",
+    widthMax: "",
+    heightMin: "",
+    heightMax: "",
+    resolutionPreset: "any",
   };
 
   let config = $state<FilterConfig>(value ?? { ...defaultConfig });
-  let customExtInput = $state('');
-  let excludeExtInput = $state('');  // 排除扩展名输入
+  let customExtInput = $state("");
+  let excludeExtInput = $state(""); // 排除扩展名输入
   let internalSql = $state(sqlValue);
 
   // 预设系统
@@ -122,110 +142,110 @@
   // 内置预设（都默认排除目录）
   const BUILTIN_PRESETS: Preset[] = [
     {
-      id: 'all-files',
-      name: '所有文件',
+      id: "all-files",
+      name: "所有文件",
       isBuiltin: true,
       config: {
         ...defaultConfig,
-        itemType: 'file',
-      }
+        itemType: "file",
+      },
     },
     {
-      id: 'jxl-in-archive',
-      name: '压缩包内JXL',
+      id: "jxl-in-archive",
+      name: "压缩包内JXL",
       isBuiltin: true,
       config: {
         ...defaultConfig,
-        customExts: ['jxl'],
+        customExts: ["jxl"],
         locationEnabled: true,
-        inArchive: 'yes',
-        itemType: 'file',
-      }
+        inArchive: "yes",
+        itemType: "file",
+      },
     },
     {
-      id: 'archive-no-avif',
-      name: '压缩包内(无AVIF/WEBP)',
+      id: "archive-no-avif",
+      name: "压缩包内(无AVIF/WEBP)",
       isBuiltin: true,
       config: {
         ...defaultConfig,
-        excludeExts: ['avif', 'webp'],
+        excludeExts: ["avif", "webp"],
         locationEnabled: true,
-        inArchive: 'yes',
-        itemType: 'file',
-      }
+        inArchive: "yes",
+        itemType: "file",
+      },
     },
     {
-      id: 'height-630-archive',
-      name: '压缩包内高度630',
+      id: "height-630-archive",
+      name: "压缩包内高度630",
       isBuiltin: true,
       config: {
         ...defaultConfig,
-        fileTypes: ['images'],
+        fileTypes: ["images"],
         locationEnabled: true,
-        inArchive: 'yes',
-        itemType: 'file',
+        inArchive: "yes",
+        itemType: "file",
         imageMetaEnabled: true,
-        heightMin: '630',
-        heightMax: '630',
-      }
+        heightMin: "630",
+        heightMax: "630",
+      },
     },
     {
-      id: 'large-files',
-      name: '大文件 (>100MB)',
+      id: "large-files",
+      name: "大文件 (>100MB)",
       isBuiltin: true,
       config: {
         ...defaultConfig,
         sizeEnabled: true,
-        sizeMin: '100M',
-        sizeMax: '',
-        itemType: 'file',
-      }
+        sizeMin: "100M",
+        sizeMax: "",
+        itemType: "file",
+      },
     },
     {
-      id: 'recent-images',
-      name: '本周图片',
+      id: "recent-images",
+      name: "本周图片",
       isBuiltin: true,
       config: {
         ...defaultConfig,
-        fileTypes: ['images'],
+        fileTypes: ["images"],
         dateEnabled: true,
-        datePreset: 'week',
-        itemType: 'file',
-      }
+        datePreset: "week",
+        itemType: "file",
+      },
     },
     {
-      id: 'nested-archives',
-      name: '嵌套压缩包',
+      id: "nested-archives",
+      name: "嵌套压缩包",
       isBuiltin: true,
       config: {
         ...defaultConfig,
-        fileTypes: ['archives'],
+        fileTypes: ["archives"],
         locationEnabled: true,
-        inArchive: 'yes',
-        itemType: 'file',
-      }
+        inArchive: "yes",
+        itemType: "file",
+      },
     },
     {
-      id: 'dirs-only',
-      name: '仅目录',
+      id: "dirs-only",
+      name: "仅目录",
       isBuiltin: true,
       config: {
         ...defaultConfig,
-        itemType: 'dir',
-      }
+        itemType: "dir",
+      },
     },
   ];
 
-  const STORAGE_KEY = 'findz-filter-presets';
+  const STORAGE_KEY = "findz-filter-presets";
   let userPresets = $state<Preset[]>([]);
   let presetDialogOpen = $state(false);
   let saveDialogOpen = $state(false);
-  let newPresetName = $state('');
-  
+  let newPresetName = $state("");
+
   // 编辑模式状态
   let editMode = $state(false);
   let editingPresetId = $state<string | null>(null);
-  let editingPresetName = $state('');
+  let editingPresetName = $state("");
 
   // 加载用户预设
   function loadUserPresets() {
@@ -235,7 +255,7 @@
         userPresets = JSON.parse(saved);
       }
     } catch (e) {
-      console.error('加载预设失败:', e);
+      console.error("加载预设失败:", e);
     }
   }
 
@@ -244,19 +264,19 @@
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(userPresets));
     } catch (e) {
-      console.error('保存预设失败:', e);
+      console.error("保存预设失败:", e);
     }
   }
 
   // 应用预设
   function applyPreset(preset: Preset) {
     config = { ...preset.config };
-    
+
     // 如果预设启用了图片元数据，通知父组件
     if (config.imageMetaEnabled && onImageMetaChange) {
       onImageMetaChange(true);
     }
-    
+
     emitChange();
     presetDialogOpen = false;
   }
@@ -271,13 +291,13 @@
     };
     userPresets = [...userPresets, newPreset];
     saveUserPresets();
-    newPresetName = '';
+    newPresetName = "";
     saveDialogOpen = false;
   }
 
   // 删除用户预设
   function deletePreset(presetId: string) {
-    userPresets = userPresets.filter(p => p.id !== presetId);
+    userPresets = userPresets.filter((p) => p.id !== presetId);
     saveUserPresets();
   }
 
@@ -290,30 +310,33 @@
   // 确认重命名
   function confirmRename() {
     if (!editingPresetId || !editingPresetName.trim()) return;
-    userPresets = userPresets.map(p => 
-      p.id === editingPresetId ? { ...p, name: editingPresetName.trim() } : p
+    userPresets = userPresets.map((p) =>
+      p.id === editingPresetId ? { ...p, name: editingPresetName.trim() } : p,
     );
     saveUserPresets();
     editingPresetId = null;
-    editingPresetName = '';
+    editingPresetName = "";
   }
 
   // 取消重命名
   function cancelRename() {
     editingPresetId = null;
-    editingPresetName = '';
+    editingPresetName = "";
   }
 
   // 移动预设位置
-  function movePreset(presetId: string, direction: 'up' | 'down') {
-    const index = userPresets.findIndex(p => p.id === presetId);
+  function movePreset(presetId: string, direction: "up" | "down") {
+    const index = userPresets.findIndex((p) => p.id === presetId);
     if (index === -1) return;
-    
-    const newIndex = direction === 'up' ? index - 1 : index + 1;
+
+    const newIndex = direction === "up" ? index - 1 : index + 1;
     if (newIndex < 0 || newIndex >= userPresets.length) return;
-    
+
     const newPresets = [...userPresets];
-    [newPresets[index], newPresets[newIndex]] = [newPresets[newIndex], newPresets[index]];
+    [newPresets[index], newPresets[newIndex]] = [
+      newPresets[newIndex],
+      newPresets[index],
+    ];
     userPresets = newPresets;
     saveUserPresets();
   }
@@ -323,7 +346,7 @@
     editMode = !editMode;
     if (!editMode) {
       editingPresetId = null;
-      editingPresetName = '';
+      editingPresetName = "";
     }
   }
 
@@ -334,38 +357,108 @@
 
   // 文件类型预设
   const FILE_TYPE_PRESETS = [
-    { id: 'images', label: '图片', icon: Image, exts: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg', 'ico', 'jxl', 'avif'] },
-    { id: 'videos', label: '视频', icon: Video, exts: ['mp4', 'mkv', 'avi', 'mov', 'wmv', 'flv', 'webm', 'm4v'] },
-    { id: 'audio', label: '音频', icon: Music, exts: ['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'wma'] },
-    { id: 'docs', label: '文档', icon: FileText, exts: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'md', 'rtf'] },
-    { id: 'archives', label: '压缩包', icon: Archive, exts: ['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz'] },
-    { id: 'code', label: '代码', icon: FileCode, exts: ['py', 'js', 'ts', 'java', 'c', 'cpp', 'h', 'go', 'rs', 'rb', 'php', 'html', 'css', 'json', 'xml', 'yaml', 'yml'] },
-    { id: 'jxl', label: 'JXL', icon: Image, exts: ['jxl'] },
+    {
+      id: "images",
+      label: "图片",
+      icon: Image,
+      exts: [
+        "jpg",
+        "jpeg",
+        "png",
+        "gif",
+        "webp",
+        "bmp",
+        "svg",
+        "ico",
+        "jxl",
+        "avif",
+      ],
+    },
+    {
+      id: "videos",
+      label: "视频",
+      icon: Video,
+      exts: ["mp4", "mkv", "avi", "mov", "wmv", "flv", "webm", "m4v"],
+    },
+    {
+      id: "audio",
+      label: "音频",
+      icon: Music,
+      exts: ["mp3", "wav", "flac", "aac", "ogg", "m4a", "wma"],
+    },
+    {
+      id: "docs",
+      label: "文档",
+      icon: FileText,
+      exts: [
+        "pdf",
+        "doc",
+        "docx",
+        "xls",
+        "xlsx",
+        "ppt",
+        "pptx",
+        "txt",
+        "md",
+        "rtf",
+      ],
+    },
+    {
+      id: "archives",
+      label: "压缩包",
+      icon: Archive,
+      exts: ["zip", "rar", "7z", "tar", "gz", "bz2", "xz"],
+    },
+    {
+      id: "code",
+      label: "代码",
+      icon: FileCode,
+      exts: [
+        "py",
+        "js",
+        "ts",
+        "java",
+        "c",
+        "cpp",
+        "h",
+        "go",
+        "rs",
+        "rb",
+        "php",
+        "html",
+        "css",
+        "json",
+        "xml",
+        "yaml",
+        "yml",
+      ],
+    },
+    { id: "jxl", label: "JXL", icon: Image, exts: ["jxl"] },
   ];
 
   // 日期预设
   const DATE_PRESETS = [
-    { value: 'any', label: '不限' },
-    { value: 'today', label: '今天' },
-    { value: 'week', label: '本周' },
-    { value: 'month', label: '本月' },
-    { value: 'year', label: '今年' },
-    { value: 'custom', label: '自定义' },
+    { value: "any", label: "不限" },
+    { value: "today", label: "今天" },
+    { value: "week", label: "本周" },
+    { value: "month", label: "本月" },
+    { value: "year", label: "今年" },
+    { value: "custom", label: "自定义" },
   ];
 
   // 大小预设
   const SIZE_PRESETS = [
-    { label: '微小 (<10KB)', min: '', max: '10K' },
-    { label: '小 (<1MB)', min: '', max: '1M' },
-    { label: '中 (1-100MB)', min: '1M', max: '100M' },
-    { label: '大 (100MB-1GB)', min: '100M', max: '1G' },
-    { label: '超大 (>1GB)', min: '1G', max: '' },
+    { label: "微小 (<10KB)", min: "", max: "10K" },
+    { label: "小 (<1MB)", min: "", max: "1M" },
+    { label: "中 (1-100MB)", min: "1M", max: "100M" },
+    { label: "大 (100MB-1GB)", min: "100M", max: "1G" },
+    { label: "超大 (>1GB)", min: "1G", max: "" },
   ];
 
   // 切换文件类型
   function toggleFileType(typeId: string) {
     if (config.fileTypes.includes(typeId)) {
-      config.fileTypes = config.fileTypes.filter(t => t !== typeId);
+      config.fileTypes = config.fileTypes.filter((t) => t !== typeId);
     } else {
       config.fileTypes = [...config.fileTypes, typeId];
     }
@@ -374,38 +467,38 @@
 
   // 添加自定义扩展名
   function addCustomExt() {
-    const ext = customExtInput.trim().replace(/^\./, '').toLowerCase();
+    const ext = customExtInput.trim().replace(/^\./, "").toLowerCase();
     if (ext && !config.customExts.includes(ext)) {
       config.customExts = [...config.customExts, ext];
-      customExtInput = '';
+      customExtInput = "";
       emitChange();
     }
   }
 
   // 移除自定义扩展名
   function removeCustomExt(ext: string) {
-    config.customExts = config.customExts.filter(e => e !== ext);
+    config.customExts = config.customExts.filter((e) => e !== ext);
     emitChange();
   }
 
   // 添加排除扩展名
   function addExcludeExt() {
-    const ext = excludeExtInput.trim().replace(/^\./, '').toLowerCase();
+    const ext = excludeExtInput.trim().replace(/^\./, "").toLowerCase();
     if (ext && !config.excludeExts.includes(ext)) {
       config.excludeExts = [...config.excludeExts, ext];
-      excludeExtInput = '';
+      excludeExtInput = "";
       emitChange();
     }
   }
 
   // 移除排除扩展名
   function removeExcludeExt(ext: string) {
-    config.excludeExts = config.excludeExts.filter(e => e !== ext);
+    config.excludeExts = config.excludeExts.filter((e) => e !== ext);
     emitChange();
   }
 
   // 应用大小预设
-  function applySizePreset(preset: typeof SIZE_PRESETS[0]) {
+  function applySizePreset(preset: (typeof SIZE_PRESETS)[0]) {
     config.sizeEnabled = true;
     config.sizeMin = preset.min;
     config.sizeMax = preset.max;
@@ -419,19 +512,19 @@
     // 文件类型（包含）
     const allExts: string[] = [];
     for (const typeId of config.fileTypes) {
-      const preset = FILE_TYPE_PRESETS.find(p => p.id === typeId);
+      const preset = FILE_TYPE_PRESETS.find((p) => p.id === typeId);
       if (preset) allExts.push(...preset.exts);
     }
     allExts.push(...config.customExts);
-    
+
     if (allExts.length > 0) {
-      const extList = allExts.map(e => `"${e}"`).join(', ');
+      const extList = allExts.map((e) => `"${e}"`).join(", ");
       conditions.push(`ext IN (${extList})`);
     }
 
     // 文件类型（排除）
     if (config.excludeExts.length > 0) {
-      const excludeList = config.excludeExts.map(e => `"${e}"`).join(', ');
+      const excludeList = config.excludeExts.map((e) => `"${e}"`).join(", ");
       conditions.push(`ext NOT IN (${excludeList})`);
     }
 
@@ -447,22 +540,24 @@
     }
 
     // 日期
-    if (config.dateEnabled && config.datePreset !== 'any') {
-      if (config.datePreset === 'today') {
-        conditions.push('date = today');
-      } else if (config.datePreset === 'week') {
-        conditions.push('date >= mo');
-      } else if (config.datePreset === 'month') {
+    if (config.dateEnabled && config.datePreset !== "any") {
+      if (config.datePreset === "today") {
+        conditions.push("date = today");
+      } else if (config.datePreset === "week") {
+        conditions.push("date >= mo");
+      } else if (config.datePreset === "month") {
         // 获取本月第一天
         const now = new Date();
         const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
-        conditions.push(`date >= "${firstDay.toISOString().split('T')[0]}"`);
-      } else if (config.datePreset === 'year') {
+        conditions.push(`date >= "${firstDay.toISOString().split("T")[0]}"`);
+      } else if (config.datePreset === "year") {
         const year = new Date().getFullYear();
         conditions.push(`date >= "${year}-01-01"`);
-      } else if (config.datePreset === 'custom') {
+      } else if (config.datePreset === "custom") {
         if (config.dateStart && config.dateEnd) {
-          conditions.push(`date BETWEEN "${config.dateStart}" AND "${config.dateEnd}"`);
+          conditions.push(
+            `date BETWEEN "${config.dateStart}" AND "${config.dateEnd}"`,
+          );
         } else if (config.dateStart) {
           conditions.push(`date >= "${config.dateStart}"`);
         } else if (config.dateEnd) {
@@ -475,24 +570,24 @@
     if (config.nameEnabled && config.namePattern) {
       const pattern = config.namePattern;
       switch (config.nameMode) {
-        case 'contains':
+        case "contains":
           conditions.push(`name ILIKE "%${pattern}%"`);
           break;
-        case 'starts':
+        case "starts":
           conditions.push(`name ILIKE "${pattern}%"`);
           break;
-        case 'ends':
+        case "ends":
           conditions.push(`name ILIKE "%${pattern}"`);
           break;
-        case 'regex':
+        case "regex":
           conditions.push(`name RLIKE "${pattern}"`);
           break;
       }
     }
 
     // 位置（是否在压缩包内）
-    if (config.locationEnabled && config.inArchive !== 'any') {
-      if (config.inArchive === 'yes') {
+    if (config.locationEnabled && config.inArchive !== "any") {
+      if (config.inArchive === "yes") {
         conditions.push('archive <> ""');
       } else {
         conditions.push('archive = ""');
@@ -500,7 +595,7 @@
     }
 
     // 类型
-    if (config.itemType !== 'any') {
+    if (config.itemType !== "any") {
       conditions.push(`type = "${config.itemType}"`);
     }
 
@@ -508,28 +603,32 @@
     if (config.imageMetaEnabled) {
       // 宽度
       if (config.widthMin && config.widthMax) {
-        conditions.push(`width BETWEEN ${config.widthMin} AND ${config.widthMax}`);
+        conditions.push(
+          `width BETWEEN ${config.widthMin} AND ${config.widthMax}`,
+        );
       } else if (config.widthMin) {
         conditions.push(`width >= ${config.widthMin}`);
       } else if (config.widthMax) {
         conditions.push(`width <= ${config.widthMax}`);
       }
-      
+
       // 高度
       if (config.heightMin && config.heightMax) {
-        conditions.push(`height BETWEEN ${config.heightMin} AND ${config.heightMax}`);
+        conditions.push(
+          `height BETWEEN ${config.heightMin} AND ${config.heightMax}`,
+        );
       } else if (config.heightMin) {
         conditions.push(`height >= ${config.heightMin}`);
       } else if (config.heightMax) {
         conditions.push(`height <= ${config.heightMax}`);
       }
-      
+
       // 分辨率预设
-      if (config.resolutionPreset && config.resolutionPreset !== 'any') {
+      if (config.resolutionPreset && config.resolutionPreset !== "any") {
         const presets: Record<string, string> = {
-          '1080p': 'resolution = "1920x1080"',
-          '4k': 'resolution = "3840x2160"',
-          '8k': 'resolution = "7680x4320"',
+          "1080p": 'resolution = "1920x1080"',
+          "4k": 'resolution = "3840x2160"',
+          "8k": 'resolution = "7680x4320"',
         };
         if (presets[config.resolutionPreset]) {
           conditions.push(presets[config.resolutionPreset]);
@@ -537,7 +636,7 @@
       }
     }
 
-    return conditions.length > 0 ? conditions.join(' AND ') : '1';
+    return conditions.length > 0 ? conditions.join(" AND ") : "1";
   }
 
   // 生成 JSON 配置
@@ -547,71 +646,96 @@
     // 文件类型（包含）
     const allExts: string[] = [];
     for (const typeId of config.fileTypes) {
-      const preset = FILE_TYPE_PRESETS.find(p => p.id === typeId);
+      const preset = FILE_TYPE_PRESETS.find((p) => p.id === typeId);
       if (preset) allExts.push(...preset.exts);
     }
     allExts.push(...config.customExts);
-    
+
     if (allExts.length > 0) {
-      conditions.push({ field: 'ext', op: 'in', value: allExts });
+      conditions.push({ field: "ext", op: "in", value: allExts });
     }
 
     // 文件类型（排除）
     if (config.excludeExts.length > 0) {
-      conditions.push({ field: 'ext', op: 'not_in', value: config.excludeExts });
+      conditions.push({
+        field: "ext",
+        op: "not_in",
+        value: config.excludeExts,
+      });
     }
 
     // 大小
     if (config.sizeEnabled) {
       if (config.sizeMin && config.sizeMax) {
-        conditions.push({ field: 'size', op: 'between', value: [config.sizeMin, config.sizeMax] });
+        conditions.push({
+          field: "size",
+          op: "between",
+          value: [config.sizeMin, config.sizeMax],
+        });
       } else if (config.sizeMin) {
-        conditions.push({ field: 'size', op: '>=', value: config.sizeMin });
+        conditions.push({ field: "size", op: ">=", value: config.sizeMin });
       } else if (config.sizeMax) {
-        conditions.push({ field: 'size', op: '<=', value: config.sizeMax });
+        conditions.push({ field: "size", op: "<=", value: config.sizeMax });
       }
     }
 
     // 日期
-    if (config.dateEnabled && config.datePreset !== 'any') {
-      if (config.datePreset === 'today') {
-        conditions.push({ field: 'date', op: '=', value: 'today' });
-      } else if (config.datePreset === 'week') {
-        conditions.push({ field: 'date', op: '>=', value: 'mo' });
-      } else if (config.datePreset === 'custom') {
+    if (config.dateEnabled && config.datePreset !== "any") {
+      if (config.datePreset === "today") {
+        conditions.push({ field: "date", op: "=", value: "today" });
+      } else if (config.datePreset === "week") {
+        conditions.push({ field: "date", op: ">=", value: "mo" });
+      } else if (config.datePreset === "custom") {
         if (config.dateStart && config.dateEnd) {
-          conditions.push({ field: 'date', op: 'between', value: [config.dateStart, config.dateEnd] });
+          conditions.push({
+            field: "date",
+            op: "between",
+            value: [config.dateStart, config.dateEnd],
+          });
         } else if (config.dateStart) {
-          conditions.push({ field: 'date', op: '>=', value: config.dateStart });
+          conditions.push({ field: "date", op: ">=", value: config.dateStart });
         } else if (config.dateEnd) {
-          conditions.push({ field: 'date', op: '<=', value: config.dateEnd });
+          conditions.push({ field: "date", op: "<=", value: config.dateEnd });
         }
       }
     }
 
     // 名称
     if (config.nameEnabled && config.namePattern) {
-      const opMap = { contains: 'ilike', starts: 'ilike', ends: 'ilike', regex: 'rlike' };
+      const opMap = {
+        contains: "ilike",
+        starts: "ilike",
+        ends: "ilike",
+        regex: "rlike",
+      };
       const patternMap = {
         contains: `%${config.namePattern}%`,
         starts: `${config.namePattern}%`,
         ends: `%${config.namePattern}`,
-        regex: config.namePattern
+        regex: config.namePattern,
       };
-      conditions.push({ field: 'name', op: opMap[config.nameMode], value: patternMap[config.nameMode] });
+      conditions.push({
+        field: "name",
+        op: opMap[config.nameMode],
+        value: patternMap[config.nameMode],
+      });
     }
 
     // 位置
-    if (config.locationEnabled && config.inArchive !== 'any') {
-      conditions.push({ field: 'archive', op: config.inArchive === 'yes' ? '!=' : '=', value: '' });
+    if (config.locationEnabled && config.inArchive !== "any") {
+      conditions.push({
+        field: "archive",
+        op: config.inArchive === "yes" ? "!=" : "=",
+        value: "",
+      });
     }
 
     // 类型
-    if (config.itemType !== 'any') {
-      conditions.push({ field: 'type', op: '=', value: config.itemType });
+    if (config.itemType !== "any") {
+      conditions.push({ field: "type", op: "=", value: config.itemType });
     }
 
-    return { op: 'and', conditions };
+    return { op: "and", conditions };
   }
 
   // 触发变化
@@ -650,7 +774,12 @@
               <div class="flex items-center justify-between">
                 <Dialog.Title>选择预设</Dialog.Title>
                 {#if userPresets.length > 0}
-                  <Button variant="ghost" size="sm" class="h-7 text-xs" onclick={toggleEditMode}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    class="h-7 text-xs"
+                    onclick={toggleEditMode}
+                  >
                     {#if editMode}
                       <Check class="w-3 h-3 mr-1" />完成
                     {:else}
@@ -659,12 +788,15 @@
                   </Button>
                 {/if}
               </div>
-              <Dialog.Description>选择一个预设快速配置过滤器</Dialog.Description>
+              <Dialog.Description>选择一个预设快速配置过滤器</Dialog.Description
+              >
             </Dialog.Header>
             <div class="space-y-3 max-h-80 overflow-y-auto">
               <!-- 内置预设 -->
               <div>
-                <div class="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
+                <div
+                  class="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1"
+                >
                   <Star class="w-3 h-3" />内置预设
                 </div>
                 <div class="space-y-1">
@@ -679,11 +811,13 @@
                   {/each}
                 </div>
               </div>
-              
+
               <!-- 用户预设 -->
               {#if userPresets.length > 0}
                 <div>
-                  <div class="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1">
+                  <div
+                    class="text-xs font-medium text-muted-foreground mb-2 flex items-center gap-1"
+                  >
                     <Save class="w-3 h-3" />我的预设
                   </div>
                   <div class="space-y-1">
@@ -692,40 +826,50 @@
                         {#if editMode}
                           <!-- 编辑模式 -->
                           <div class="flex items-center gap-1 shrink-0">
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              class="h-7 w-7" 
-                              onclick={() => movePreset(preset.id, 'up')}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              class="h-7 w-7"
+                              onclick={() => movePreset(preset.id, "up")}
                               disabled={index === 0}
                             >
                               <ArrowUp class="w-3 h-3" />
                             </Button>
-                            <Button 
-                              variant="ghost" 
-                              size="icon" 
-                              class="h-7 w-7" 
-                              onclick={() => movePreset(preset.id, 'down')}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              class="h-7 w-7"
+                              onclick={() => movePreset(preset.id, "down")}
                               disabled={index === userPresets.length - 1}
                             >
                               <ArrowDown class="w-3 h-3" />
                             </Button>
                           </div>
-                          
+
                           {#if editingPresetId === preset.id}
                             <!-- 重命名输入框 -->
-                            <Input 
+                            <Input
                               bind:value={editingPresetName}
                               class="h-8 text-sm flex-1"
                               onkeydown={(e) => {
-                                if (e.key === 'Enter') confirmRename();
-                                if (e.key === 'Escape') cancelRename();
+                                if (e.key === "Enter") confirmRename();
+                                if (e.key === "Escape") cancelRename();
                               }}
                             />
-                            <Button variant="ghost" size="icon" class="h-7 w-7" onclick={confirmRename}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              class="h-7 w-7"
+                              onclick={confirmRename}
+                            >
                               <Check class="w-3 h-3 text-green-500" />
                             </Button>
-                            <Button variant="ghost" size="icon" class="h-7 w-7" onclick={cancelRename}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              class="h-7 w-7"
+                              onclick={cancelRename}
+                            >
                               <X class="w-3 h-3" />
                             </Button>
                           {:else}
@@ -736,10 +880,20 @@
                             >
                               {preset.name}
                             </button>
-                            <Button variant="ghost" size="icon" class="h-7 w-7" onclick={() => startRenamePreset(preset)}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              class="h-7 w-7"
+                              onclick={() => startRenamePreset(preset)}
+                            >
                               <Pencil class="w-3 h-3 text-muted-foreground" />
                             </Button>
-                            <Button variant="ghost" size="icon" class="h-7 w-7" onclick={() => deletePreset(preset.id)}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              class="h-7 w-7"
+                              onclick={() => deletePreset(preset.id)}
+                            >
                               <Trash2 class="w-3 h-3 text-destructive" />
                             </Button>
                           {/if}
@@ -774,14 +928,19 @@
               <Dialog.Description>将当前配置保存为预设</Dialog.Description>
             </Dialog.Header>
             <div class="space-y-3">
-              <Input 
+              <Input
                 bind:value={newPresetName}
                 placeholder="预设名称"
-                onkeydown={(e) => e.key === 'Enter' && saveAsPreset()}
+                onkeydown={(e) => e.key === "Enter" && saveAsPreset()}
               />
               <div class="flex justify-end gap-2">
-                <Button variant="outline" onclick={() => saveDialogOpen = false}>取消</Button>
-                <Button onclick={saveAsPreset} disabled={!newPresetName.trim()}>保存</Button>
+                <Button
+                  variant="outline"
+                  onclick={() => (saveDialogOpen = false)}>取消</Button
+                >
+                <Button onclick={saveAsPreset} disabled={!newPresetName.trim()}
+                  >保存</Button
+                >
               </div>
             </div>
           </Dialog.Content>
@@ -789,7 +948,12 @@
       </div>
 
       <!-- 模式切换 -->
-      <Button variant="ghost" size="sm" class="h-6 text-xs" onclick={toggleAdvanced}>
+      <Button
+        variant="ghost"
+        size="sm"
+        class="h-6 text-xs"
+        onclick={toggleAdvanced}
+      >
         {#if advancedMode}
           <Sparkles class="w-3 h-3 mr-1" />可视化
         {:else}
@@ -801,16 +965,16 @@
 
   {#if advancedMode}
     <!-- SQL 直接输入模式 -->
-    <Input 
+    <Input
       bind:value={internalSql}
-      placeholder='例: size > 10M and ext in ("zip", "rar")'
+      placeholder="例: size > 10M and ext in ('zip', 'rar')"
       class="font-mono text-xs"
       {disabled}
       oninput={() => onchange?.(config, internalSql)}
     />
   {:else}
     <!-- 可视化模式 -->
-    
+
     <!-- 文件类型快捷选择 -->
     <div>
       <div class="text-xs font-medium mb-1.5 flex items-center gap-1">
@@ -821,7 +985,9 @@
           {@const isActive = config.fileTypes.includes(preset.id)}
           <button
             class="flex items-center gap-1 px-2 py-1 rounded-md text-xs transition-colors
-              {isActive ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}"
+              {isActive
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-muted hover:bg-muted/80'}"
             onclick={() => toggleFileType(preset.id)}
             {disabled}
           >
@@ -830,52 +996,74 @@
           </button>
         {/each}
       </div>
-      
+
       <!-- 自定义扩展名 -->
       <div class="flex items-center gap-1 mt-2">
-        <Input 
+        <Input
           bind:value={customExtInput}
           placeholder="自定义扩展名"
           class="h-7 text-xs flex-1"
           {disabled}
-          onkeydown={(e) => e.key === 'Enter' && addCustomExt()}
+          onkeydown={(e) => e.key === "Enter" && addCustomExt()}
         />
-        <Button variant="outline" size="sm" class="h-7" onclick={addCustomExt} {disabled}>
+        <Button
+          variant="outline"
+          size="sm"
+          class="h-7"
+          onclick={addCustomExt}
+          {disabled}
+        >
           <Plus class="w-3 h-3" />
         </Button>
       </div>
       {#if config.customExts.length > 0}
         <div class="flex flex-wrap gap-1 mt-1">
           {#each config.customExts as ext}
-            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-500/20 text-blue-600 rounded text-xs">
+            <span
+              class="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-500/20 text-blue-600 rounded text-xs"
+            >
               .{ext}
-              <button onclick={() => removeCustomExt(ext)} class="hover:text-red-500">
+              <button
+                onclick={() => removeCustomExt(ext)}
+                class="hover:text-red-500"
+              >
                 <X class="w-3 h-3" />
               </button>
             </span>
           {/each}
         </div>
       {/if}
-      
+
       <!-- 排除扩展名 -->
       <div class="flex items-center gap-1 mt-2">
-        <Input 
+        <Input
           bind:value={excludeExtInput}
           placeholder="排除扩展名"
           class="h-7 text-xs flex-1"
           {disabled}
-          onkeydown={(e) => e.key === 'Enter' && addExcludeExt()}
+          onkeydown={(e) => e.key === "Enter" && addExcludeExt()}
         />
-        <Button variant="outline" size="sm" class="h-7" onclick={addExcludeExt} {disabled}>
+        <Button
+          variant="outline"
+          size="sm"
+          class="h-7"
+          onclick={addExcludeExt}
+          {disabled}
+        >
           <X class="w-3 h-3" />
         </Button>
       </div>
       {#if config.excludeExts.length > 0}
         <div class="flex flex-wrap gap-1 mt-1">
           {#each config.excludeExts as ext}
-            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-500/20 text-red-600 rounded text-xs">
+            <span
+              class="inline-flex items-center gap-1 px-1.5 py-0.5 bg-red-500/20 text-red-600 rounded text-xs"
+            >
               .{ext}
-              <button onclick={() => removeExcludeExt(ext)} class="hover:text-red-700">
+              <button
+                onclick={() => removeExcludeExt(ext)}
+                class="hover:text-red-700"
+              >
                 <X class="w-3 h-3" />
               </button>
             </span>
@@ -890,7 +1078,13 @@
         <label class="text-xs font-medium flex items-center gap-1">
           <HardDrive class="w-3 h-3" />文件大小
         </label>
-        <input type="checkbox" bind:checked={config.sizeEnabled} onchange={emitChange} {disabled} class="w-3.5 h-3.5" />
+        <input
+          type="checkbox"
+          bind:checked={config.sizeEnabled}
+          onchange={emitChange}
+          {disabled}
+          class="w-3.5 h-3.5"
+        />
       </div>
       {#if config.sizeEnabled}
         <div class="flex flex-wrap gap-1 mb-2">
@@ -905,7 +1099,7 @@
           {/each}
         </div>
         <div class="flex items-center gap-2">
-          <Input 
+          <Input
             bind:value={config.sizeMin}
             placeholder="最小 (如 10M)"
             class="h-7 text-xs flex-1"
@@ -913,7 +1107,7 @@
             oninput={emitChange}
           />
           <span class="text-xs text-muted-foreground">~</span>
-          <Input 
+          <Input
             bind:value={config.sizeMax}
             placeholder="最大 (如 1G)"
             class="h-7 text-xs flex-1"
@@ -930,24 +1124,35 @@
         <label class="text-xs font-medium flex items-center gap-1">
           <Calendar class="w-3 h-3" />修改日期
         </label>
-        <input type="checkbox" bind:checked={config.dateEnabled} onchange={emitChange} {disabled} class="w-3.5 h-3.5" />
+        <input
+          type="checkbox"
+          bind:checked={config.dateEnabled}
+          onchange={emitChange}
+          {disabled}
+          class="w-3.5 h-3.5"
+        />
       </div>
       {#if config.dateEnabled}
         <div class="flex flex-wrap gap-1">
           {#each DATE_PRESETS as preset}
             <button
               class="px-2 py-0.5 rounded text-xs transition-colors
-                {config.datePreset === preset.value ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}"
-              onclick={() => { config.datePreset = preset.value; emitChange(); }}
+                {config.datePreset === preset.value
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted hover:bg-muted/80'}"
+              onclick={() => {
+                config.datePreset = preset.value;
+                emitChange();
+              }}
               {disabled}
             >
               {preset.label}
             </button>
           {/each}
         </div>
-        {#if config.datePreset === 'custom'}
+        {#if config.datePreset === "custom"}
           <div class="flex items-center gap-2 mt-2">
-            <Input 
+            <Input
               type="date"
               bind:value={config.dateStart}
               class="h-7 text-xs flex-1"
@@ -955,7 +1160,7 @@
               oninput={emitChange}
             />
             <span class="text-xs text-muted-foreground">~</span>
-            <Input 
+            <Input
               type="date"
               bind:value={config.dateEnd}
               class="h-7 text-xs flex-1"
@@ -973,22 +1178,40 @@
         <label class="text-xs font-medium flex items-center gap-1">
           <FileText class="w-3 h-3" />文件名
         </label>
-        <input type="checkbox" bind:checked={config.nameEnabled} onchange={emitChange} {disabled} class="w-3.5 h-3.5" />
+        <input
+          type="checkbox"
+          bind:checked={config.nameEnabled}
+          onchange={emitChange}
+          {disabled}
+          class="w-3.5 h-3.5"
+        />
       </div>
       {#if config.nameEnabled}
         <div class="flex items-center gap-2">
-          <Select.Root type="single" value={config.nameMode} onValueChange={(v) => { config.nameMode = v as any; emitChange(); }}>
+          <Select.Root
+            type="single"
+            value={config.nameMode}
+            onValueChange={(v) => {
+              config.nameMode = v as any;
+              emitChange();
+            }}
+          >
             <Select.Trigger class="h-7 text-xs w-24" {disabled}>
-              {{ contains: '包含', starts: '开头', ends: '结尾', regex: '正则' }[config.nameMode]}
+              {{
+                contains: "包含",
+                starts: "开头",
+                ends: "结尾",
+                regex: "正则",
+              }[config.nameMode]}
             </Select.Trigger>
-            <Select.Content>
+            <Select.Content class="z-[100]">
               <Select.Item value="contains">包含</Select.Item>
               <Select.Item value="starts">开头是</Select.Item>
               <Select.Item value="ends">结尾是</Select.Item>
               <Select.Item value="regex">正则</Select.Item>
             </Select.Content>
           </Select.Root>
-          <Input 
+          <Input
             bind:value={config.namePattern}
             placeholder="输入关键词"
             class="h-7 text-xs flex-1"
@@ -1005,90 +1228,138 @@
         <label class="text-xs font-medium flex items-center gap-1">
           <Image class="w-3 h-3" />图片尺寸
         </label>
-        <input type="checkbox" bind:checked={config.imageMetaEnabled} onchange={emitChange} {disabled} class="w-3.5 h-3.5" />
+        <input
+          type="checkbox"
+          bind:checked={config.imageMetaEnabled}
+          onchange={emitChange}
+          {disabled}
+          class="w-3.5 h-3.5"
+        />
       </div>
       {#if config.imageMetaEnabled}
         <!-- 分辨率预设 -->
         <div class="flex flex-wrap gap-1 mb-2">
           <button
             class="px-2 py-0.5 rounded text-xs transition-colors
-              {config.resolutionPreset === '1080p' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}"
-            onclick={() => { config.resolutionPreset = '1080p'; config.widthMin = ''; config.widthMax = ''; config.heightMin = ''; config.heightMax = ''; emitChange(); }}
+              {config.resolutionPreset === '1080p'
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-muted hover:bg-muted/80'}"
+            onclick={() => {
+              config.resolutionPreset = "1080p";
+              config.widthMin = "";
+              config.widthMax = "";
+              config.heightMin = "";
+              config.heightMax = "";
+              emitChange();
+            }}
             {disabled}
           >
             1080p
           </button>
           <button
             class="px-2 py-0.5 rounded text-xs transition-colors
-              {config.resolutionPreset === '4k' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}"
-            onclick={() => { config.resolutionPreset = '4k'; config.widthMin = ''; config.widthMax = ''; config.heightMin = ''; config.heightMax = ''; emitChange(); }}
+              {config.resolutionPreset === '4k'
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-muted hover:bg-muted/80'}"
+            onclick={() => {
+              config.resolutionPreset = "4k";
+              config.widthMin = "";
+              config.widthMax = "";
+              config.heightMin = "";
+              config.heightMax = "";
+              emitChange();
+            }}
             {disabled}
           >
             4K
           </button>
           <button
             class="px-2 py-0.5 rounded text-xs transition-colors
-              {config.resolutionPreset === '8k' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}"
-            onclick={() => { config.resolutionPreset = '8k'; config.widthMin = ''; config.widthMax = ''; config.heightMin = ''; config.heightMax = ''; emitChange(); }}
+              {config.resolutionPreset === '8k'
+              ? 'bg-primary text-primary-foreground'
+              : 'bg-muted hover:bg-muted/80'}"
+            onclick={() => {
+              config.resolutionPreset = "8k";
+              config.widthMin = "";
+              config.widthMax = "";
+              config.heightMin = "";
+              config.heightMax = "";
+              emitChange();
+            }}
             {disabled}
           >
             8K
           </button>
           <button
             class="px-2 py-0.5 rounded text-xs bg-muted hover:bg-muted/80"
-            onclick={() => { config.resolutionPreset = 'any'; emitChange(); }}
+            onclick={() => {
+              config.resolutionPreset = "any";
+              emitChange();
+            }}
             {disabled}
           >
             自定义
           </button>
         </div>
-        
+
         <!-- 宽度范围 -->
         <div class="space-y-1.5">
           <div class="flex items-center gap-2">
             <span class="text-xs text-muted-foreground w-10">宽度</span>
-            <Input 
+            <Input
               bind:value={config.widthMin}
               placeholder="最小"
               type="number"
               class="h-7 text-xs flex-1"
               {disabled}
-              oninput={() => { config.resolutionPreset = 'any'; emitChange(); }}
+              oninput={() => {
+                config.resolutionPreset = "any";
+                emitChange();
+              }}
             />
             <span class="text-xs text-muted-foreground">~</span>
-            <Input 
+            <Input
               bind:value={config.widthMax}
               placeholder="最大"
               type="number"
               class="h-7 text-xs flex-1"
               {disabled}
-              oninput={() => { config.resolutionPreset = 'any'; emitChange(); }}
+              oninput={() => {
+                config.resolutionPreset = "any";
+                emitChange();
+              }}
             />
           </div>
-          
+
           <!-- 高度范围 -->
           <div class="flex items-center gap-2">
             <span class="text-xs text-muted-foreground w-10">高度</span>
-            <Input 
+            <Input
               bind:value={config.heightMin}
               placeholder="最小"
               type="number"
               class="h-7 text-xs flex-1"
               {disabled}
-              oninput={() => { config.resolutionPreset = 'any'; emitChange(); }}
+              oninput={() => {
+                config.resolutionPreset = "any";
+                emitChange();
+              }}
             />
             <span class="text-xs text-muted-foreground">~</span>
-            <Input 
+            <Input
               bind:value={config.heightMax}
               placeholder="最大"
               type="number"
               class="h-7 text-xs flex-1"
               {disabled}
-              oninput={() => { config.resolutionPreset = 'any'; emitChange(); }}
+              oninput={() => {
+                config.resolutionPreset = "any";
+                emitChange();
+              }}
             />
           </div>
         </div>
-        
+
         <div class="text-[10px] text-muted-foreground mt-1">
           💡 需要在节点中启用"图片元数据"选项
         </div>
@@ -1100,7 +1371,7 @@
       <!-- 位置 -->
       <div class="flex items-center gap-2">
         <span class="text-muted-foreground">位置:</span>
-        <select 
+        <select
           bind:value={config.inArchive}
           onchange={emitChange}
           {disabled}
@@ -1111,11 +1382,11 @@
           <option value="yes">仅压缩包内</option>
         </select>
       </div>
-      
+
       <!-- 类型（默认排除目录） -->
       <div class="flex items-center gap-2">
         <span class="text-muted-foreground">类型:</span>
-        <select 
+        <select
           bind:value={config.itemType}
           onchange={emitChange}
           {disabled}
@@ -1129,8 +1400,11 @@
     </div>
 
     <!-- 生成的条件预览 -->
-    <div class="text-[10px] text-muted-foreground font-mono bg-muted/30 rounded px-2 py-1 truncate" title={internalSql}>
-      {internalSql === '1' ? '匹配所有文件' : internalSql}
+    <div
+      class="text-[10px] text-muted-foreground font-mono bg-muted/30 rounded px-2 py-1 truncate"
+      title={internalSql}
+    >
+      {internalSql === "1" ? "匹配所有文件" : internalSql}
     </div>
   {/if}
 </div>

@@ -322,6 +322,17 @@ class BandiaAdapter(BaseAdapter):
             if m.get("archive_path") and m.get("extracted_path")
         ]
         
+        # 智能路径恢复
+        for m in mappings:
+            p = Path(m.extracted_path)
+            if not p.exists() and "?" in p.name:
+                try:
+                    candidates = list(p.parent.glob(p.name))
+                    if candidates:
+                        m.extracted_path = str(candidates[0])
+                except Exception:
+                    pass
+        
         if not mappings:
             return BandiaOutput(
                 success=False,

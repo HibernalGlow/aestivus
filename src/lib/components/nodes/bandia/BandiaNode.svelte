@@ -62,6 +62,10 @@
     useTrash: boolean;
     parallel: boolean; // 启用并行
     workers: number; // 并行工作线程数
+    extractMode: "auto" | "normal"; // 解压模式
+    outputPrefix: string; // 普通模式输出前缀
+    compressFormat: "zip" | "7z"; // 压缩格式
+    deleteSource: boolean; // 压缩后删除源目录
     activeIndices: number[]; // 正在处理的文件索引列表
     completedIndices: number[]; // 已完成的文件索引列表
     extractResult: ExtractResult | null;
@@ -109,6 +113,10 @@
     useTrash: configUseTrash,
     parallel: true,
     workers: 2,
+    extractMode: "auto",
+    outputPrefix: "【a】",
+    compressFormat: "zip",
+    deleteSource: true,
     activeIndices: [],
     completedIndices: [],
     extractResult: null,
@@ -325,6 +333,8 @@
           use_trash: ns.useTrash,
           parallel: ns.parallel,
           workers: ns.workers,
+          extract_mode: ns.extractMode,
+          output_prefix: ns.outputPrefix,
         },
         { taskId, nodeId },
       )) as any;
@@ -517,7 +527,8 @@
         {
           action: "compress",
           mappings: ns.pathMappings,
-          delete_source: ns.deleteAfter,
+          delete_source: ns.deleteSource,
+          compress_format: ns.compressFormat,
         },
         { taskId, nodeId },
       )) as any;
@@ -574,7 +585,7 @@
           onclick={() => (ns.mode = "compress")}
           disabled={isRunning}
         >
-          <FileArchive class="cq-icon mr-1" />压缩
+          <FolderOpen class="cq-icon mr-1" />压缩
         </Button>
       </div>
 
@@ -660,34 +671,115 @@
 
 {#snippet optionsBlock()}
   <div class="flex flex-col cq-gap">
-    <label class="flex items-center cq-gap cursor-pointer">
-      <Checkbox bind:checked={ns.deleteAfter} disabled={isRunning} />
-      <span class="cq-text">解压后删除源文件</span>
-    </label>
-    {#if ns.deleteAfter}
-      <label class="flex items-center cq-gap cursor-pointer ml-4">
-        <Checkbox bind:checked={ns.useTrash} disabled={isRunning} />
-        <span class="cq-text flex items-center gap-1"
-          ><Trash2 class="cq-icon text-orange-500" />移入回收站</span
-        >
-      </label>
-    {/if}
-    <div class="border-t border-border my-1"></div>
-    <label class="flex items-center cq-gap cursor-pointer">
-      <Checkbox bind:checked={ns.parallel} disabled={isRunning} />
-      <span class="cq-text">启用并行解压 ⚡</span>
-    </label>
-    {#if ns.parallel}
-      <div class="flex items-center cq-gap ml-4">
-        <span class="cq-text-sm text-muted-foreground">工作线程:</span>
-        <input
-          type="number"
-          min="1"
-          max="8"
-          bind:value={ns.workers}
-          disabled={isRunning}
-          class="w-14 h-6 px-1 cq-text-sm border rounded bg-background text-center"
-        />
+    {#if ns.mode === "extract"}
+      <div class="space-y-2">
+        <label class="flex items-center cq-gap cursor-pointer">
+          <Checkbox bind:checked={ns.deleteAfter} disabled={isRunning} />
+          <span class="cq-text">解压后删除源文件</span>
+        </label>
+        {#if ns.deleteAfter}
+          <label class="flex items-center cq-gap cursor-pointer ml-4">
+            <Checkbox bind:checked={ns.useTrash} disabled={isRunning} />
+            <span class="cq-text flex items-center gap-1"
+              ><Trash2 class="cq-icon text-orange-500" />移入回收站</span
+            >
+          </label>
+        {/if}
+        <div class="border-t border-border my-1"></div>
+
+        <div class="flex flex-col cq-gap">
+          <span class="cq-text-sm text-muted-foreground font-medium"
+            >解压模式:</span
+          >
+          <div class="flex items-center gap-2">
+            <label class="flex items-center gap-1 cursor-pointer">
+              <input
+                type="radio"
+                name="extractMode"
+                value="auto"
+                bind:group={ns.extractMode}
+                disabled={isRunning}
+              />
+              <span class="cq-text-sm">智能</span>
+            </label>
+            <label class="flex items-center gap-1 cursor-pointer">
+              <input
+                type="radio"
+                name="extractMode"
+                value="normal"
+                bind:group={ns.extractMode}
+                disabled={isRunning}
+              />
+              <span class="cq-text-sm">普通</span>
+            </label>
+          </div>
+          {#if ns.extractMode === "normal"}
+            <div class="flex items-center gap-2 mt-1">
+              <span class="cq-text-sm text-muted-foreground">前缀:</span>
+              <input
+                type="text"
+                bind:value={ns.outputPrefix}
+                disabled={isRunning}
+                class="flex-1 h-6 px-1 cq-text-sm border rounded bg-background"
+                placeholder="例如: 【a】"
+              />
+            </div>
+          {/if}
+        </div>
+
+        <div class="border-t border-border my-1"></div>
+        <label class="flex items-center cq-gap cursor-pointer">
+          <Checkbox bind:checked={ns.parallel} disabled={isRunning} />
+          <span class="cq-text">启用并行解压 ⚡</span>
+        </label>
+        {#if ns.parallel}
+          <div class="flex items-center cq-gap ml-4">
+            <span class="cq-text-sm text-muted-foreground">工作线程:</span>
+            <input
+              type="number"
+              min="1"
+              max="8"
+              bind:value={ns.workers}
+              disabled={isRunning}
+              class="w-14 h-6 px-1 cq-text-sm border rounded bg-background text-center"
+            />
+          </div>
+        {/if}
+      </div>
+    {:else}
+      <div class="space-y-2">
+        <label class="flex items-center cq-gap cursor-pointer">
+          <Checkbox bind:checked={ns.deleteSource} disabled={isRunning} />
+          <span class="cq-text">压缩后删除源目录</span>
+        </label>
+        <div class="border-t border-border my-1"></div>
+        <div class="flex flex-col cq-gap">
+          <span class="cq-text-sm text-muted-foreground font-medium"
+            >压缩格式:</span
+          >
+          <div class="flex items-center gap-2">
+            <label class="flex items-center gap-1 cursor-pointer">
+              <input
+                type="radio"
+                name="compressFormat"
+                value="zip"
+                bind:group={ns.compressFormat}
+                disabled={isRunning}
+              />
+              <span class="cq-text-sm">ZIP</span>
+            </label>
+            <label class="flex items-center gap-1 cursor-pointer">
+              <input
+                type="radio"
+                name="compressFormat"
+                value="7z"
+                bind:group={ns.compressFormat}
+                disabled={isRunning}
+              />
+              <span class="cq-text-sm">7Z</span>
+            </label>
+          </div>
+        </div>
       </div>
     {/if}
   </div>
@@ -697,14 +789,39 @@
   <div class="flex flex-col cq-gap h-full">
     <div class="flex flex-col cq-gap cq-padding bg-muted/30 cq-rounded">
       <div class="flex items-center cq-gap">
-        {#if ns.extractResult}
-          {#if ns.extractResult.success && ns.extractResult.failed === 0}
+        {#if ns.mode === "extract"}
+          {#if ns.extractResult}
+            {#if ns.extractResult.success && ns.extractResult.failed === 0}
+              <CircleCheck class="cq-icon text-green-500 shrink-0" />
+              <span class="cq-text text-green-600 font-medium">完成</span>
+              <span class="cq-text-sm text-muted-foreground ml-auto"
+                >{ns.extractResult.extracted} 成功</span
+              >
+            {:else if ns.extractResult.success}
+              <CircleCheck class="cq-icon text-yellow-500 shrink-0" />
+              <span class="cq-text text-yellow-600 font-medium">部分完成</span>
+            {:else}
+              <CircleX class="cq-icon text-red-500 shrink-0" />
+              <span class="cq-text text-red-600 font-medium">失败</span>
+            {/if}
+          {:else if isRunning}
+            <LoaderCircle class="cq-icon text-primary animate-spin shrink-0" />
+            <div class="flex-1">
+              <Progress value={ns.progress} class="h-1.5" />
+            </div>
+            <span class="cq-text-sm text-muted-foreground">{ns.progress}%</span>
+          {:else}
+            <FileArchive class="cq-icon text-muted-foreground/50 shrink-0" />
+            <span class="cq-text text-muted-foreground">等待解压</span>
+          {/if}
+        {:else if ns.compressResult}
+          {#if ns.compressResult.success && ns.compressResult.failed === 0}
             <CircleCheck class="cq-icon text-green-500 shrink-0" />
             <span class="cq-text text-green-600 font-medium">完成</span>
             <span class="cq-text-sm text-muted-foreground ml-auto"
-              >{ns.extractResult.extracted} 成功</span
+              >{ns.compressResult.compressed} 成功</span
             >
-          {:else if ns.extractResult.success}
+          {:else if ns.compressResult.success}
             <CircleCheck class="cq-icon text-yellow-500 shrink-0" />
             <span class="cq-text text-yellow-600 font-medium">部分完成</span>
           {:else}
@@ -718,8 +835,8 @@
           </div>
           <span class="cq-text-sm text-muted-foreground">{ns.progress}%</span>
         {:else}
-          <FileArchive class="cq-icon text-muted-foreground/50 shrink-0" />
-          <span class="cq-text text-muted-foreground">等待解压</span>
+          <FolderOpen class="cq-icon text-muted-foreground/50 shrink-0" />
+          <span class="cq-text text-muted-foreground">等待压缩</span>
         {/if}
       </div>
       {#if isRunning && ns.progressText}
@@ -789,50 +906,100 @@
 
 {#snippet filesBlock()}
   <div class="h-full flex flex-col overflow-hidden">
-    <div class="flex items-center justify-between mb-1 shrink-0">
-      <span class="cq-text font-semibold flex items-center gap-1"
-        ><FileArchive class="cq-icon text-blue-500" />待解压文件</span
-      >
-      <span class="cq-text-sm text-muted-foreground">
-        {#if isRunning && currentFileIndex >= 0}
-          {currentFileIndex + 1}/{ns.archivePaths.length}
+    {#if ns.mode === "extract"}
+      <div class="flex items-center justify-between mb-1 shrink-0">
+        <span class="cq-text font-semibold flex items-center gap-1"
+          ><FileArchive class="cq-icon text-blue-500" />待解压文件</span
+        >
+        <span class="cq-text-sm text-muted-foreground">
+          {#if isRunning && currentFileIndex >= 0}
+            {currentFileIndex + 1}/{ns.archivePaths.length}
+          {:else}
+            {ns.archivePaths.length || parsePaths(pathsText).length} 个
+          {/if}
+        </span>
+      </div>
+      <div class="flex-1 overflow-y-auto cq-padding bg-muted/30 cq-rounded">
+        {#if ns.archivePaths.length > 0 || parsePaths(pathsText).length > 0}
+          {#each ns.archivePaths.length > 0 ? ns.archivePaths : parsePaths(pathsText) as filePath, idx}
+            {@const isActive = ns.activeIndices.includes(idx)}
+            {@const isCompleted =
+              ns.phase === "completed" || ns.completedIndices.includes(idx)}
+            <div
+              class="cq-text-sm truncate py-0.5 flex items-center gap-1 transition-colors"
+              class:text-muted-foreground={!isRunning ||
+                (!isActive && !isCompleted)}
+              class:text-primary={isActive}
+              class:text-green-600={isCompleted}
+              title={filePath}
+            >
+              {#if isCompleted}
+                <CircleCheck class="w-3 h-3 text-green-500 shrink-0" />
+              {:else if isActive}
+                <LoaderCircle
+                  class="w-3 h-3 text-primary animate-spin shrink-0"
+                />
+              {:else}
+                <span class="w-3 h-3 shrink-0 text-center">{idx + 1}.</span>
+              {/if}
+              <span class="truncate">{filePath.split(/[/\\]/).pop()}</span>
+            </div>
+          {/each}
         {:else}
-          {ns.archivePaths.length || parsePaths(pathsText).length} 个
-        {/if}
-      </span>
-    </div>
-    <div class="flex-1 overflow-y-auto cq-padding bg-muted/30 cq-rounded">
-      {#if ns.archivePaths.length > 0 || parsePaths(pathsText).length > 0}
-        {#each ns.archivePaths.length > 0 ? ns.archivePaths : parsePaths(pathsText) as filePath, idx}
-          {@const isActive = ns.activeIndices.includes(idx)}
-          {@const isCompleted =
-            ns.phase === "completed" || ns.completedIndices.includes(idx)}
-          <div
-            class="cq-text-sm truncate py-0.5 flex items-center gap-1 transition-colors"
-            class:text-muted-foreground={!isRunning ||
-              (!isActive && !isCompleted)}
-            class:text-primary={isActive}
-            class:text-green-600={isCompleted}
-            title={filePath}
-          >
-            {#if isCompleted}
-              <CircleCheck class="w-3 h-3 text-green-500 shrink-0" />
-            {:else if isActive}
-              <LoaderCircle
-                class="w-3 h-3 text-primary animate-spin shrink-0"
-              />
-            {:else}
-              <span class="w-3 h-3 shrink-0 text-center">{idx + 1}.</span>
-            {/if}
-            <span class="truncate">{filePath.split(/[/\\]/).pop()}</span>
+          <div class="cq-text text-muted-foreground text-center py-3">
+            暂无文件
           </div>
-        {/each}
-      {:else}
-        <div class="cq-text text-muted-foreground text-center py-3">
-          暂无文件
-        </div>
-      {/if}
-    </div>
+        {/if}
+      </div>
+    {:else}
+      <div class="flex items-center justify-between mb-1 shrink-0">
+        <span class="cq-text font-semibold flex items-center gap-1"
+          ><FolderOpen class="cq-icon text-orange-500" />待压缩映射</span
+        >
+        <span class="cq-text-sm text-muted-foreground">
+          {ns.pathMappings.length} 个
+        </span>
+      </div>
+      <div class="flex-1 overflow-y-auto cq-padding bg-muted/30 cq-rounded">
+        {#if ns.pathMappings.length > 0}
+          {#each ns.pathMappings as mapping, idx}
+            {@const isActive = ns.activeIndices.includes(idx)}
+            {@const isCompleted =
+              ns.phase === "completed" || ns.completedIndices.includes(idx)}
+            <div
+              class="cq-text-sm py-1 border-b border-border/50 last:border-0"
+              class:text-primary={isActive}
+              class:text-green-600={isCompleted}
+            >
+              <div class="flex items-center gap-1 truncate font-medium">
+                {#if isCompleted}
+                  <CircleCheck class="w-3 h-3 text-green-500 shrink-0" />
+                {:else if isActive}
+                  <LoaderCircle
+                    class="w-3 h-3 text-primary animate-spin shrink-0"
+                  />
+                {/if}
+                <span class="truncate"
+                  >{mapping.extracted_path.split(/[/\\]/).pop()}</span
+                >
+              </div>
+              <div
+                class="flex items-center gap-1 text-[10px] text-muted-foreground truncate pl-4"
+              >
+                <span>→</span>
+                <span class="truncate"
+                  >{mapping.archive_path.split(/[/\\]/).pop()}</span
+                >
+              </div>
+            </div>
+          {/each}
+        {:else}
+          <div class="cq-text text-muted-foreground text-center py-3">
+            暂无映射，请先通过剪贴板导入
+          </div>
+        {/if}
+      </div>
+    {/if}
   </div>
 {/snippet}
 

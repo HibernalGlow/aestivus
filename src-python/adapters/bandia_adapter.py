@@ -30,6 +30,8 @@ class BandiaInput(BaseModel):
     overwrite_mode: str = Field(default="overwrite", description="冲突处理: overwrite/skip/rename")
     parallel: bool = Field(default=True, description="是否启用并行处理")
     workers: Optional[int] = Field(default=None, description="并行工作线程数")
+    extract_mode: str = Field(default="auto", description="解压模式: auto(智能)/normal(普通)")
+    output_prefix: str = Field(default="【a】", description="普通模式输出目录前缀")
     # 压缩参数
     mappings: List[Dict[str, str]] = Field(default_factory=list, description="路径映射列表（压缩用）")
     compress_format: str = Field(default="zip", description="压缩格式: zip/7z")
@@ -74,14 +76,15 @@ class BandiaAdapter(BaseAdapter):
         from bandia import (
             extract_batch, compress_batch, 
             ProgressCallback, PathMapping,
-            get_shutdown_event
+            get_shutdown_event, ExtractMode
         )
         return {
             "extract_batch": extract_batch,
             "compress_batch": compress_batch,
             "ProgressCallback": ProgressCallback,
             "PathMapping": PathMapping,
-            "get_shutdown_event": get_shutdown_event
+            "get_shutdown_event": get_shutdown_event,
+            "ExtractMode": ExtractMode
         }
     
     async def execute(
@@ -111,7 +114,7 @@ class BandiaAdapter(BaseAdapter):
         # 解压操作
         if input_data.action == "extract":
             return await self._execute_extract(
-                input_data, extract_batch, ProgressCallback, on_progress, on_log
+                input_data, extract_batch, ProgressCallback, ExtractMode, on_progress, on_log
             )
         
         # 压缩/重压缩操作
@@ -131,6 +134,7 @@ class BandiaAdapter(BaseAdapter):
         input_data: BandiaInput,
         extract_batch,
         ProgressCallback,
+        ExtractMode,
         on_progress: Optional[Callable[[int, str], None]],
         on_log: Optional[Callable[[str], None]]
     ) -> BandiaOutput:
@@ -146,6 +150,9 @@ class BandiaAdapter(BaseAdapter):
                 message="没有有效的压缩包路径",
                 action="extract"
             )
+        
+        # 解析解压模式
+        extract_mode = ExtractMode.AUTO if input_data.extract_mode == "auto" else ExtractMode.NORMAL
         
         progress_queue: queue.Queue = queue.Queue()
         result_holder = [None]
@@ -172,7 +179,9 @@ class BandiaAdapter(BaseAdapter):
                     overwrite_mode=input_data.overwrite_mode,
                     callback=callback,
                     parallel=input_data.parallel,
-                    workers=input_data.workers
+                    workers=input_data.workers,
+                    extract_mode=extract_mode,
+                    output_prefix=input_data.output_prefix
                 )
             except Exception as e:
                 result_holder[0] = e

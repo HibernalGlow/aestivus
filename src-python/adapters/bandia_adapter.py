@@ -44,6 +44,9 @@ class BandiaInput(BaseModel):
     mappings: List[Dict[str, str]] = Field(default_factory=list, description="路径映射列表（压缩用）")
     compress_format: str = Field(default="zip", description="压缩格式: zip/7z")
     delete_source: bool = Field(default=True, description="压缩后删除源目录")
+    # EFU 导出参数
+    efu_output_path: str = Field(default="", description="EFU 输出路径（为空则使用临时路径）")
+    open_in_everything: bool = Field(default=True, description="导出后自动用 Everything 打开")
 
 
 class BandiaOutput(AdapterOutput):
@@ -84,7 +87,8 @@ class BandiaAdapter(BaseAdapter):
         from bandia import (
             extract_batch, compress_batch, 
             ProgressCallback, PathMapping,
-            get_shutdown_event, ExtractMode
+            get_shutdown_event, ExtractMode,
+            export_efu
         )
         return {
             "extract_batch": extract_batch,
@@ -92,7 +96,8 @@ class BandiaAdapter(BaseAdapter):
             "ProgressCallback": ProgressCallback,
             "PathMapping": PathMapping,
             "get_shutdown_event": get_shutdown_event,
-            "ExtractMode": ExtractMode
+            "ExtractMode": ExtractMode,
+            "export_efu": export_efu
         }
     
     async def execute(
@@ -131,6 +136,10 @@ class BandiaAdapter(BaseAdapter):
             return await self._execute_compress(
                 input_data, compress_batch, ProgressCallback, PathMapping, on_progress, on_log
             )
+        
+        # 导出 EFU (Everything File List)
+        elif input_data.action == "export_efu":
+            return await self._execute_export_efu(input_data, module["export_efu"], on_log)
         
         return BandiaOutput(
             success=False,
@@ -437,5 +446,76 @@ class BandiaAdapter(BaseAdapter):
                 'compressed_count': result.compressed,
                 'failed_count': result.failed,
                 'total_count': result.total
+            }
+        )
+    
+    async def _execute_export_efu(
+        self,
+        input_data: BandiaInput,
+        export_efu,
+        on_log: Optional[Callable[[str], None]]
+    ) -> BandiaOutput:
+        """导出 EFU 文件到 Everything"""
+        import tempfile
+        
+        # 获取要导出的路径列表
+        # 优先使用 mappings 中的 extracted_path（解压后的文件夹）
+        paths = []
+        if input_data.mappings:
+            for m in input_data.mappings:
+                extracted = m.get("extracted_path", "")
+                if extracted:
+                    p = Path(extracted.strip().strip('"\''))
+                    if p.exists():
+                        paths.append(p)
+        
+        # 如果没有 mappings，使用 paths 字段
+        if not paths and input_data.paths:
+            for path_str in input_data.paths:
+                p = Path(path_str.strip().strip('"\''))
+                if p.exists():
+                    paths.append(p)
+        
+        if not paths:
+            return BandiaOutput(
+                success=False,
+                message="没有有效的路径可导出",
+                action="export_efu"
+            )
+        
+        # 确定输出路径
+        if input_data.efu_output_path:
+            output_path = Path(input_data.efu_output_path)
+        else:
+            # 使用临时文件
+            output_path = Path(tempfile.gettempdir()) / "bandia_export.efu"
+        
+        if on_log:
+            on_log(f"📤 导出 {len(paths)} 个路径到 EFU...")
+        
+        # 执行导出
+        success = export_efu(
+            paths=paths,
+            output_path=output_path,
+            open_in_everything=input_data.open_in_everything
+        )
+        
+        if success:
+            message = f"已导出 {len(paths)} 个路径到 {output_path}"
+            if on_log:
+                on_log(f"✅ {message}")
+        else:
+            message = "EFU 导出失败"
+            if on_log:
+                on_log(f"❌ {message}")
+        
+        return BandiaOutput(
+            success=success,
+            message=message,
+            action="export_efu",
+            total_count=len(paths),
+            data={
+                'efu_path': str(output_path),
+                'exported_count': len(paths) if success else 0
             }
         )

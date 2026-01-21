@@ -29,6 +29,7 @@
     RotateCcw,
     FolderOpen,
     Square,
+    ExternalLink,
   } from "@lucide/svelte";
 
   interface Props {
@@ -476,6 +477,31 @@
     }
   }
 
+  async function exportToEverything() {
+    if (ns.pathMappings.length === 0) {
+      log("❌ 没有路径映射可导出");
+      return;
+    }
+
+    log(`📤 正在导出 ${ns.pathMappings.length} 个文件夹到 Everything...`);
+
+    try {
+      const result = await api.executeNode("bandia", {
+        action: "export_efu",
+        mappings: ns.pathMappings,
+        open_in_everything: true,
+      });
+
+      if (result.success) {
+        log(`✅ 已导出到 Everything: ${result.data?.efu_path || ""}`);
+      } else {
+        log(`❌ 导出失败: ${result.message}`);
+      }
+    } catch (e) {
+      log(`❌ 导出失败: ${e}`);
+    }
+  }
+
   async function handleCompress() {
     if (ns.pathMappings.length === 0) {
       log("❌ 没有路径映射可压缩");
@@ -858,13 +884,24 @@
           <Play class="cq-icon mr-1" /><span>开始解压</span>
         </Button>
       {:else}
-        <Button
-          class="w-full cq-button flex-1"
-          onclick={handleCompress}
-          disabled={!canCompress}
-        >
-          <Play class="cq-icon mr-1" /><span>开始压缩</span>
-        </Button>
+        <div class="flex cq-gap">
+          <Button
+            class="flex-1 cq-button"
+            onclick={handleCompress}
+            disabled={!canCompress}
+          >
+            <Play class="cq-icon mr-1" /><span>开始压缩</span>
+          </Button>
+          <Button
+            variant="outline"
+            class="cq-button"
+            onclick={exportToEverything}
+            disabled={ns.pathMappings.length === 0}
+            title="在 Everything 中打开，可用右键菜单手动压缩"
+          >
+            <ExternalLink class="cq-icon" />
+          </Button>
+        </div>
       {/if}
     {:else if ns.phase === "extracting" || ns.phase === "compressing"}
       <Button

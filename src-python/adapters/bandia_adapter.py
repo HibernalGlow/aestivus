@@ -151,7 +151,19 @@ class BandiaAdapter(BaseAdapter):
         import queue
         from concurrent.futures import ThreadPoolExecutor
         
-        paths = [Path(p.strip().strip('"\'')) for p in input_data.paths if p.strip()]
+        raw_paths = [Path(p.strip().strip('"\'')) for p in input_data.paths if p.strip()]
+        paths = []
+        for p in raw_paths:
+            if not p.exists() and "?" in p.name:
+                # 尝试将 ? 作为通配符处理
+                try:
+                    candidates = list(p.parent.glob(p.name))
+                    if candidates:
+                        paths.append(candidates[0])
+                        continue
+                except Exception:
+                    pass
+            paths.append(p)
         
         if not paths:
             return BandiaOutput(

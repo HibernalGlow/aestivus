@@ -35,6 +35,10 @@ class BandiaOutput(AdapterOutput):
     failed_count: int = Field(default=0, description="失败的数量")
     total_count: int = Field(default=0, description="总数量")
     results: List[Dict] = Field(default_factory=list, description="每个文件的处理结果")
+    path_mappings: List[Dict[str, str]] = Field(
+        default_factory=list, 
+        description="压缩包路径到解压目录的映射列表"
+    )
 
 
 class BandiaAdapter(BaseAdapter):
@@ -173,12 +177,23 @@ class BandiaAdapter(BaseAdapter):
         results = [
             {
                 'path': str(r.path),
+                'output_path': str(r.output_path) if r.output_path else None,
                 'success': r.success,
                 'duration': r.duration,
                 'file_size': r.file_size,
                 'error': r.error
             }
             for r in result.results
+        ]
+        
+        # 生成路径映射（仅成功的解压）
+        path_mappings = [
+            {
+                'archive_path': str(r.path),
+                'extracted_path': str(r.output_path)
+            }
+            for r in result.results
+            if r.success and r.output_path
         ]
         
         return BandiaOutput(
@@ -188,9 +203,11 @@ class BandiaAdapter(BaseAdapter):
             failed_count=result.failed,
             total_count=result.total,
             results=results,
+            path_mappings=path_mappings,
             data={
                 'extracted_count': result.extracted,
                 'failed_count': result.failed,
-                'total_count': result.total
+                'total_count': result.total,
+                'path_mappings': path_mappings
             }
         )

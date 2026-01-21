@@ -63,8 +63,14 @@
     activeIndices: number[]; // 正在解压的文件索引列表 (用于并行高亮)
     completedIndices: number[]; // 已解压完成的文件索引列表
     extractResult: ExtractResult | null;
+    pathMappings: PathMapping[]; // 压缩包到解压目录的映射
     logs: string[];
     hasInputConnection: boolean;
+  }
+
+  interface PathMapping {
+    archive_path: string;
+    extracted_path: string;
   }
 
   interface ExtractResult {
@@ -95,6 +101,7 @@
     activeIndices: [],
     completedIndices: [],
     extractResult: null,
+    pathMappings: [],
     logs: [],
     hasInputConnection: false,
   });
@@ -108,7 +115,7 @@
   let pathsText = $state(
     ns.archivePaths.length > 0
       ? ns.archivePaths.join("\n")
-      : configPaths.join("\n")
+      : configPaths.join("\n"),
   );
 
   // 持续同步外部数据
@@ -118,7 +125,7 @@
   });
 
   let canExtract = $derived(
-    ns.phase === "idle" && (pathsText.trim() !== "" || ns.hasInputConnection)
+    ns.phase === "idle" && (pathsText.trim() !== "" || ns.hasInputConnection),
   );
   let isRunning = $derived(ns.phase === "extracting");
   let borderClass = $derived(
@@ -127,7 +134,7 @@
       extracting: "border-primary shadow-sm",
       completed: "border-primary/50",
       error: "border-destructive/50",
-    }[ns.phase]
+    }[ns.phase],
   );
 
   function log(msg: string) {
@@ -219,7 +226,7 @@
             if (statusMsg.startsWith("FINISHED:")) {
               const finishedIdx = parseInt(statusMsg.split(":")[1]);
               ns.activeIndices = ns.activeIndices.filter(
-                (i) => i !== finishedIdx
+                (i) => i !== finishedIdx,
               );
               if (!ns.completedIndices.includes(finishedIdx)) {
                 ns.completedIndices = [...ns.completedIndices, finishedIdx];
@@ -242,7 +249,7 @@
               // 这里的策略是：X 完成的消息到达时，我们可以根据文件名或索引清理
               // 实际上后端目前完成时发送的是 "解压 X/Y"，我们可以认为 [0...X-1] 已经完成
               ns.activeIndices = ns.activeIndices.filter(
-                (i) => i >= processedCount
+                (i) => i >= processedCount,
               );
 
               if (
@@ -299,7 +306,7 @@
           parallel: ns.parallel,
           workers: ns.workers,
         },
-        { taskId, nodeId }
+        { taskId, nodeId },
       )) as any;
 
       if (response.success) {
@@ -312,10 +319,15 @@
           failed: response.data?.failed_count ?? 0,
           total: response.data?.total_count ?? paths.length,
         };
+        // 保存路径映射
+        ns.pathMappings = response.data?.path_mappings ?? [];
         log(`✅ ${response.message}`);
         log(
-          `📊 成功: ${ns.extractResult.extracted}, 失败: ${ns.extractResult.failed}`
+          `📊 成功: ${ns.extractResult.extracted}, 失败: ${ns.extractResult.failed}`,
         );
+        if (ns.pathMappings.length > 0) {
+          log(`📂 已记录 ${ns.pathMappings.length} 个路径映射`);
+        }
       } else {
         ns.phase = "error";
         ns.progress = 0;
@@ -339,6 +351,7 @@
     ns.progressText = "";
     ns.extractResult = null;
     ns.archivePaths = [];
+    ns.pathMappings = [];
     ns.logs = [];
     currentFileIndex = -1;
     ns.activeIndices = [];
@@ -365,6 +378,33 @@
       }, 2000);
     } catch (e) {
       console.error("复制失败:", e);
+    }
+  }
+
+  let exportCopied = $state(false);
+
+  async function exportPathMappings() {
+    if (ns.pathMappings.length === 0) {
+      log("❌ 没有可导出的路径映射");
+      return;
+    }
+
+    try {
+      // 导出为 JSON 格式
+      const exportData = {
+        exported_at: new Date().toISOString(),
+        total: ns.pathMappings.length,
+        mappings: ns.pathMappings,
+      };
+      const jsonStr = JSON.stringify(exportData, null, 2);
+      await navigator.clipboard.writeText(jsonStr);
+      exportCopied = true;
+      log(`📋 已复制 ${ns.pathMappings.length} 个路径映射到剪贴板`);
+      setTimeout(() => {
+        exportCopied = false;
+      }, 2000);
+    } catch (e) {
+      log(`❌ 导出失败: ${e}`);
     }
   }
 </script>
@@ -502,6 +542,21 @@
     {:else if ns.phase === "completed"}
       <Button class="w-full cq-button flex-1" onclick={handleReset}>
         <Play class="cq-icon mr-1" /><span>重新开始</span>
+      </Button>
+    {/if}
+    {#if ns.phase === "completed" && ns.pathMappings.length > 0}
+      <Button
+        variant="outline"
+        class="w-full cq-button-sm"
+        onclick={exportPathMappings}
+      >
+        {#if exportCopied}
+          <Check class="cq-icon mr-1 text-green-500" /><span>已复制</span>
+        {:else}
+          <Copy class="cq-icon mr-1" /><span
+            >导出路径映射 ({ns.pathMappings.length})</span
+          >
+        {/if}
       </Button>
     {/if}
     <Button

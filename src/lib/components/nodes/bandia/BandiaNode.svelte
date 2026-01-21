@@ -502,6 +502,32 @@
     }
   }
 
+  async function exportArchivesToEverything() {
+    const paths = parsePaths(pathsText);
+    if (paths.length === 0) {
+      log("❌ 没有压缩包可导出");
+      return;
+    }
+
+    log(`📤 正在导出 ${paths.length} 个压缩包到 Everything...`);
+
+    try {
+      const result = await api.executeNode("bandia", {
+        action: "export_efu",
+        paths: paths,
+        open_in_everything: true,
+      });
+
+      if (result.success) {
+        log(`✅ 已导出到 Everything: ${result.data?.efu_path || ""}`);
+      } else {
+        log(`❌ 导出失败: ${result.message}`);
+      }
+    } catch (e) {
+      log(`❌ 导出失败: ${e}`);
+    }
+  }
+
   async function handleCompress() {
     if (ns.pathMappings.length === 0) {
       log("❌ 没有路径映射可压缩");
@@ -876,13 +902,24 @@
     </div>
     {#if ns.phase === "idle" || ns.phase === "error"}
       {#if ns.mode === "extract"}
-        <Button
-          class="w-full cq-button flex-1"
-          onclick={handleExtract}
-          disabled={!canExtract}
-        >
-          <Play class="cq-icon mr-1" /><span>开始解压</span>
-        </Button>
+        <div class="flex cq-gap">
+          <Button
+            class="flex-1 cq-button"
+            onclick={handleExtract}
+            disabled={!canExtract}
+          >
+            <Play class="cq-icon mr-1" /><span>开始解压</span>
+          </Button>
+          <Button
+            variant="outline"
+            class="cq-button"
+            onclick={exportArchivesToEverything}
+            disabled={parsePaths(pathsText).length === 0}
+            title="在 Everything 中打开，可用右键菜单手动解压"
+          >
+            <ExternalLink class="cq-icon" />
+          </Button>
+        </div>
       {:else}
         <div class="flex cq-gap">
           <Button

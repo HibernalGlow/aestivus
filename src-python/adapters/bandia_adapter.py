@@ -19,6 +19,14 @@ from pydantic import BaseModel, Field
 
 from .base import BaseAdapter, AdapterOutput
 
+# Windows encoding fix
+import sys
+if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 
 class BandiaInput(BaseModel):
     """bandia 输入参数"""

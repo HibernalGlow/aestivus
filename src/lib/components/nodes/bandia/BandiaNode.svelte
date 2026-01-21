@@ -49,23 +49,33 @@
 
   let { id, data = {}, isFullscreenRender = false }: Props = $props();
 
-  type Phase = "idle" | "extracting" | "completed" | "error";
+  type Phase = "idle" | "extracting" | "compressing" | "completed" | "error";
+  type Mode = "extract" | "compress";
 
   interface BandiaState {
+    mode: Mode; // 当前模式
     phase: Phase;
     progress: number;
     progressText: string;
     archivePaths: string[];
     deleteAfter: boolean;
     useTrash: boolean;
-    parallel: boolean; // 启用并行解压
+    parallel: boolean; // 启用并行
     workers: number; // 并行工作线程数
-    activeIndices: number[]; // 正在解压的文件索引列表 (用于并行高亮)
-    completedIndices: number[]; // 已解压完成的文件索引列表
+    activeIndices: number[]; // 正在处理的文件索引列表
+    completedIndices: number[]; // 已完成的文件索引列表
     extractResult: ExtractResult | null;
+    compressResult: CompressResult | null;
     pathMappings: PathMapping[]; // 压缩包到解压目录的映射
     logs: string[];
     hasInputConnection: boolean;
+  }
+
+  interface CompressResult {
+    success: boolean;
+    compressed: number;
+    failed: number;
+    total: number;
   }
 
   interface PathMapping {
@@ -90,6 +100,7 @@
 
   // 获取共享的响应式状态（节点模式和全屏模式共用同一个对象）
   const ns = getNodeState<BandiaState>(id, {
+    mode: "extract",
     phase: "idle",
     progress: 0,
     progressText: "",
@@ -101,6 +112,7 @@
     activeIndices: [],
     completedIndices: [],
     extractResult: null,
+    compressResult: null,
     pathMappings: [],
     logs: [],
     hasInputConnection: false,
@@ -125,13 +137,21 @@
   });
 
   let canExtract = $derived(
-    ns.phase === "idle" && (pathsText.trim() !== "" || ns.hasInputConnection),
+    ns.phase === "idle" &&
+      ns.mode === "extract" &&
+      (pathsText.trim() !== "" || ns.hasInputConnection),
   );
-  let isRunning = $derived(ns.phase === "extracting");
+  let canCompress = $derived(
+    ns.phase === "idle" && ns.mode === "compress" && ns.pathMappings.length > 0,
+  );
+  let isRunning = $derived(
+    ns.phase === "extracting" || ns.phase === "compressing",
+  );
   let borderClass = $derived(
     {
       idle: "border-border",
       extracting: "border-primary shadow-sm",
+      compressing: "border-primary shadow-sm",
       completed: "border-primary/50",
       error: "border-destructive/50",
     }[ns.phase],
@@ -346,10 +366,12 @@
   }
 
   function handleReset() {
+    ns.mode = "extract";
     ns.phase = "idle";
     ns.progress = 0;
     ns.progressText = "";
     ns.extractResult = null;
+    ns.compressResult = null;
     ns.archivePaths = [];
     ns.pathMappings = [];
     ns.logs = [];
@@ -359,7 +381,7 @@
   }
 
   async function handleStop() {
-    log("⏹️ 用户请求停止解压");
+    log("⏹️ 用户请求停止");
     try {
       await api.executeNode("bandia", { action: "stop" }, { nodeId });
     } catch (e) {
@@ -407,40 +429,225 @@
       log(`❌ 导出失败: ${e}`);
     }
   }
+
+  async function importPathMappings() {
+    try {
+      const { platform } = await import("$lib/api/platform");
+      const text = await platform.readClipboard();
+      if (!text) {
+        log("❌ 剪贴板为空");
+        return;
+      }
+
+      const data = JSON.parse(text);
+      let mappings: PathMapping[] = [];
+
+      if (Array.isArray(data)) {
+        mappings = data;
+      } else if (data.mappings && Array.isArray(data.mappings)) {
+        mappings = data.mappings;
+      }
+
+      // 验证并过滤有效映射
+      const validMappings = mappings.filter(
+        (m) => m.archive_path && m.extracted_path,
+      );
+
+      if (validMappings.length === 0) {
+        log("❌ 没有有效的路径映射");
+        return;
+      }
+
+      ns.pathMappings = validMappings;
+      ns.mode = "compress";
+      log(`📥 已导入 ${validMappings.length} 个路径映射`);
+    } catch (e) {
+      log(`❌ 导入失败: ${e}`);
+    }
+  }
+
+  async function handleCompress() {
+    if (ns.pathMappings.length === 0) {
+      log("❌ 没有路径映射可压缩");
+      return;
+    }
+
+    ns.phase = "compressing";
+    ns.progress = 0;
+    ns.progressText = "正在压缩...";
+    ns.compressResult = null;
+    log(`📦 开始压缩 ${ns.pathMappings.length} 个目录...`);
+
+    const taskId = `bandia-compress-${nodeId}-${Date.now()}`;
+    let ws: WebSocket | null = null;
+
+    try {
+      const wsUrl = `${getWsBaseUrl()}/v1/ws/tasks/${taskId}`;
+      ws = new WebSocket(wsUrl);
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === "progress") {
+            ns.progress = msg.progress;
+            const parts = msg.message.split("|");
+            ns.progressText = parts[0];
+          } else if (msg.type === "log") {
+            log(msg.message);
+          }
+        } catch (e) {
+          console.error("解析 WebSocket 消息失败:", e);
+        }
+      };
+
+      await new Promise<void>((resolve) => {
+        const timeout = setTimeout(() => resolve(), 2000);
+        ws!.onopen = () => {
+          clearTimeout(timeout);
+          resolve();
+        };
+        ws!.onerror = () => {
+          clearTimeout(timeout);
+          resolve();
+        };
+      });
+
+      const response = (await api.executeNode(
+        "bandia",
+        {
+          action: "compress",
+          mappings: ns.pathMappings,
+          delete_source: ns.deleteAfter,
+        },
+        { taskId, nodeId },
+      )) as any;
+
+      if (response.success) {
+        ns.phase = "completed";
+        ns.progress = 100;
+        ns.progressText = "压缩完成";
+        ns.compressResult = {
+          success: true,
+          compressed: response.data?.compressed_count ?? 0,
+          failed: response.data?.failed_count ?? 0,
+          total: response.data?.total_count ?? ns.pathMappings.length,
+        };
+        log(`✅ ${response.message}`);
+        log(
+          `📊 成功: ${ns.compressResult.compressed}, 失败: ${ns.compressResult.failed}`,
+        );
+      } else {
+        ns.phase = "error";
+        ns.progress = 0;
+        log(`❌ 压缩失败: ${response.message}`);
+      }
+    } catch (error) {
+      ns.phase = "error";
+      ns.progress = 0;
+      log(`❌ 压缩失败: ${error}`);
+    } finally {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+    }
+  }
 </script>
 
 {#snippet sourceBlock()}
   {#if !ns.hasInputConnection}
     <div class="flex flex-col cq-gap h-full">
+      <!-- 模式切换 -->
       <div class="flex cq-gap">
         <Button
-          variant="outline"
+          variant={ns.mode === "extract" ? "default" : "outline"}
           size="sm"
           class="cq-button-sm flex-1"
-          onclick={pasteFromClipboard}
+          onclick={() => (ns.mode = "extract")}
           disabled={isRunning}
         >
-          <Clipboard class="cq-icon mr-1" />剪贴板
+          <FileArchive class="cq-icon mr-1" />解压
         </Button>
         <Button
-          variant="outline"
+          variant={ns.mode === "compress" ? "default" : "outline"}
           size="sm"
           class="cq-button-sm flex-1"
-          onclick={selectFiles}
+          onclick={() => (ns.mode = "compress")}
           disabled={isRunning}
         >
-          <FolderOpen class="cq-icon mr-1" />选择文件
+          <FileArchive class="cq-icon mr-1" />压缩
         </Button>
       </div>
-      <Textarea
-        bind:value={pathsText}
-        placeholder="粘贴压缩包路径（每行一个）&#10;支持: .zip .7z .rar .tar .gz .bz2 .xz"
-        disabled={isRunning}
-        class="flex-1 cq-text font-mono resize-none min-h-[60px]"
-      />
-      <div class="cq-text-sm text-muted-foreground">
-        已识别 {parsePaths(pathsText).length} 个压缩包
-      </div>
+
+      {#if ns.mode === "extract"}
+        <!-- 解压模式 -->
+        <div class="flex cq-gap">
+          <Button
+            variant="outline"
+            size="sm"
+            class="cq-button-sm flex-1"
+            onclick={pasteFromClipboard}
+            disabled={isRunning}
+          >
+            <Clipboard class="cq-icon mr-1" />剪贴板
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            class="cq-button-sm flex-1"
+            onclick={selectFiles}
+            disabled={isRunning}
+          >
+            <FolderOpen class="cq-icon mr-1" />选择文件
+          </Button>
+        </div>
+        <Textarea
+          bind:value={pathsText}
+          placeholder="粘贴压缩包路径（每行一个）&#10;支持: .zip .7z .rar .tar .gz .bz2 .xz"
+          disabled={isRunning}
+          class="flex-1 cq-text font-mono resize-none min-h-[60px]"
+        />
+        <div class="cq-text-sm text-muted-foreground">
+          已识别 {parsePaths(pathsText).length} 个压缩包
+        </div>
+      {:else}
+        <!-- 压缩模式 -->
+        <div class="flex cq-gap">
+          <Button
+            variant="outline"
+            size="sm"
+            class="cq-button-sm flex-1"
+            onclick={importPathMappings}
+            disabled={isRunning}
+          >
+            <Clipboard class="cq-icon mr-1" />导入映射
+          </Button>
+        </div>
+        <div class="flex-1 cq-padding bg-muted/30 cq-rounded overflow-y-auto">
+          {#if ns.pathMappings.length > 0}
+            <div class="space-y-1">
+              {#each ns.pathMappings.slice(0, 10) as mapping, idx}
+                <div class="cq-text-sm truncate" title={mapping.extracted_path}>
+                  {idx + 1}. {mapping.extracted_path.split(/[/\\]/).pop()} → {mapping.archive_path
+                    .split(/[/\\]/)
+                    .pop()}
+                </div>
+              {/each}
+              {#if ns.pathMappings.length > 10}
+                <div class="cq-text-sm text-muted-foreground">
+                  还有 {ns.pathMappings.length - 10} 个...
+                </div>
+              {/if}
+            </div>
+          {:else}
+            <div class="cq-text text-muted-foreground text-center py-2">
+              点击"导入映射"从剪贴板读取路径映射
+            </div>
+          {/if}
+        </div>
+        <div class="cq-text-sm text-muted-foreground">
+          已导入 {ns.pathMappings.length} 个映射
+        </div>
+      {/if}
     </div>
   {:else}
     <div
@@ -525,14 +732,24 @@
       {/if}
     </div>
     {#if ns.phase === "idle" || ns.phase === "error"}
-      <Button
-        class="w-full cq-button flex-1"
-        onclick={handleExtract}
-        disabled={!canExtract}
-      >
-        <Play class="cq-icon mr-1" /><span>开始解压</span>
-      </Button>
-    {:else if ns.phase === "extracting"}
+      {#if ns.mode === "extract"}
+        <Button
+          class="w-full cq-button flex-1"
+          onclick={handleExtract}
+          disabled={!canExtract}
+        >
+          <Play class="cq-icon mr-1" /><span>开始解压</span>
+        </Button>
+      {:else}
+        <Button
+          class="w-full cq-button flex-1"
+          onclick={handleCompress}
+          disabled={!canCompress}
+        >
+          <Play class="cq-icon mr-1" /><span>开始压缩</span>
+        </Button>
+      {/if}
+    {:else if ns.phase === "extracting" || ns.phase === "compressing"}
       <Button
         class="w-full cq-button flex-1 bg-destructive hover:bg-destructive/90"
         onclick={handleStop}
@@ -544,7 +761,7 @@
         <Play class="cq-icon mr-1" /><span>重新开始</span>
       </Button>
     {/if}
-    {#if ns.phase === "completed" && ns.pathMappings.length > 0}
+    {#if ns.phase === "completed" && ns.mode === "extract" && ns.pathMappings.length > 0}
       <Button
         variant="outline"
         class="w-full cq-button-sm"

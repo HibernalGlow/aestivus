@@ -104,6 +104,7 @@ class BandiaAdapter(BaseAdapter):
         ProgressCallback = module["ProgressCallback"]
         PathMapping = module["PathMapping"]
         get_shutdown_event = module["get_shutdown_event"]
+        ExtractMode = module["ExtractMode"]
         
         # 处理停止命令
         if input_data.action == "stop":

@@ -15,7 +15,7 @@
   import { NodeLayoutRenderer } from '$lib/components/blocks';
   import { DISSOLVEF_DEFAULT_GRID_LAYOUT } from './blocks';
   import { api } from '$lib/services/api';
-  import { getNodeState, saveNodeState } from '$lib/stores/nodeState.svelte';
+  import { getNodeState } from '$lib/stores/nodeState.svelte';
   import { getWsBaseUrl } from '$lib/stores/backend';
   import NodeWrapper from '../NodeWrapper.svelte';
   import { 
@@ -37,6 +37,9 @@
         exclude?: string;
         file_conflict?: string;
         dir_conflict?: string;
+        enable_similarity?: boolean;
+        similarity_threshold?: number;
+        protect_first_level?: boolean;
       };
       status?: 'idle' | 'running' | 'completed' | 'error';
       hasInputConnection?: boolean;
@@ -74,6 +77,7 @@
     dirConflict: string;
     enableSimilarity: boolean;
     similarityThreshold: number;
+    protectFirstLevel: boolean;
     result: DissolveResult | null;
     operationHistory: OperationRecord[];
     lastOperationId: string;
@@ -92,7 +96,6 @@
   }
 
   const nodeId = $derived(id);
-  const configPath = $derived(data?.config?.path ?? '');
   const dataLogs = $derived(data?.logs ?? []);
   const dataHasInputConnection = $derived(data?.hasInputConnection ?? false);
 
@@ -101,7 +104,7 @@
     phase: 'idle',
     progress: 0,
     progressText: '',
-    pathText: configPath || '',
+    pathText: '',
     nestedMode: true,
     mediaMode: true,
     archiveMode: true,
@@ -112,6 +115,7 @@
     dirConflict: 'auto',
     enableSimilarity: true,
     similarityThreshold: 0.6,
+    protectFirstLevel: true,
     result: null,
     operationHistory: [],
     lastOperationId: '',
@@ -122,13 +126,48 @@
   // 纯 UI 状态（不需要同步）
   let copied = $state(false);
   let layoutRenderer = $state<any>(undefined);
-  // similarityThreshold slider 需要数组格式
-  let similarityThresholdArr = $derived([ns.similarityThreshold]);
+  // slider 组件使用 number[]，这里做双向同步
+  let similarityThresholdArr = $state([ns.similarityThreshold]);
+
+  $effect(() => {
+    const nextVal = similarityThresholdArr[0];
+    if (typeof nextVal === 'number' && nextVal !== ns.similarityThreshold) {
+      ns.similarityThreshold = nextVal;
+    }
+  });
+
+  $effect(() => {
+    if (similarityThresholdArr[0] !== ns.similarityThreshold) {
+      similarityThresholdArr = [ns.similarityThreshold];
+    }
+  });
   
   // 持续同步外部数据
   $effect(() => {
     ns.logs = [...dataLogs];
     ns.hasInputConnection = dataHasInputConnection;
+  });
+
+  let configInitialized = $state(false);
+  $effect(() => {
+    if (configInitialized) return;
+    const cfg = data?.config;
+    if (!cfg) return;
+
+    if (cfg.path) ns.pathText = cfg.path;
+    if (typeof cfg.nested === 'boolean') ns.nestedMode = cfg.nested;
+    if (typeof cfg.media === 'boolean') ns.mediaMode = cfg.media;
+    if (typeof cfg.archive === 'boolean') ns.archiveMode = cfg.archive;
+    if (typeof cfg.direct === 'boolean') ns.directMode = cfg.direct;
+    if (typeof cfg.preview === 'boolean') ns.previewMode = cfg.preview;
+    if (typeof cfg.exclude === 'string') ns.excludeKeywords = cfg.exclude;
+    if (typeof cfg.file_conflict === 'string') ns.fileConflict = cfg.file_conflict;
+    if (typeof cfg.dir_conflict === 'string') ns.dirConflict = cfg.dir_conflict;
+    if (typeof cfg.enable_similarity === 'boolean') ns.enableSimilarity = cfg.enable_similarity;
+    if (typeof cfg.similarity_threshold === 'number') ns.similarityThreshold = cfg.similarity_threshold;
+    if (typeof cfg.protect_first_level === 'boolean') ns.protectFirstLevel = cfg.protect_first_level;
+
+    configInitialized = true;
   });
 
   let canExecute = $derived(ns.phase === 'idle' && (ns.pathText.trim() !== '' || ns.hasInputConnection));
@@ -206,7 +245,8 @@
         file_conflict: ns.fileConflict,
         dir_conflict: ns.dirConflict,
         enable_similarity: ns.enableSimilarity,
-        similarity_threshold: ns.similarityThreshold
+        similarity_threshold: ns.similarityThreshold,
+        protect_first_level: ns.protectFirstLevel
       }, { taskId, nodeId }) as any;
       
       if (response.success) {
@@ -345,6 +385,11 @@
       <span class="cq-text">预览模式</span>
     </div>
     <Input bind:value={ns.excludeKeywords} placeholder="排除关键词(逗号分隔)" disabled={isRunning} class="cq-text-sm" />
+
+    <div class="flex items-center cq-gap cursor-pointer" onclick={() => { if (!isRunning) ns.protectFirstLevel = !ns.protectFirstLevel; }}>
+      <Checkbox checked={ns.protectFirstLevel} disabled={isRunning} />
+      <span class="cq-text">保护一级目录（不解散输入路径下一级文件夹）</span>
+    </div>
     
     <!-- 相似度设置 -->
     {#if !ns.directMode && (ns.nestedMode || ns.archiveMode)}
@@ -355,7 +400,7 @@
         </div>
         {#if ns.enableSimilarity}
           <div class="flex items-center cq-gap">
-            <Slider type="multiple" value={similarityThresholdArr} onValueChange={(v) => ns.similarityThreshold = v[0]} min={0} max={1} step={0.1} disabled={isRunning} class="flex-1" />
+            <Slider type="multiple" bind:value={similarityThresholdArr} min={0} max={1} step={0.1} disabled={isRunning} class="flex-1" />
             <span class="cq-text-sm text-muted-foreground w-10 text-right">{Math.round(ns.similarityThreshold * 100)}%</span>
           </div>
           <span class="cq-text-sm text-muted-foreground">父文件夹与子项名称相似度需超过此值</span>

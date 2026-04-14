@@ -12,6 +12,7 @@ dissolvef 适配器
 
 from pathlib import Path
 from typing import Callable, Dict, List, Optional
+import inspect
 
 from pydantic import BaseModel, Field
 
@@ -33,6 +34,7 @@ class DissolvefInput(BaseModel):
     # 相似度限制
     similarity_threshold: float = Field(default=0.6, description="相似度阈值 (0.0-1.0)，只有超过此值才解散")
     enable_similarity: bool = Field(default=True, description="是否启用相似度检测")
+    protect_first_level: bool = Field(default=True, description="是否保护输入路径下一级文件夹（不直接解散它们）")
     # 撤销参数
     undo_id: str = Field(default="", description="要撤销的操作 ID")
 
@@ -198,8 +200,22 @@ class DissolvefAdapter(BaseAdapter):
             on_log(f"[DIR] {mode_prefix}开始处理: {path}")
             if input_data.enable_similarity and not input_data.direct:
                 on_log(f"[SIM] 相似度阈值: {input_data.similarity_threshold:.0%}")
+            if input_data.protect_first_level and not input_data.direct:
+                on_log("[SAFE] 已启用一级目录保护")
         
         try:
+            def _call_with_supported_kwargs(func, *args, **kwargs):
+                """仅传递目标函数支持的关键字参数，兼容旧版 dissolvef。"""
+                try:
+                    sig = inspect.signature(func)
+                    supported = {
+                        k: v for k, v in kwargs.items()
+                        if k in sig.parameters
+                    }
+                except Exception:
+                    supported = kwargs
+                return func(*args, **supported)
+
             if input_data.direct:
                 # 直接解散模式
                 if on_progress:
@@ -234,8 +250,12 @@ class DissolvefAdapter(BaseAdapter):
                     if on_log:
                         on_log(f"[MEDIA] {mode_prefix}解散单媒体文件夹...")
                     
-                    media_count = mod["release_single_media_folder"](
-                        path, exclude_keywords, input_data.preview
+                    media_count = _call_with_supported_kwargs(
+                        mod["release_single_media_folder"],
+                        path,
+                        exclude_keywords,
+                        input_data.preview,
+                        protect_first_level=input_data.protect_first_level
                     )
                     
                     if on_log:
@@ -250,10 +270,13 @@ class DissolvefAdapter(BaseAdapter):
                         on_log(f"[NESTED] {mode_prefix}解散嵌套文件夹...")
                     
                     # 调用带相似度检测的函数，传递日志回调
-                    result = mod["flatten_single_subfolder"](
-                        path, exclude_keywords,
+                    result = _call_with_supported_kwargs(
+                        mod["flatten_single_subfolder"],
+                        path,
+                        exclude_keywords,
                         preview=input_data.preview,
                         similarity_threshold=similarity,
+                        protect_first_level=input_data.protect_first_level,
                         enable_undo=not input_data.preview,
                         on_log=on_log
                     )
@@ -279,10 +302,13 @@ class DissolvefAdapter(BaseAdapter):
                         on_log(f"[ARCHIVE] {mode_prefix}解散单压缩包文件夹...")
                     
                     # 调用带相似度检测的函数
-                    result = mod["release_single_archive_folder"](
-                        path, exclude_keywords,
+                    result = _call_with_supported_kwargs(
+                        mod["release_single_archive_folder"],
+                        path,
+                        exclude_keywords,
                         preview=input_data.preview,
                         similarity_threshold=similarity,
+                        protect_first_level=input_data.protect_first_level,
                         enable_undo=not input_data.preview
                     )
                     # 兼容新旧返回值

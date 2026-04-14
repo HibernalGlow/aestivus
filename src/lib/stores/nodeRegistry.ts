@@ -239,7 +239,10 @@ export const NODE_REGISTRY: NodeRegistryEntry[] = [
       media: { type: 'boolean', label: '单媒体文件夹', default: true },
       archive: { type: 'boolean', label: '单压缩包文件夹', default: true },
       direct: { type: 'boolean', label: '直接解散', default: false },
-      preview: { type: 'boolean', label: '预览模式', default: false }
+      preview: { type: 'boolean', label: '预览模式', default: false },
+      enable_similarity: { type: 'boolean', label: '启用相似度', default: true },
+      similarity_threshold: { type: 'number', label: '相似度阈值', default: 0.6 },
+      protect_first_level: { type: 'boolean', label: '保护一级目录', default: true }
     }
   },
   {
